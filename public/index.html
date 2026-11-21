@@ -134,15 +134,6 @@
     .progress-bar-bg { width: 100%; height: 9px; background: rgba(255,255,255,0.08); border-radius: 99px; overflow: hidden; margin: 9px 0 3px; }
     .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); width: 0%; transition: width 0.3s; }
 
-    .job-card { background: var(--bg); border: 1px solid var(--card-border); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
-    .job-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
-    .job-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; }
-    .stat-box { background: var(--sec-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 8px; text-align: center; }
-    .stat-val { font-size: 0.98rem; font-weight: 700; display: block; }
-    .stat-lbl { font-size: 0.7rem; color: var(--hint); }
-    .val-ok { color: #34d399; }
-    .val-err { color: #f87171; }
-
     .perm-pills { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
     .perm-pill { font-size: 0.7rem; padding: 3px 8px; border-radius: 8px; background: rgba(255,255,255,0.06); color: var(--hint); }
     .perm-pill.active { background: rgba(16, 185, 129, 0.14); color: #34d399; }
@@ -307,7 +298,7 @@
       <div id="communitiesList"></div>
     </div>
 
-    <!-- تبويب الإرسال والتقارير -->
+    <!-- تبويب الإرسال -->
     <div id="tab-publish" class="tab">
       <div class="card">
         <h3><svg class="ico"><use href="#i-send"/></svg> إرسال الاختبار</h3>
@@ -394,17 +385,8 @@
           <div class="progress-bar-bg">
             <div id="progressBarFill" class="progress-bar-fill"></div>
           </div>
+          <small style="display:block; color:var(--hint); margin-top:7px;">ستصلك رسالة في الخاص عند انتهاء العملية.</small>
         </div>
-      </div>
-
-      <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-          <h3 style="margin:0;">تقارير الإرسال ومتابعة المتعذر</h3>
-          <button class="btn btn-outline btn-sm" onclick="loadPublishJobs()">
-            <svg class="ico ico-sm"><use href="#i-refresh"/></svg> تحديث
-          </button>
-        </div>
-        <div id="publishJobsList"></div>
       </div>
     </div>
 
@@ -641,7 +623,7 @@
         document.getElementById("appContainer").style.display = "block";
         applyActorUI();
 
-        const tasks = [loadBanks(), loadCommunities(), loadPublishJobs(), loadLogs()];
+        const tasks = [loadBanks(), loadCommunities(), loadLogs()];
         if (currentActor.role === "owner" || currentActor.can_manage_admins) {
           tasks.push(loadAdmins());
         }
@@ -664,7 +646,7 @@
         } else {
           syncPublishBanksSelect();
         }
-        await Promise.all([onPublishBankChange(), loadPublishJobs()]);
+        await onPublishBankChange();
       } else if (tabName === "banks") {
         await loadBanks();
       } else if (tabName === "communities") {
@@ -1189,70 +1171,11 @@
         });
         const actualCount = typeof res.queued_count === "number" ? res.queued_count : finalCount;
         pFill.style.width = "100%";
-        pStatus.innerText = `تم بدء إرسال ${actualCount} سؤال إلى (${res.target_label || targetLabel}) في الخلفية.`;
+        pStatus.innerText = `تم بدء إرسال ${actualCount} سؤال إلى (${res.target_label || targetLabel}).`;
         pCounter.innerText = `${actualCount} سؤال`;
-        await loadPublishJobs();
       } finally {
         startBtn.disabled = false;
       }
-    }
-
-    function jobStatusText(st) {
-      if (st === "completed") return "مكتمل";
-      if (st === "partial_failed") return "مكتمل مع متعذرات";
-      if (st === "failed") return "متعذر";
-      if (st === "running") return "قيد الإرسال";
-      return "في الانتظار";
-    }
-
-    async function loadPublishJobs() {
-      const jobs = await api("/api/publish_jobs");
-      const box = document.getElementById("publishJobsList");
-      if (!jobs || jobs.length === 0) {
-        box.innerHTML = `<div style="text-align:center; color:var(--hint); padding:12px;">لا توجد عمليات إرسال مسجلة بعد.</div>`;
-        return;
-      }
-
-      box.innerHTML = jobs.map(j => `
-        <div class="job-card">
-          <div class="job-top">
-            <div>
-              <strong>${j.target_label}</strong>
-              ${j.quiz_title ? `<div style="font-size:0.78rem; color:var(--hint);">${j.quiz_title}</div>` : ""}
-            </div>
-            <span class="badge">${jobStatusText(j.status)} (#${j.id})</span>
-          </div>
-          <div style="font-size:0.75rem; color:var(--hint);">المنفّذ: ${j.actor_name} (${j.actor_tag}) • الإنجاز: ${j.success_rate}%</div>
-          <div class="job-stats">
-            <div class="stat-box">
-              <span class="stat-val">${j.total_count}</span>
-              <span class="stat-lbl">المستهدف</span>
-            </div>
-            <div class="stat-box">
-              <span class="stat-val val-ok">${j.sent_count}</span>
-              <span class="stat-lbl">المرسل فعلياً</span>
-            </div>
-            <div class="stat-box">
-              <span class="stat-val val-err">${j.failed_count}</span>
-              <span class="stat-lbl">المتعذر</span>
-            </div>
-          </div>
-          ${j.failed_count > 0 ? `
-            <button class="btn btn-sm btn-outline" onclick="retryFailedBatch(${j.id})">
-              <svg class="ico ico-sm"><use href="#i-refresh"/></svg> إعادة إرسال المتعذرة (${j.failed_count})
-            </button>
-          ` : ""}
-        </div>
-      `).join("");
-    }
-
-    async function retryFailedBatch(jobId) {
-      const res = await api("/api/publish_jobs/retry_failed", {
-        method: "POST",
-        body: JSON.stringify({ job_id: jobId })
-      });
-      alert(`تمت جدولة إعادة إرسال ${res.retried_count} سؤال متعذر إلى (${res.target_label}).`);
-      await loadPublishJobs();
     }
 
     async function loadAdmins() {
