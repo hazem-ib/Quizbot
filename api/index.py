@@ -219,7 +219,6 @@ def normalize_options_list(
 
 
 def unpack_row_options(row_tuple) -> List[str]:
-    # row_tuple: (opt1, opt2, opt3, opt4, options_json)
     o1, o2, o3, o4, opts_json = row_tuple
     if opts_json:
         parsed = opts_json if isinstance(opts_json, list) else json.loads(opts_json)
@@ -1026,6 +1025,7 @@ async def upload_pdf(
 async def upload_csv(
     bank_name: str = Form(default=""),
     bank_id: Optional[int] = Form(default=None),
+    structure: str = Form(default="auto"),
     file: UploadFile = File(...),
     x_telegram_init_data: str = Header(default=""),
 ):
@@ -1044,24 +1044,54 @@ async def upload_csv(
     if df.shape[1] < 4:
         raise HTTPException(status_code=400, detail=f"الملف يحتوي على {df.shape[1]} أعمدة فقط؛ المطلوب 4 أعمدة على الأقل.")
 
+    mode = (structure or "auto").strip().lower()
+
     def _extract_csv_row(row_vals):
         non_empty = [
-            (col_i, str(val).strip())
-            for col_i, val in enumerate(row_vals)
+            str(val).strip()
+            for val in row_vals
             if not pd.isna(val) and str(val).strip() != ""
         ]
         if len(non_empty) < 4:
             return None
-        q_text = non_empty[0][1]
-        # البحث عن عمود الإجابة من النهاية أو ما قبل الشرح
+
+        if mode == "q_opts_expl_ans":
+            if len(non_empty) < 5:
+                return "INVALID_ANSWER"
+            q_text = non_empty[0]
+            ans_val = non_empty[-1]
+            expl_val = non_empty[-2]
+            candidate_opts = [x for x in non_empty[1:-2] if x != "-"]
+            if not (2 <= len(candidate_opts) <= 10):
+                return "INVALID_ANSWER"
+            c_idx = parse_correct_index(ans_val, candidate_opts)
+            if c_idx is None:
+                return "INVALID_ANSWER"
+            return (q_text, candidate_opts, c_idx, expl_val)
+
+        if mode == "num_q_opts_ans_expl":
+            if len(non_empty) < 5:
+                return "INVALID_ANSWER"
+            q_text = non_empty[1]
+            for ans_pos in (len(non_empty) - 1, len(non_empty) - 2):
+                if ans_pos >= 4:
+                    candidate_opts = [x for x in non_empty[2:ans_pos] if x != "-"]
+                    if 2 <= len(candidate_opts) <= 10:
+                        c_idx = parse_correct_index(non_empty[ans_pos], candidate_opts)
+                        if c_idx is not None:
+                            expl_val = non_empty[ans_pos + 1] if ans_pos + 1 < len(non_empty) else ""
+                            return (q_text, candidate_opts, c_idx, expl_val)
+            return "INVALID_ANSWER"
+
+        q_text = non_empty[0]
         for ans_pos in (len(non_empty) - 1, len(non_empty) - 2):
             if ans_pos >= 3:
-                candidate_opts = [x[1] for x in non_empty[1:ans_pos] if x[1] != "-"]
+                candidate_opts = [x for x in non_empty[1:ans_pos] if x != "-"]
                 if 2 <= len(candidate_opts) <= 10:
-                    c_idx = parse_correct_index(non_empty[ans_pos][1], candidate_opts)
+                    c_idx = parse_correct_index(non_empty[ans_pos], candidate_opts)
                     if c_idx is not None:
-                        expl = non_empty[ans_pos + 1][1] if ans_pos + 1 < len(non_empty) else ""
-                        return (q_text, candidate_opts, c_idx, expl)
+                        expl_val = non_empty[ans_pos + 1] if ans_pos + 1 < len(non_empty) else ""
+                        return (q_text, candidate_opts, c_idx, expl_val)
         return "INVALID_ANSWER"
 
     first_check = _extract_csv_row(df.iloc[0].tolist())
@@ -1079,7 +1109,7 @@ async def upload_csv(
             q_preview = str(row[0]).strip()[:30]
             raise HTTPException(
                 status_code=400,
-                detail=f"خطأ في الصف {idx + 1} (السؤال: {q_preview}...): تعذر تحديد الإجابة الصحيحة أو عدد الخيارات خارج النطاق (2 إلى 10).",
+                detail=f"خطأ في الصف {idx + 1} (السؤال: {q_preview}...) مع البنية المختارة ({mode}): تأكد من مطابقة ترتيب الأعمدة.",
             )
         rows_to_insert.append(parsed_row)
 
@@ -1092,7 +1122,7 @@ async def upload_csv(
     write_audit_log(
         actor,
         "import_csv",
-        f"استورد {len(rows_to_insert)} سؤالاً من CSV إلى بنك «{saved['bank_name']}».",
+        f"استورد {len(rows_to_insert)} سؤالاً من CSV (بنية: {mode}) إلى بنك «{saved['bank_name']}».",
     )
     return {"status": "ok", "added": len(rows_to_insert), "bank_id": saved["bank_id"]}
 
