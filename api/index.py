@@ -2101,3 +2101,58 @@ async def catch_all(full_path: str, request: Request):
     if "webhook" in full_path and request.method == "POST":
         return await telegram_webhook(request)
     raise HTTPException(status_code=404, detail=f"المسار غير موجود: /{full_path}")
+
+@app.post("/api/send_generated_pdf_pair")
+@app.post("/send_generated_pdf_pair")
+async def send_generated_pdf_pair(
+    bank_id: int = Form(...),
+    question_count: int = Form(default=0),
+    solved_pdf: UploadFile = File(...),
+    unsolved_pdf: UploadFile = File(...),
+    x_telegram_init_data: str = Header(default=""),
+):
+    actor = verify_actor(x_telegram_init_data)
+    bank = get_bank_record(bank_id)
+    if not bank:
+        raise HTTPException(status_code=404, detail="البنك غير موجود.")
+
+    solved_bytes = await solved_pdf.read()
+    unsolved_bytes = await unsolved_pdf.read()
+
+    if not solved_bytes or not unsolved_bytes:
+        raise HTTPException(status_code=400, detail="ملف PDF المرسل فارغ.")
+
+    safe_slug = re.sub(r"[^\w\u0600-\u06FF-]+", "_", bank["name"]).strip("_") or "bank_questions"
+    solved_name = solved_pdf.filename or f"{safe_slug}_Solved.pdf"
+    unsolved_name = unsolved_pdf.filename or f"{safe_slug}_Unsolved.pdf"
+    q_label = f" ({question_count} سؤال)" if question_count > 0 else ""
+
+    bot_app = build_bot_app()
+    async with bot_app:
+        try:
+            await bot_app.bot.send_document(
+                chat_id=actor["user_id"],
+                document=io.BytesIO(solved_bytes),
+                filename=solved_name,
+                caption=f"النسخة المحلولة (Solved) — {bank['name']}{q_label}",
+            )
+            await bot_app.bot.send_document(
+                chat_id=actor["user_id"],
+                document=io.BytesIO(unsolved_bytes),
+                filename=unsolved_name,
+                caption=f"النسخة غير المحلولة (Unsolved) — {bank['name']}{q_label}",
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"تعذر إرسال الملفين إلى الخاص: تأكد من بدء محادثة مع البوت أولاً. ({e})",
+            )
+
+    write_audit_log(
+        actor,
+        "send_local_pdf_pair",
+        f"ولّد وأرسل نسختي PDF عالية الجودة (محلولة وغير محلولة) للبنك «{bank['name']}»{q_label} إلى الخاص.",
+    )
+    return {"status": "ok", "solved_file": solved_name, "unsolved_file": unsolved_name}
+
+
