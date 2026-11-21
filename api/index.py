@@ -175,7 +175,7 @@ def init_db():
             """)
             c.execute("CREATE INDEX IF NOT EXISTS idx_questions_bank_id ON questions(bank_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at)")
-            c.execute("CREATE INDEX IF NOT EXISTS idx_publish_jobs_actor ON publish_jobs(actor_id, id DESC)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_publish_jobs_id ON publish_jobs(id DESC)")
         conn.commit()
     _db_initialized = True
 
@@ -198,21 +198,13 @@ def cleanup_old_logs():
         conn.commit()
 
 
-def keep_only_latest_job_for_actor(actor_id: int, keep_job_id: Optional[int] = None):
+def replace_with_single_job(keep_job_id: Optional[int] = None):
     with PooledConn() as conn:
         with conn.cursor() as c:
             if keep_job_id is not None:
-                c.execute(
-                    "DELETE FROM publish_jobs WHERE actor_id = %s AND id != %s",
-                    (actor_id, keep_job_id),
-                )
+                c.execute("DELETE FROM publish_jobs WHERE id != %s", (keep_job_id,))
             else:
-                c.execute(
-                    """DELETE FROM publish_jobs
-                       WHERE actor_id = %s
-                         AND id NOT IN (SELECT id FROM publish_jobs WHERE actor_id = %s ORDER BY id DESC LIMIT 1)""",
-                    (actor_id, actor_id),
-                )
+                c.execute("DELETE FROM publish_jobs")
         conn.commit()
 
 
@@ -306,7 +298,7 @@ def write_audit_log(
     description: str,
     payload: Optional[Dict[str, Any]] = None,
 ):
-    cleanup_old_logs()
+    init_db()
     with PooledConn() as conn:
         with conn.cursor() as c:
             c.execute(
@@ -505,11 +497,15 @@ async def setup_webhook(request: Request):
     webhook_url = f"{base_url}/api/webhook"
 
     bot_app = build_bot_app(base_url)
-    async with bot_app:
+    await bot_app.initialize()
+    try:
         await bot_app.bot.set_webhook(url=webhook_url)
         await bot_app.bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(text="إدارة الاختبارات", web_app=WebAppInfo(url=base_url))
         )
+    finally:
+        await bot_app.shutdown()
+
     return {
         "status": "Webhook & Menu Button configured successfully on Render!",
         "app_url": base_url,
@@ -523,9 +519,12 @@ async def telegram_webhook(request: Request):
     base_url = get_base_url(request)
     data = await request.json()
     bot_app = build_bot_app(base_url)
-    async with bot_app:
+    await bot_app.initialize()
+    try:
         update = Update.de_json(data, bot_app.bot)
         await bot_app.process_update(update)
+    finally:
+        await bot_app.shutdown()
     return {"ok": True}
 
 
@@ -1083,18 +1082,20 @@ async def delete_community(comm_id: int, x_telegram_init_data: str = Header(defa
 async def test_community(req: CommunityCreateReq, x_telegram_init_data: str = Header(default="")):
     verify_actor(x_telegram_init_data)
     bot = Bot(token=BOT_TOKEN)
-    async with bot:
-        try:
-            kwargs = {"chat_id": req.chat_id.strip(), "text": "تم التحقق من صلاحيات البوت والاتصال بالوجهة بنجاح."}
-            if req.topic_id:
-                kwargs["message_thread_id"] = req.topic_id
-            await bot.send_message(**kwargs)
-            return {"status": "ok"}
-        except Exception as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"تعذر الإرسال: تأكد من إضافة البوت كمشرف ومنح صلاحية النشر. ({e})",
-            )
+    await bot.initialize()
+    try:
+        kwargs: Dict[str, Any] = {"chat_id": req.chat_id.strip(), "text": "تم التحقق من صلاحيات البوت والاتصال بالوجهة بنجاح."}
+        if req.topic_id:
+            kwargs["message_thread_id"] = req.topic_id
+        await bot.send_message(**kwargs)
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"تعذر الإرسال: تأكد من إضافة البوت كمشرف ومنح صلاحية النشر. ({e})",
+        )
+    finally:
+        await bot.shutdown()
 
 
 async def execute_publish_job(
@@ -1138,8 +1139,11 @@ async def execute_publish_job(
 
     is_group_or_channel = isinstance(parsed_chat, int) or str(parsed_chat).startswith("@")
     cancelled_early = False
+    last_err = ""
 
-    async with Bot(token=BOT_TOKEN) as bot:
+    bot = Bot(token=BOT_TOKEN)
+    await bot.initialize()
+    try:
         if quiz_title and quiz_title.strip() and total_requested > 0:
             try:
                 prefix = "إعادة إرسال الأسئلة المتعذرة" if is_retry else "اختبار جديد"
@@ -1179,8 +1183,15 @@ async def execute_publish_job(
                 break
 
             qid, q_text, o1, o2, o3, o4, c_idx, expl = row
-            opts = [str(o1 or "-")[:98], str(o2 or "-")[:98], str(o3 or "-")[:98], str(o4 or "-")[:98]]
+            opts = [
+                str(o1 if o1 and str(o1).strip() else "-")[:98],
+                str(o2 if o2 and str(o2).strip() else "-")[:98],
+                str(o3 if o3 and str(o3).strip() else "-")[:98],
+                str(o4 if o4 and str(o4).strip() else "-")[:98],
+            ]
             current_correct = int(c_idx or 0)
+            if current_correct < 0 or current_correct > 3:
+                current_correct = 0
 
             if shuffle_options:
                 indexed = list(enumerate(opts))
@@ -1188,9 +1199,13 @@ async def execute_publish_job(
                 opts = [x[1] for x in indexed]
                 current_correct = [i for i, x in enumerate(indexed) if x[0] == current_correct][0]
 
+            q_str = str(q_text or "").strip()[:295]
+            if not q_str:
+                q_str = "سؤال"
+
             kwargs: Dict[str, Any] = {
                 "chat_id": parsed_chat,
-                "question": str(q_text or "")[:295],
+                "question": q_str,
                 "options": opts,
                 "type": Poll.QUIZ,
                 "correct_option_id": current_correct,
@@ -1213,11 +1228,12 @@ async def execute_publish_job(
                     delivered = True
                     break
                 except RetryAfter as e:
+                    last_err = f"RetryAfter: {e.retry_after}"
                     await asyncio.sleep(int(e.retry_after) + 1)
                 except Exception as e:
-                    err_msg = str(e)
-                    if "retry after" in err_msg.lower() or "too many requests" in err_msg.lower():
-                        m = re.search(r"(\d+)", err_msg)
+                    last_err = str(e)
+                    if "retry after" in last_err.lower() or "too many requests" in last_err.lower():
+                        m = re.search(r"(\d+)", last_err)
                         await asyncio.sleep(int(m.group(1)) + 1 if m else 10)
                     else:
                         break
@@ -1270,7 +1286,7 @@ async def execute_publish_job(
 
         report_lines = [
             "━━━━━━━━━━━━━━━━━━━━",
-            "التقرير التفصيلي لعملية الإرسال",
+            "التقرير التفصيلي لعملية الإرسال الحالية",
             "━━━━━━━━━━━━━━━━━━━━",
             f"• رقم العملية: #{job_id}",
             f"• حالة العملية: {status_label}",
@@ -1285,20 +1301,18 @@ async def execute_publish_job(
             f"• الأسئلة المتعذرة / غير المرسلة: {failed_count}",
             f"• نسبة الإنجاز الفعلي: {success_rate}%",
         ])
-        if failed_count > 0:
-            report_lines.append("• ملاحظة: يمكنك إعادة إرسال الأسئلة المتبقية أو المتعذرة من لوحة التحكم.")
+        if failed_count > 0 and last_err:
+            report_lines.append(f"• سبب التعذر: {last_err[:120]}")
 
         try:
             await bot.send_message(chat_id=admin_id, text="\n".join(report_lines))
         except Exception:
             pass
-
-    actor_desc = f"{actor['name']} ({actor['tag']})" if actor["role"] == "admin" else "المالك"
-    write_audit_log(
-        actor,
-        "publish_quiz",
-        f"أرسل {sent_count} من {total_requested} سؤالاً إلى «{target_label}» (المتعذر/المتوقف: {failed_count}، الحالة: {status_label}) بواسطة {actor_desc}.",
-    )
+    finally:
+        try:
+            await bot.shutdown()
+        except Exception:
+            pass
 
 
 @app.post("/api/publish_batch")
@@ -1320,6 +1334,14 @@ async def publish_batch(
 
     with PooledConn() as conn:
         with conn.cursor() as c:
+            c.execute("SELECT id, status FROM publish_jobs WHERE status IN ('queued', 'running', 'paused') ORDER BY id DESC LIMIT 1")
+            active_job = c.fetchone()
+            if active_job:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"توجد عملية إرسال حالية (#{active_job[0]}) قيد التشغيل. أوقفها أو احذفها أولاً.",
+                )
+
             c.execute("SELECT id FROM questions WHERE id = ANY(%s)", (q_ids,))
             valid_set = {r[0] for r in c.fetchall()}
             if req.target_type == "saved_comm":
@@ -1343,6 +1365,7 @@ async def publish_batch(
             if not ordered_valid_ids:
                 raise HTTPException(status_code=400, detail="الأسئلة المحددة غير متوفرة.")
 
+            c.execute("DELETE FROM publish_jobs")
             c.execute(
                 """INSERT INTO publish_jobs
                    (actor_id, actor_name, actor_tag, bank_id, target_type, comm_id, target_label,
@@ -1368,7 +1391,7 @@ async def publish_batch(
             job_id = c.fetchone()[0]
         conn.commit()
 
-    keep_only_latest_job_for_actor(int(actor["user_id"]), keep_job_id=int(job_id))
+    replace_with_single_job(keep_job_id=int(job_id))
 
     background_tasks.add_task(
         execute_publish_job,
@@ -1395,16 +1418,15 @@ async def publish_batch(
 @app.get("/api/publish_jobs")
 @app.get("/publish_jobs")
 async def get_publish_jobs(x_telegram_init_data: str = Header(default="")):
-    actor = verify_actor(x_telegram_init_data)
-    cleanup_old_logs()
+    verify_actor(x_telegram_init_data)
     with PooledConn() as conn:
         with conn.cursor() as c:
             c.execute("""
                 SELECT id, actor_name, actor_tag, target_label, quiz_title,
                        total_count, sent_count, failed_count, failed_question_ids,
                        status, created_at, completed_at
-                FROM publish_jobs WHERE actor_id = %s ORDER BY id DESC LIMIT 1
-            """, (actor["user_id"],))
+                FROM publish_jobs ORDER BY id DESC LIMIT 1
+            """)
             rows = c.fetchall()
 
     jobs = []
@@ -1435,7 +1457,7 @@ async def get_publish_jobs(x_telegram_init_data: str = Header(default="")):
 @app.get("/api/publish_jobs/{job_id}")
 @app.get("/publish_jobs/{job_id}")
 async def get_single_publish_job(job_id: int, x_telegram_init_data: str = Header(default="")):
-    actor = verify_actor(x_telegram_init_data)
+    verify_actor(x_telegram_init_data)
     with PooledConn() as conn:
         with conn.cursor() as c:
             c.execute(
@@ -1448,8 +1470,6 @@ async def get_single_publish_job(job_id: int, x_telegram_init_data: str = Header
             r = c.fetchone()
             if not r:
                 raise HTTPException(status_code=404, detail="العملية غير موجودة.")
-            if int(r[1]) != int(actor["user_id"]) and actor["role"] != "owner":
-                raise HTTPException(status_code=403, detail="غير مصرح بعرض هذه العملية.")
 
     f_ids = r[9] if isinstance(r[9], list) else (json.loads(r[9]) if r[9] else [])
     total_c = r[6] or 0
@@ -1476,15 +1496,9 @@ async def get_single_publish_job(job_id: int, x_telegram_init_data: str = Header
 @app.delete("/api/publish_jobs/{job_id}")
 @app.delete("/publish_jobs/{job_id}")
 async def delete_publish_job(job_id: int, x_telegram_init_data: str = Header(default="")):
-    actor = verify_actor(x_telegram_init_data)
+    verify_actor(x_telegram_init_data)
     with PooledConn() as conn:
         with conn.cursor() as c:
-            c.execute("SELECT actor_id FROM publish_jobs WHERE id = %s", (job_id,))
-            row = c.fetchone()
-            if not row:
-                return {"status": "ok"}
-            if int(row[0]) != int(actor["user_id"]) and actor["role"] != "owner":
-                raise HTTPException(status_code=403, detail="لا تملك صلاحية حذف هذا التقرير.")
             c.execute("DELETE FROM publish_jobs WHERE id = %s", (job_id,))
         conn.commit()
     return {"status": "ok"}
@@ -1493,22 +1507,19 @@ async def delete_publish_job(job_id: int, x_telegram_init_data: str = Header(def
 @app.post("/api/publish_jobs/control")
 @app.post("/publish_jobs/control")
 async def control_publish_job(req: JobControlReq, x_telegram_init_data: str = Header(default="")):
-    actor = verify_actor(x_telegram_init_data)
+    verify_actor(x_telegram_init_data)
     action = (req.action or "").strip().lower()
     if action not in ("pause", "resume", "cancel"):
         raise HTTPException(status_code=400, detail="إجراء التحكم غير صالح.")
 
     with PooledConn() as conn:
         with conn.cursor() as c:
-            c.execute("SELECT actor_id, status, target_label FROM publish_jobs WHERE id = %s", (req.job_id,))
+            c.execute("SELECT id, status FROM publish_jobs WHERE id = %s", (req.job_id,))
             row = c.fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="العملية غير موجودة.")
-            if int(row[0]) != int(actor["user_id"]) and actor["role"] != "owner":
-                raise HTTPException(status_code=403, detail="لا تملك صلاحية التحكم في هذه العملية.")
 
             current_status = row[1]
-            target_label = row[2]
 
             if action == "pause":
                 if current_status not in ("queued", "running"):
@@ -1530,8 +1541,6 @@ async def control_publish_job(req: JobControlReq, x_telegram_init_data: str = He
                 )
         conn.commit()
 
-    action_ar = {"pause": "أوقف مؤقتاً", "resume": "استأنف", "cancel": "ألغى"}[action]
-    write_audit_log(actor, "control_publish_job", f"{action_ar} عملية الإرسال #{req.job_id} إلى «{target_label}».")
     return {"status": "ok", "job_id": req.job_id, "job_status": new_status}
 
 
@@ -1547,6 +1556,14 @@ async def retry_failed_questions(
 
     with PooledConn() as conn:
         with conn.cursor() as c:
+            c.execute("SELECT id, status FROM publish_jobs WHERE status IN ('queued', 'running', 'paused') ORDER BY id DESC LIMIT 1")
+            active_job = c.fetchone()
+            if active_job:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"توجد عملية إرسال حالية (#{active_job[0]}) قيد التشغيل. أوقفها أو احذفها أولاً.",
+                )
+
             c.execute(
                 """SELECT id, actor_id, bank_id, target_type, comm_id, target_label,
                           quiz_title, failed_question_ids, delay_sec, shuffle_options, open_period
@@ -1556,8 +1573,6 @@ async def retry_failed_questions(
             row = c.fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="سجل عملية الإرسال غير موجود.")
-            if int(row[1]) != int(actor["user_id"]) and actor["role"] != "owner":
-                raise HTTPException(status_code=403, detail="لا تملك صلاحية إعادة إرسال هذه العملية.")
 
             failed_ids = row[7] if isinstance(row[7], list) else (json.loads(row[7]) if row[7] else [])
             if not failed_ids:
@@ -1585,6 +1600,7 @@ async def retry_failed_questions(
             if not valid_failed_ids:
                 raise HTTPException(status_code=400, detail="الأسئلة المتعذرة لم تعد موجودة في قاعدة البيانات.")
 
+            c.execute("DELETE FROM publish_jobs")
             c.execute(
                 """INSERT INTO publish_jobs
                    (actor_id, actor_name, actor_tag, bank_id, target_type, comm_id, target_label,
@@ -1610,7 +1626,7 @@ async def retry_failed_questions(
             new_job_id = c.fetchone()[0]
         conn.commit()
 
-    keep_only_latest_job_for_actor(int(actor["user_id"]), keep_job_id=int(new_job_id))
+    replace_with_single_job(keep_job_id=int(new_job_id))
 
     background_tasks.add_task(
         execute_publish_job,
@@ -1773,11 +1789,11 @@ async def get_logs(x_telegram_init_data: str = Header(default="")):
 @app.delete("/logs")
 async def clear_logs(x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
-    if actor["role"] != "owner":
-        raise HTTPException(status_code=403, detail="مسح السجل بالكامل متاح للمالك فقط.")
+    if actor["role"] != "owner" and not actor.get("can_manage_admins", False):
+        raise HTTPException(status_code=403, detail="مسح السجل غير متاح لصلاحياتك الحالية.")
     with PooledConn() as conn:
         with conn.cursor() as c:
-            c.execute("DELETE FROM audit_logs")
+            c.execute("TRUNCATE TABLE audit_logs RESTART IDENTITY")
         conn.commit()
     return {"status": "ok"}
 
