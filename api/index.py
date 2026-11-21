@@ -1,16 +1,15 @@
 import os
 import io
-import re
 import json
 import hmac
 import hashlib
 import urllib.parse
 import asyncio
 import random
-from typing import Optional
+from typing import Optional, List
 import pandas as pd
 import psycopg2
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Request
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Poll, MenuButtonWebApp
@@ -20,7 +19,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "9268644584:AAE8woNBoXzueYqpsT4x69efYcDgP1mPP9Y")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
-app = FastAPI(title="Telegram Quiz Mini App v3.3")
+app = FastAPI(title="Telegram Quiz Mini App v4")
 
 def get_conn():
     if not DATABASE_URL:
@@ -142,11 +141,14 @@ class CommunityCreateReq(BaseModel):
     chat_id: str
     topic_id: Optional[int] = None
 
-class SinglePublishReq(BaseModel):
-    question_id: int
+class BulkPublishReq(BaseModel):
+    bank_id: int
+    question_ids: Optional[List[int]] = None
     target_type: str
     chat_id: Optional[str] = None
     topic_id: Optional[int] = None
+    delay_sec: float = 0.0
+    shuffle_questions: bool = False
     shuffle_options: bool = False
     open_period: Optional[int] = None
 
@@ -218,7 +220,7 @@ async def setup_webhook(request: Request):
             menu_button=MenuButtonWebApp(text="📱 فتح التطبيق", web_app=WebAppInfo(url=base_url))
         )
     return {
-        "status": "Webhook & Menu Button configured successfully! (v3.3)",
+        "status": "Webhook & Menu Button configured successfully! (v4)",
         "app_url": base_url,
         "webhook_url": webhook_url
     }
@@ -507,57 +509,93 @@ async def test_community(req: CommunityCreateReq, x_telegram_init_data: str = He
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"فشل الاتصال: تأكد أن البوت مشرف (Admin) ولديه صلاحية إرسال الرسائل. ({e})")
 
-# إرسال سؤال واحد في كل طلب لتجاوز مهلة Vercel ومعالجة قيود تيليجرام
-@app.post("/api/publish_single")
-@app.post("/publish_single")
-async def publish_single_question(req: SinglePublishReq, x_telegram_init_data: str = Header(default="")):
+# دالة العمل في الخلفية على الخادم لإرسال الكل معاً حتى لو أغلقت البوت فوراً
+async def run_bulk_publish_task(questions: list, target_chat, req: BulkPublishReq, admin_user_id: int):
+    bot_app = build_bot_app()
+    sent_count = 0
+    async with bot_app:
+        for idx, (q_text, o1, o2, o3, o4, c_idx, expl) in enumerate(questions):
+            opts = [o1[:98], o2[:98], o3[:98], o4[:98]]
+            if req.shuffle_options:
+                indexed = list(enumerate(opts))
+                random.shuffle(indexed)
+                opts = [x[1] for x in indexed]
+                c_idx = [i for i, x in enumerate(indexed) if x[0] == c_idx][0]
+
+            kwargs = {
+                "chat_id": target_chat,
+                "question": q_text[:295],
+                "options": opts,
+                "type": Poll.QUIZ,
+                "correct_option_id": c_idx,
+                "is_anonymous": True
+            }
+            if expl:
+                kwargs["explanation"] = expl[:195]
+            if req.topic_id:
+                kwargs["message_thread_id"] = req.topic_id
+            if req.open_period and 5 <= req.open_period <= 600:
+                kwargs["open_period"] = req.open_period
+
+            while True:
+                try:
+                    await bot_app.bot.send_poll(**kwargs)
+                    sent_count += 1
+                    break
+                except RetryAfter as e:
+                    await asyncio.sleep(int(e.retry_after) + 1)
+                except Exception:
+                    break
+
+            if idx < len(questions) - 1:
+                if req.delay_sec > 0:
+                    await asyncio.sleep(req.delay_sec)
+                else:
+                    # أسرع ما يمكن مع تجنب حظر الترتيب
+                    await asyncio.sleep(0.15)
+
+        try:
+            await bot_app.bot.send_message(
+                chat_id=admin_user_id,
+                text=f"✅ اكتمل إرسال الاختبار في الخلفية! تم إرسال **{sent_count}** من **{len(questions)}** سؤال.",
+                parse_mode="Markdown"
+            )
+        except Exception:
+            pass
+
+@app.post("/api/publish_all")
+@app.post("/publish_all")
+async def publish_all_background(
+    req: BulkPublishReq,
+    background_tasks: BackgroundTasks,
+    x_telegram_init_data: str = Header(default="")
+):
     user = verify_telegram_init_data(x_telegram_init_data)
-    target_chat = user.get("id") if req.target_type == "private" else req.chat_id
+    admin_user_id = user.get("id")
+    target_chat = admin_user_id if req.target_type == "private" else req.chat_id
     if not target_chat:
         raise HTTPException(status_code=400, detail="يرجى تحديد الوجهة أو اختيار مجتمع/قناة")
 
     conn = get_conn()
     c = conn.cursor()
-    c.execute("SELECT question, opt1, opt2, opt3, opt4, correct_idx, explanation FROM questions WHERE id = %s", (req.question_id,))
-    row = c.fetchone()
+    c.execute("SELECT id, question, opt1, opt2, opt3, opt4, correct_idx, explanation FROM questions WHERE bank_id = %s ORDER BY id ASC", (req.bank_id,))
+    rows = c.fetchall()
     c.close()
     conn.close()
 
-    if not row:
-        return {"status": "skipped"}
+    if req.question_ids is not None:
+        allowed = set(req.question_ids)
+        rows = [r for r in rows if r[0] in allowed]
 
-    q_text, o1, o2, o3, o4, c_idx, expl = row
-    opts = [o1[:98], o2[:98], o3[:98], o4[:98]]
-    if req.shuffle_options:
-        indexed = list(enumerate(opts))
-        random.shuffle(indexed)
-        opts = [x[1] for x in indexed]
-        c_idx = [i for i, x in enumerate(indexed) if x[0] == c_idx][0]
+    questions = [(r[1], r[2], r[3], r[4], r[5], r[6], r[7]) for r in rows]
+    if not questions:
+        raise HTTPException(status_code=400, detail="لا توجد أسئلة محددة للإرسال")
 
-    kwargs = {
-        "chat_id": target_chat,
-        "question": q_text[:295],
-        "options": opts,
-        "type": Poll.QUIZ,
-        "correct_option_id": c_idx,
-        "is_anonymous": True
-    }
-    if expl:
-        kwargs["explanation"] = expl[:195]
-    if req.topic_id:
-        kwargs["message_thread_id"] = req.topic_id
-    if req.open_period and 5 <= req.open_period <= 600:
-        kwargs["open_period"] = req.open_period
+    if req.shuffle_questions:
+        random.shuffle(questions)
 
-    bot_app = build_bot_app()
-    async with bot_app:
-        try:
-            await bot_app.bot.send_poll(**kwargs)
-            return {"status": "sent"}
-        except RetryAfter as e:
-            return {"status": "retry_after", "wait_seconds": int(e.retry_after) + 1}
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"فشل إرسال السؤال: {str(e)}")
+    background_tasks.add_task(run_bulk_publish_task, questions, target_chat, req, admin_user_id)
+    return {"status": "started", "count": len(questions)}
 
 @app.get("/api/admins")
 @app.get("/admins")
