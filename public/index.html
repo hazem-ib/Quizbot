@@ -431,7 +431,7 @@
 
       <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-          <h3 style="margin:0;">تقارير الإرسال ومتابعة المتعذر</h3>
+          <h3 style="margin:0;">آخر تقرير إرسال</h3>
           <button class="btn btn-outline btn-sm" onclick="loadPublishJobs()">
             <svg class="ico ico-sm"><use href="#i-refresh"/></svg> تحديث
           </button>
@@ -1332,17 +1332,32 @@
       return "في الانتظار";
     }
 
+    async function deletePublishJob(jobId) {
+      await api(`/api/publish_jobs/${jobId}`, { method: "DELETE" });
+      if (activeJobId === jobId) {
+        stopJobPolling();
+        activeJobId = null;
+        document.getElementById("liveProcessCard").style.display = "none";
+        document.getElementById("progressBox").style.display = "none";
+      }
+      await loadPublishJobs();
+    }
+
     async function loadPublishJobs() {
       const jobs = await api("/api/publish_jobs");
       const box = document.getElementById("publishJobsList");
       if (!jobs || jobs.length === 0) {
-        box.innerHTML = `<div style="text-align:center; color:var(--hint); padding:12px;">لا توجد عمليات إرسال مسجلة بعد.</div>`;
+        box.innerHTML = `<div style="text-align:center; color:var(--hint); padding:12px;">لا يوجد تقرير حالي.</div>`;
         return;
       }
 
-      const activeJob = jobs.find(j => ["queued", "running", "paused"].includes(j.status));
-      if (activeJob && activeJobId !== activeJob.id) {
-        startJobPolling(activeJob.id);
+      const latestJob = jobs[0];
+      if (["queued", "running", "paused"].includes(latestJob.status)) {
+        if (activeJobId !== latestJob.id) {
+          startJobPolling(latestJob.id);
+        }
+      } else if (activeJobId === latestJob.id) {
+        renderLiveProcessUI(latestJob);
       }
 
       box.innerHTML = jobs.map(j => {
@@ -1385,6 +1400,9 @@
                 <svg class="ico ico-sm"><use href="#i-refresh"/></svg> إعادة إرسال (${j.failed_count})
               </button>
             ` : ""}
+            <button class="btn btn-sm btn-danger" onclick="deletePublishJob(${j.id})">
+              <svg class="ico ico-sm"><use href="#i-trash"/></svg> حذف التقرير
+            </button>
           </div>
         </div>
       `;
