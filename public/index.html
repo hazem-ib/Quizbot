@@ -1,4 +1,4 @@
-<<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
@@ -350,7 +350,7 @@
           <input type="checkbox" id="enableLimit" onchange="toggleLimitInput()" />
         </div>
         <div id="limitBox" style="display:none;">
-          <label>عدد الأسئلة المطلوب إرسالها:</label>
+          <label>عدد الأسئلة المطلوب إرسالها (اتركه فارغاً لإرسال كل المحدد):</label>
           <input type="number" id="pubLimit" min="1" placeholder="مثال: 15" />
         </div>
 
@@ -1241,14 +1241,17 @@
 
       let questionsToSend = [...pubBankQuestions];
       if (document.getElementById("enableSelectiveMode").checked) {
-        const selectedIds = new Set(
-          Array.from(document.querySelectorAll(".pub-q-chk:checked")).map(c => parseInt(c.value))
-        );
-        questionsToSend = questionsToSend.filter(q => selectedIds.has(q.id));
+        const checkboxes = document.querySelectorAll(".pub-q-chk");
+        if (checkboxes.length > 0) {
+          const selectedIds = new Set(
+            Array.from(checkboxes).filter(c => c.checked).map(c => parseInt(c.value))
+          );
+          questionsToSend = questionsToSend.filter(q => selectedIds.has(q.id));
+        }
       }
 
       if (questionsToSend.length === 0) {
-        return alert("لم يتم تحديد أي سؤال للإرسال.");
+        return alert("لا توجد أسئلة متاحة أو محددة في هذا البنك.");
       }
 
       if (document.getElementById("pubShuffleQ").checked) {
@@ -1257,12 +1260,15 @@
 
       let limitCount = null;
       if (document.getElementById("enableLimit").checked) {
-        const parsedLimit = parseInt(document.getElementById("pubLimit").value);
-        if (!parsedLimit || parsedLimit < 1) {
-          return alert("يرجى إدخال عدد أسئلة صحيح (1 فأكثر).");
+        const rawLimit = (document.getElementById("pubLimit").value || "").trim();
+        if (rawLimit !== "") {
+          const parsedLimit = parseInt(rawLimit, 10);
+          if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
+            return alert("يرجى إدخال عدد أسئلة صحيح (1 فأكثر) أو ترك الخانة فارغة.");
+          }
+          limitCount = parsedLimit;
+          questionsToSend = questionsToSend.slice(0, limitCount);
         }
-        limitCount = parsedLimit;
-        questionsToSend = questionsToSend.slice(0, limitCount);
       }
 
       const finalCount = questionsToSend.length;
