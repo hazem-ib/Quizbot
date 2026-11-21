@@ -267,10 +267,10 @@
 
     <div id="tab-upload" class="tab">
       <div class="card">
-        <h3><svg class="ico"><use href="#i-upload"/></svg> استيراد أسئلة من PDF (باللون الأحمر / الهايلايت)</h3>
+        <h3><svg class="ico"><use href="#i-upload"/></svg> استيراد أسئلة PDF</h3>
         <div class="hint-box">
-          يستخرج النص، يفصل المقدمات والأسئلة المقالية، يفصص أسئلة الاختيار من متعدد (A / B / C / D)، ويحدد الخيار الملوّن بالأحمر أو المظلل عبر طبقات تحقق متعددة.<br>
-          <strong>تنبيه درجات الطلاب:</strong> أي سؤال لا يحقق إشارة واضحة أو يظهر فيه أكثر من خيار ملوّن يُعلَّم تلقائياً للمراجعة قبل الإرسال.
+          يستخرج المحتوى النصي من ملف PDF، ويعزل المقدمات والعناوين التمهيدية والأسئلة المقالية، ويحلل أسئلة الاختيار من متعدد (A / B / C / D) لتحديد الخيار الملوّن أو المظلل عبر طبقات فحص متعددة.<br>
+          <strong>ملاحظة جودة وتصحيح:</strong> أي سؤال لا يحقق إشارة تمييز واضحة أو تتعدد فيه الخيارات الملوّنة يُعلَّم تلقائياً للمراجعة اليدوية قبل الاعتماد أو الإرسال.
         </div>
         <label>اسم البنك الجديد:</label>
         <input type="text" id="pdfBankName" placeholder="مثال: علم الأدوية - بنك PDF" />
@@ -489,7 +489,6 @@
       </div>
     </div>
 
-    <!-- نافذة تصدير الأسئلة كـ CSV إلى الخاص -->
     <div id="exportCsvModal" class="modal">
       <div class="modal-content">
         <h3><svg class="ico"><use href="#i-download"/></svg> تحميل الأسئلة كـ CSV على الخاص</h3>
@@ -627,7 +626,7 @@
       document.getElementById("authRing").style.color = "#f87171";
       document.getElementById("authTitle").innerText = "تعذر الوصول";
       document.getElementById("authTitle").style.color = "#f87171";
-      document.getElementById("authMsg").innerText = reason || "عذراً، أنت لست مشرفاً في البوت.";
+      document.getElementById("authMsg").innerText = reason || "تعذر التحقق من صلاحيات المشرف.";
     }
 
     async function api(url, options = {}, silent = false) {
@@ -637,7 +636,7 @@
       }
       const res = await fetch(url, options);
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: "حدث خطأ غير متوقع." }));
+        const err = await res.json().catch(() => ({ detail: "تعذر إتمام الطلب." }));
         if (!silent) alert(err.detail || "تعذر إتمام الطلب.");
         throw new Error(err.detail || "Request failed");
       }
@@ -1105,7 +1104,7 @@
         repBox.style.display = "block";
         repBox.innerHTML = `
           <div class="${reviewCount > 0 ? 'warn-box' : 'hint-box'}">
-            تم استخراج <b>${res.added}</b> سؤال MCQ (مؤكد: <b>${verifiedCount}</b> • يحتاج مراجعة: <b>${reviewCount}</b> • أسئلة مقالية مفصولة: <b>${essayCount}</b>).
+            تم استخراج <b>${res.added}</b> سؤال اختيار من متعدد (مؤكد: <b>${verifiedCount}</b> • يحتاج مراجعة: <b>${reviewCount}</b> • أسئلة مقالية معزولة: <b>${essayCount}</b>).
             ${itemsHtml ? `<ul style="margin:6px 0 0; padding-right:18px;">${itemsHtml}</ul>` : ""}
           </div>
         `;
