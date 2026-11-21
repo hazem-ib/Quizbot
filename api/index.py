@@ -17,6 +17,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Requ
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Poll, MenuButtonWebApp
+from telegram.constants import ParseMode
 from telegram.error import RetryAfter
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from api.pdf_mcq_importer import extract_pdf_mcq_rows
@@ -578,6 +579,38 @@ def build_bot_app(webapp_url: str = ""):
             reply_markup=InlineKeyboardMarkup(keyboard),
         )
 
+    async def id_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        msg = update.effective_message
+        chat = update.effective_chat
+        user = update.effective_user
+        if not msg or not chat:
+            return
+
+        chat_title = (getattr(chat, "title", None) or "").strip()
+        lines = []
+        if chat.type in ("group", "supergroup", "channel"):
+            lines.append(f"اسم المجموعة / القناة: <b>{chat_title or 'بدون اسم'}</b>")
+            lines.append(f"معرّف المجموعة / القناة (Chat ID): <code>{chat.id}</code>")
+            topic_id = getattr(msg, "message_thread_id", None)
+            if topic_id:
+                lines.append(f"رقم الموضوع (Topic ID): <code>{topic_id}</code>")
+            else:
+                lines.append("رقم الموضوع (Topic ID): <i>لا يوجد موضوع (رسالة عامة)</i>")
+        else:
+            lines.append(f"معرّف المحادثة (Chat ID): <code>{chat.id}</code>")
+
+        if user:
+            lines.append(f"معرّف المستخدم (User ID): <code>{user.id}</code>")
+
+        reply_kwargs = {
+            "text": "\n".join(lines),
+            "parse_mode": ParseMode.HTML,
+        }
+        if getattr(msg, "message_thread_id", None):
+            reply_kwargs["message_thread_id"] = msg.message_thread_id
+
+        await msg.reply_text(**reply_kwargs)
+
     async def handle_pdf_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         init_db()
         doc = update.message.document if update.message else None
@@ -620,6 +653,7 @@ def build_bot_app(webapp_url: str = ""):
             await update.message.reply_text(f"تعذر استخراج الأسئلة: {e}")
 
     application.add_handler(CommandHandler("start", start_cmd))
+    application.add_handler(CommandHandler("id", id_cmd))
     application.add_handler(MessageHandler(filters.Document.PDF, handle_pdf_doc))
     return application
 
@@ -750,7 +784,7 @@ async def rename_bank(bank_id: int, req: BankRenameReq, x_telegram_init_data: st
 
 
 @app.delete("/api/banks/{bank_id}")
-@app.delete("/banks/{bank_id}")
+@app.delete("/api/banks/{bank_id}")
 async def delete_bank(bank_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_delete", "لا تملك صلاحية الحذف.")
@@ -1369,7 +1403,7 @@ async def add_community(req: CommunityCreateReq, x_telegram_init_data: str = Hea
 
 
 @app.delete("/api/communities/{comm_id}")
-@app.delete("/communities/{comm_id}")
+@app.delete("/api/communities/{comm_id}")
 async def delete_community(comm_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_delete", "لا تملك صلاحية حذف الوجهات.")
