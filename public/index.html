@@ -20,7 +20,7 @@
       --radius: 16px;
     }
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { margin: 0; padding: 14px 14px 98px; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+    body { margin: 0; padding: 14px 14px 98px; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; min-height: 100vh; }
 
     .ico { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.85; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
     .ico-sm { width: 15px; height: 15px; }
@@ -37,7 +37,7 @@
       display: flex; align-items: center; justify-content: center; margin-bottom: 14px; color: #60a5fa;
     }
     #authScreen p { color: #94a3b8; font-size: 0.92rem; max-width: 320px; line-height: 1.65; }
-    #appContainer { display: none; max-width: 600px; margin: 0 auto; }
+    #appContainer { display: none; width: 100%; max-width: 960px; margin: 0 auto; }
 
     .profile-header {
       display: flex; justify-content: space-between; align-items: center; gap: 10px;
@@ -117,16 +117,16 @@
     .opt-item { padding: 8px 11px; border-radius: 10px; background: var(--bg); margin-bottom: 6px; font-size: 0.84rem; border: 1px solid transparent; }
     .opt-item.correct { border-color: rgba(16, 185, 129, 0.45); background: rgba(16, 185, 129, 0.1); color: #34d399; font-weight: 600; }
 
-    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.82); backdrop-filter: blur(4px); z-index: 200; align-items: center; justify-content: center; padding: 16px; }
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.82); backdrop-filter: blur(4px); z-index: 200; align-items: center; justify-content: center; padding: 14px; }
     .modal.open { display: flex; }
-    .modal-content { background: var(--sec-bg); border: 1px solid var(--card-border); border-radius: var(--radius); padding: 18px; width: 100%; max-width: 470px; max-height: 90vh; overflow-y: auto; }
+    .modal-content { background: var(--sec-bg); border: 1px solid var(--card-border); border-radius: var(--radius); padding: 18px; width: 100%; max-width: 580px; max-height: 92vh; overflow-y: auto; }
 
     .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 11px; font-size: 0.85rem; }
     .switch-row input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--btn); flex-shrink: 0; }
     .hint-box { background: rgba(59,130,246,0.09); border-right: 3px solid var(--btn); padding: 10px 12px; border-radius: 10px; font-size: 0.8rem; margin-bottom: 13px; color: var(--text); line-height: 1.55; }
     .warn-box { background: rgba(245,158,11,0.11); border-right: 3px solid var(--warn); padding: 11px 13px; border-radius: 12px; font-size: 0.8rem; margin-top: 12px; color: #fde68a; line-height: 1.6; }
 
-    .select-list { max-height: 230px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 8px; background: var(--bg); margin-bottom: 12px; }
+    .select-list { max-height: 240px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 8px; background: var(--bg); margin-bottom: 12px; }
     .select-q-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.83rem; }
     .select-q-item:last-child { border-bottom: none; }
     .select-q-item input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0; }
@@ -156,6 +156,9 @@
       </symbol>
       <symbol id="i-upload" viewBox="0 0 24 24">
         <path d="M12 16V4m0 0-4 4m4-4 4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+      </symbol>
+      <symbol id="i-download" viewBox="0 0 24 24">
+        <path d="M12 4v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
       </symbol>
       <symbol id="i-globe" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>
@@ -223,11 +226,11 @@
     </div>
 
     <div id="tab-banks" class="tab active">
-      <div style="display:flex; gap:8px; margin-bottom:13px;">
-        <button class="btn" id="btnNewBank" onclick="openNewBankModal()">
+      <div style="display:flex; gap:8px; margin-bottom:13px; flex-wrap:wrap;">
+        <button class="btn" style="flex:1; min-width:140px;" id="btnNewBank" onclick="openNewBankModal()">
           <svg class="ico"><use href="#i-plus"/></svg> بنك جديد
         </button>
-        <button class="btn btn-success" id="btnGoUpload" onclick="switchTab('upload')">
+        <button class="btn btn-success" style="flex:1; min-width:140px;" id="btnGoUpload" onclick="switchTab('upload')">
           <svg class="ico"><use href="#i-upload"/></svg> استيراد ملفات
         </button>
       </div>
@@ -245,12 +248,15 @@
             <svg class="ico ico-sm"><use href="#i-edit"/></svg> الاسم
           </button>
         </div>
-        <div style="display:flex; gap:8px;">
-          <button class="btn btn-sm" id="btnAddQ" style="flex:1;" onclick="openQuestionModal()">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-sm" id="btnAddQ" style="flex:1; min-width:110px;" onclick="openQuestionModal()">
             <svg class="ico ico-sm"><use href="#i-plus"/></svg> إضافة سؤال
           </button>
-          <button class="btn btn-sm btn-success" id="btnAppendCsv" style="flex:1;" onclick="openAppendCsvModal()">
+          <button class="btn btn-sm btn-success" id="btnAppendCsv" style="flex:1; min-width:110px;" onclick="openAppendCsvModal()">
             <svg class="ico ico-sm"><use href="#i-upload"/></svg> دمج CSV
+          </button>
+          <button class="btn btn-sm btn-outline" style="flex:1; min-width:130px;" onclick="openExportCsvModal(currentBankId, currentBankName, questionsCache)">
+            <svg class="ico ico-sm"><use href="#i-download"/></svg> تحميل CSV للخاص
           </button>
         </div>
       </div>
@@ -263,8 +269,8 @@
       <div class="card">
         <h3><svg class="ico"><use href="#i-upload"/></svg> استيراد أسئلة من PDF (باللون الأحمر / الهايلايت)</h3>
         <div class="hint-box">
-          يستخرج النص، يفصص السؤال وخياراته (A / B / C / D)، ويحدد الخيار الملوّن بالأحمر أو المظلل ثم يدخله مباشرة في البنك.<br>
-          <strong>تنبيه درجات الطلاب:</strong> أي سؤال لا يظهر فيه لون أحمر/هايلايت واضح أو يظهر فيه أكثر من خيار ملوّن يُعلَّم تلقائياً للمراجعة قبل الإرسال.
+          يستخرج النص، يفصل المقدمات والأسئلة المقالية، يفصص أسئلة الاختيار من متعدد (A / B / C / D)، ويحدد الخيار الملوّن بالأحمر أو المظلل عبر طبقات تحقق متعددة.<br>
+          <strong>تنبيه درجات الطلاب:</strong> أي سؤال لا يحقق إشارة واضحة أو يظهر فيه أكثر من خيار ملوّن يُعلَّم تلقائياً للمراجعة قبل الإرسال.
         </div>
         <label>اسم البنك الجديد:</label>
         <input type="text" id="pdfBankName" placeholder="مثال: علم الأدوية - بنك PDF" />
@@ -483,6 +489,38 @@
       </div>
     </div>
 
+    <!-- نافذة تصدير الأسئلة كـ CSV إلى الخاص -->
+    <div id="exportCsvModal" class="modal">
+      <div class="modal-content">
+        <h3><svg class="ico"><use href="#i-download"/></svg> تحميل الأسئلة كـ CSV على الخاص</h3>
+        <p id="exportBankSubtitle" style="font-size:0.84rem; color:var(--hint); margin-top:0;"></p>
+
+        <label>نطاق التصدير:</label>
+        <select id="exportScopeSelect" onchange="toggleExportScope()">
+          <option value="all">البنك كاملاً</option>
+          <option value="selected">تحديد أسئلة معينة</option>
+        </select>
+
+        <div id="exportSelectBox" style="display:none;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <small id="exportSelectedCount" style="color:var(--success); font-weight:bold;">الأسئلة المحددة: 0</small>
+            <div style="display:flex; gap:6px;">
+              <button type="button" class="btn btn-sm btn-outline" onclick="toggleAllExport(true)">تحديد الكل</button>
+              <button type="button" class="btn btn-sm btn-outline" onclick="toggleAllExport(false)">إلغاء الكل</button>
+            </div>
+          </div>
+          <div id="exportQuestionsList" class="select-list"></div>
+        </div>
+
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-success" id="confirmExportCsvBtn" onclick="confirmExportCsv()">
+            <svg class="ico ico-sm"><use href="#i-send"/></svg> إرسال CSV إلى الخاص
+          </button>
+          <button class="btn btn-outline" onclick="closeModal('exportCsvModal')">إلغاء</button>
+        </div>
+      </div>
+    </div>
+
     <div id="qModal" class="modal">
       <div class="modal-content">
         <h3 id="qModalTitle">إضافة سؤال</h3>
@@ -541,7 +579,12 @@
 
   <script>
     const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
-    if (tg) tg.expand();
+    if (tg) {
+      tg.expand();
+      if (typeof tg.requestFullscreen === "function") {
+        try { tg.requestFullscreen(); } catch (_) {}
+      }
+    }
     const initData = tg ? (tg.initData || "") : "";
     const tgUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : {};
 
@@ -555,6 +598,9 @@
     let pubBankQuestions = [];
     let activePubBankId = null;
     let banksLoadedOnce = false;
+
+    let exportTargetBankId = null;
+    let exportCandidateQuestions = [];
 
     function renderUserIdentityCard() {
       const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ").trim();
@@ -712,6 +758,9 @@
               <button class="btn btn-sm" onclick="openBank(${b.id}, '${safeName}', ${Boolean(b.can_edit)})">
                 <svg class="ico ico-sm"><use href="#i-edit"/></svg> الأسئلة
               </button>
+              <button class="btn btn-sm btn-outline" onclick="openExportCsvModal(${b.id}, '${safeName}')">
+                <svg class="ico ico-sm"><use href="#i-download"/></svg> CSV للخاص
+              </button>
               <button class="btn btn-sm btn-success" ${!canPublish ? "disabled" : ""} onclick="quickPublish(${b.id})">
                 <svg class="ico ico-sm"><use href="#i-send"/></svg> إرسال
               </button>
@@ -723,6 +772,95 @@
       });
 
       syncPublishBanksSelect();
+    }
+
+    async function openExportCsvModal(bankId, bankName, preloadedQuestions = null) {
+      exportTargetBankId = bankId;
+      document.getElementById("exportBankSubtitle").innerText = `البنك: ${bankName} — سيتم إرسال ملف CSV إلى محادثتك الخاصة مع البوت.`;
+      document.getElementById("exportScopeSelect").value = "all";
+      document.getElementById("exportSelectBox").style.display = "none";
+
+      if (Array.isArray(preloadedQuestions) && bankId === currentBankId) {
+        exportCandidateQuestions = preloadedQuestions;
+      } else {
+        exportCandidateQuestions = await api(`/api/banks/${bankId}/questions`);
+      }
+
+      renderExportQuestionsList();
+      document.getElementById("exportCsvModal").classList.add("open");
+    }
+
+    function toggleExportScope() {
+      const mode = document.getElementById("exportScopeSelect").value;
+      document.getElementById("exportSelectBox").style.display = mode === "selected" ? "block" : "none";
+      updateExportSelectedCount();
+    }
+
+    function renderExportQuestionsList() {
+      const box = document.getElementById("exportQuestionsList");
+      if (!exportCandidateQuestions || exportCandidateQuestions.length === 0) {
+        box.innerHTML = `<div style="padding:10px; color:var(--hint);">لا توجد أسئلة في هذا البنك.</div>`;
+        updateExportSelectedCount();
+        return;
+      }
+      box.innerHTML = exportCandidateQuestions.map((q, idx) => `
+        <div class="select-q-item" id="exp-row-${q.id}">
+          <input type="checkbox" class="exp-q-chk" value="${q.id}" checked onchange="updateExportSelectedCount(${q.id}, this.checked)" />
+          <label style="color:var(--text); margin:0; cursor:pointer;" onclick="this.previousElementSibling.click()">
+            <b>${idx + 1}.</b> ${q.question}
+          </label>
+        </div>
+      `).join("");
+      updateExportSelectedCount();
+    }
+
+    function updateExportSelectedCount(qId = null, isChecked = true) {
+      if (qId !== null) {
+        const row = document.getElementById("exp-row-" + qId);
+        if (row) row.classList.toggle("excluded", !isChecked);
+      }
+      const total = exportCandidateQuestions.length;
+      const checked = document.querySelectorAll(".exp-q-chk:checked").length;
+      document.getElementById("exportSelectedCount").innerText = `الأسئلة المحددة: ${checked} من ${total}`;
+    }
+
+    function toggleAllExport(state) {
+      document.querySelectorAll(".exp-q-chk").forEach(chk => {
+        chk.checked = state;
+        const row = document.getElementById("exp-row-" + chk.value);
+        if (row) row.classList.toggle("excluded", !state);
+      });
+      updateExportSelectedCount();
+    }
+
+    async function confirmExportCsv() {
+      if (!exportTargetBankId) return;
+      const scope = document.getElementById("exportScopeSelect").value;
+      let questionIds = null;
+
+      if (scope === "selected") {
+        questionIds = Array.from(document.querySelectorAll(".exp-q-chk:checked")).map(c => parseInt(c.value));
+        if (!questionIds.length) {
+          return alert("يرجى تحديد سؤال واحد على الأقل للتصدير.");
+        }
+      }
+
+      const btn = document.getElementById("confirmExportCsvBtn");
+      btn.disabled = true;
+      try {
+        const res = await api("/api/export_csv", {
+          method: "POST",
+          body: JSON.stringify({
+            bank_id: exportTargetBankId,
+            question_ids: questionIds
+          })
+        });
+        closeModal("exportCsvModal");
+        alert(`تم إرسال ملف CSV (${res.exported_count} سؤال) إلى محادثتك الخاصة بنجاح.`);
+        await loadLogs();
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     async function openNewBankModal() {
@@ -959,14 +1097,15 @@
 
         const reviewCount = res.needs_review_count || 0;
         const verifiedCount = res.verified_count || 0;
-        const itemsHtml = (res.review_items || []).slice(0, 8).map(it =>
+        const essayCount = res.essay_count || 0;
+        const itemsHtml = (res.review_items || []).slice(0, 10).map(it =>
           `<li>سؤال #${it.question_number} (صفحة ${it.page}): ${it.reasons.join("، ")}</li>`
         ).join("");
 
         repBox.style.display = "block";
         repBox.innerHTML = `
           <div class="${reviewCount > 0 ? 'warn-box' : 'hint-box'}">
-            تم استخراج <b>${res.added}</b> سؤالاً (مؤكد بالأحمر/الهايلايت: <b>${verifiedCount}</b> • يحتاج مراجعة: <b>${reviewCount}</b>).
+            تم استخراج <b>${res.added}</b> سؤال MCQ (مؤكد: <b>${verifiedCount}</b> • يحتاج مراجعة: <b>${reviewCount}</b> • أسئلة مقالية مفصولة: <b>${essayCount}</b>).
             ${itemsHtml ? `<ul style="margin:6px 0 0; padding-right:18px;">${itemsHtml}</ul>` : ""}
           </div>
         `;
