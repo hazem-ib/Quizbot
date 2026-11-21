@@ -20,11 +20,11 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "9268644584:AAE8woNBoXzueYqpsT4x69efYcDgP1mPP9Y")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
-app = FastAPI(title="Telegram Quiz Mini App - HuggingFace Edition")
+app = FastAPI(title="Telegram Quiz Mini App - Render Edition")
 
 def get_conn():
     if not DATABASE_URL:
-        raise HTTPException(status_code=500, detail="متغير DATABASE_URL غير مضاف في إعدادات Secrets")
+        raise HTTPException(status_code=500, detail="متغير DATABASE_URL غير مضاف في إعدادات البيئة")
     clean_url = DATABASE_URL.replace("&channel_binding=require", "").replace("?channel_binding=require", "")
     return psycopg2.connect(clean_url, sslmode="require")
 
@@ -111,6 +111,13 @@ def verify_telegram_init_data(init_data: str) -> dict:
         raise HTTPException(status_code=403, detail="⛔ عذراً، هذا التطبيق مخصص للمالك والمشرفين فقط.")
     return user_info
 
+def get_base_url(request: Request) -> str:
+    render_url = os.environ.get("RENDER_EXTERNAL_URL", "").strip()
+    if render_url:
+        return render_url.rstrip("/")
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    return f"https://{host}".rstrip("/")
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_home():
     html_path = os.path.join(os.path.dirname(__file__), "..", "public", "index.html")
@@ -168,8 +175,7 @@ def build_bot_app(webapp_url: str = ""):
             await update.message.reply_text("⛔ عذراً، هذا البوت مخصص للمشرفين فقط.")
             return
 
-        space_host = os.environ.get("SPACE_HOST", "")
-        url = webapp_url or (f"https://{space_host}" if space_host else "")
+        url = webapp_url or os.environ.get("RENDER_EXTERNAL_URL", "")
         keyboard = [[InlineKeyboardButton("🚀 فتح تطبيق إدارة الاختبارات", web_app=WebAppInfo(url=url))]]
         await update.message.reply_text(
             f"👋 أهلاً بك يا **{user.first_name}**!\n\n"
@@ -209,9 +215,7 @@ def build_bot_app(webapp_url: str = ""):
 @app.get("/setup_webhook")
 async def setup_webhook(request: Request):
     init_db()
-    space_host = os.environ.get("SPACE_HOST")
-    host = space_host or request.headers.get("x-forwarded-host") or request.headers.get("host")
-    base_url = f"https://{host}"
+    base_url = get_base_url(request)
     webhook_url = f"{base_url}/api/webhook"
 
     bot_app = build_bot_app(base_url)
@@ -221,7 +225,7 @@ async def setup_webhook(request: Request):
             menu_button=MenuButtonWebApp(text="📱 فتح التطبيق", web_app=WebAppInfo(url=base_url))
         )
     return {
-        "status": "Webhook & Menu Button configured successfully on Hugging Face!",
+        "status": "Webhook & Menu Button configured successfully on Render!",
         "app_url": base_url,
         "webhook_url": webhook_url
     }
@@ -229,9 +233,7 @@ async def setup_webhook(request: Request):
 @app.post("/api/webhook")
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
-    space_host = os.environ.get("SPACE_HOST")
-    host = space_host or request.headers.get("x-forwarded-host") or request.headers.get("host")
-    base_url = f"https://{host}"
+    base_url = get_base_url(request)
     data = await request.json()
     bot_app = build_bot_app(base_url)
     async with bot_app:
@@ -517,7 +519,6 @@ async def test_community(req: CommunityCreateReq, x_telegram_init_data: str = He
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"فشل الاتصال: تأكد أن البوت مشرف (Admin) ولديه صلاحية إرسال الرسائل. ({e})")
 
-# إرسال جميع الأسئلة في الخلفية بالكامل على خادم Hugging Face المستمر
 async def bg_send_all_questions(
     q_ids: List[int],
     target_chat,
