@@ -1,7 +1,8 @@
 fastapi
-uvicorn
-python-telegram-bot
-pandas
-psycopg2-binary
+uvicorn[standard]
 python-multipart
 pydantic
+pandas
+psycopg2-binary
+python-telegram-bot
+pymupdf
