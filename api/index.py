@@ -1,6 +1,7 @@
 import os
 import io
 import re
+import csv
 import json
 import hmac
 import hashlib
@@ -456,6 +457,11 @@ class BankRenameReq(BaseModel):
     name: str
 
 
+class ExportCsvReq(BaseModel):
+    bank_id: int
+    question_ids: Optional[List[int]] = None
+
+
 class CommunityCreateReq(BaseModel):
     title: str
     chat_id: str
@@ -548,11 +554,12 @@ def build_bot_app(webapp_url: str = ""):
             write_audit_log(
                 actor,
                 "import_pdf_bot",
-                f"استورد {parsed['total_extracted']} سؤالاً من PDF عبر البوت إلى «{saved['bank_name']}» (مراجعة: {parsed['needs_review_count']}).",
+                f"استورد {parsed['total_extracted']} سؤال MCQ من PDF عبر البوت إلى «{saved['bank_name']}» (مراجعة: {parsed['needs_review_count']}، مقالي مفصول: {parsed['essay_count']}).",
             )
             await update.message.reply_text(
-                f"تم حفظ {parsed['total_extracted']} سؤال في البنك «{saved['bank_name']}».\n"
-                f"المؤكدة تلقائياً: {parsed['verified_count']} | تحتاج مراجعة: {parsed['needs_review_count']}"
+                f"تم حفظ {parsed['total_extracted']} سؤال MCQ في البنك «{saved['bank_name']}».\n"
+                f"المؤكدة تلقائياً: {parsed['verified_count']} | تحتاج مراجعة: {parsed['needs_review_count']}\n"
+                f"الأسئلة المقالية المفصولة خارج الاختيارات: {parsed['essay_count']}"
             )
         except Exception as e:
             await update.message.reply_text(f"تعذر استخراج الأسئلة بأمان: {e}")
@@ -735,6 +742,72 @@ async def delete_bank(bank_id: int, x_telegram_init_data: str = Header(default="
     return {"status": "ok"}
 
 
+@app.post("/api/export_csv")
+@app.post("/export_csv")
+async def export_questions_csv(
+    req: ExportCsvReq,
+    x_telegram_init_data: str = Header(default=""),
+):
+    actor = verify_actor(x_telegram_init_data)
+    bank = get_bank_record(req.bank_id)
+    if not bank:
+        raise HTTPException(status_code=404, detail="البنك غير موجود.")
+
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            if req.question_ids:
+                c.execute(
+                    """SELECT id, question, opt1, opt2, opt3, opt4, correct_idx, explanation
+                       FROM questions WHERE bank_id = %s AND id = ANY(%s)""",
+                    (req.bank_id, req.question_ids),
+                )
+                q_map = {r[0]: r for r in c.fetchall()}
+                rows = [q_map[qid] for qid in req.question_ids if qid in q_map]
+            else:
+                c.execute(
+                    """SELECT id, question, opt1, opt2, opt3, opt4, correct_idx, explanation
+                       FROM questions WHERE bank_id = %s ORDER BY id ASC""",
+                    (req.bank_id,),
+                )
+                rows = c.fetchall()
+
+    if not rows:
+        raise HTTPException(status_code=400, detail="لا توجد أسئلة محددة للتصدير.")
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    for r in rows:
+        _, q_text, o1, o2, o3, o4, c_idx, expl = r
+        ans_letter = ["A", "B", "C", "D"][c_idx] if isinstance(c_idx, int) and 0 <= c_idx <= 3 else "A"
+        writer.writerow([q_text, o1, o2, o3, o4, ans_letter, expl or ""])
+
+    csv_bytes = buf.getvalue().encode("utf-8-sig")
+    safe_slug = re.sub(r"[^\w\u0600-\u06FF-]+", "_", bank["name"]).strip("_") or "bank_questions"
+    filename = f"{safe_slug}.csv"
+
+    bot_app = build_bot_app()
+    async with bot_app:
+        try:
+            await bot_app.bot.send_document(
+                chat_id=actor["user_id"],
+                document=io.BytesIO(csv_bytes),
+                filename=filename,
+                caption=f"ملف CSV للبنك «{bank['name']}» ({len(rows)} سؤال).",
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"تعذر إرسال ملف CSV إلى محادثتك الخاصة: تأكد من بدء محادثة مع البوت أولاً. ({e})",
+            )
+
+    write_audit_log(
+        actor,
+        "export_csv",
+        f"صدّر {len(rows)} سؤالاً كملف CSV إلى الخاص من بنك «{bank['name']}».",
+    )
+    return {"status": "ok", "exported_count": len(rows), "filename": filename}
+
+
 @app.post("/api/logs/{log_id}/undo")
 @app.post("/logs/{log_id}/undo")
 async def undo_audit_log(log_id: int, x_telegram_init_data: str = Header(default="")):
@@ -858,13 +931,15 @@ async def upload_pdf(
     write_audit_log(
         actor,
         "import_pdf",
-        f"استورد {parsed['total_extracted']} سؤالاً من PDF إلى بنك «{saved['bank_name']}» (يحتاج مراجعة: {parsed['needs_review_count']}).",
+        f"استورد {parsed['total_extracted']} سؤال MCQ من PDF إلى بنك «{saved['bank_name']}» (يحتاج مراجعة: {parsed['needs_review_count']}، مقالي مفصول: {parsed['essay_count']}).",
     )
     return {
         "status": "ok",
         "added": parsed["total_extracted"],
         "verified_count": parsed["verified_count"],
         "needs_review_count": parsed["needs_review_count"],
+        "essay_count": parsed["essay_count"],
+        "essay_questions": parsed["essay_questions"],
         "review_items": parsed["review_items"],
         "scanned_pages": parsed["scanned_pages"],
         "bank_id": saved["bank_id"],
