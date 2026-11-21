@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+<<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>نظام إدارة الاختبارات والصلاحيات</title>
+  <title>منظومة إدارة الاختبارات</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     :root {
@@ -16,64 +16,84 @@
       --btn-text: var(--tg-theme-button-text-color, #ffffff);
       --danger: #ef4444;
       --success: #10b981;
-      --warning: #f59e0b;
       --radius: 16px;
     }
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { margin: 0; padding: 16px 16px 96px; background: var(--bg); color: var(--text); }
+    body { margin: 0; padding: 14px 14px 96px; background: var(--bg); color: var(--text); }
+
+    .ico { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.85; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+    .ico-sm { width: 15px; height: 15px; }
+    .ico-lg { width: 34px; height: 34px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
     #authScreen {
       position: fixed; inset: 0; background: #070b14; z-index: 9999;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       text-align: center; padding: 24px;
     }
-    #authScreen h1 { font-size: 2.8rem; margin: 0 0 10px; }
-    #authScreen p { color: #94a3b8; font-size: 0.95rem; max-width: 320px; line-height: 1.6; }
+    .auth-ring {
+      width: 68px; height: 68px; border-radius: 22px;
+      background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.28);
+      display: flex; align-items: center; justify-content: center; margin-bottom: 14px; color: #60a5fa;
+    }
+    #authScreen p { color: #94a3b8; font-size: 0.92rem; max-width: 320px; line-height: 1.65; }
     #appContainer { display: none; max-width: 580px; margin: 0 auto; }
 
-    .header {
-      display: flex; justify-content: space-between; align-items: center; gap: 8px;
-      margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--card-border);
+    .profile-header {
+      display: flex; justify-content: space-between; align-items: center; gap: 10px;
+      background: var(--sec-bg); border: 1px solid var(--card-border);
+      border-radius: 18px; padding: 12px 14px; margin-bottom: 14px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
     }
-    .header h2 { margin: 0; font-size: 1.12rem; font-weight: 700; }
-    .header-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .user-identity { display: flex; align-items: center; gap: 11px; min-width: 0; }
+    .avatar-box {
+      width: 44px; height: 44px; border-radius: 14px; overflow: hidden; flex-shrink: 0;
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.28), rgba(16, 185, 129, 0.22));
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      display: flex; align-items: center; justify-content: center; color: #e2e8f0; font-weight: 700;
+    }
+    .avatar-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .user-names { min-width: 0; }
+    .user-primary-name { font-size: 0.98rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-sub-handle { font-size: 0.76rem; color: var(--hint); margin-top: 2px; }
+
+    .header-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
     .badge {
-      background: rgba(59, 130, 246, 0.16); color: #60a5fa;
-      border: 1px solid rgba(59, 130, 246, 0.3);
-      padding: 4px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 600;
+      background: rgba(59, 130, 246, 0.15); color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.28);
+      padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 600;
     }
     .badge-tag {
-      background: rgba(16, 185, 129, 0.15); color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      padding: 4px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 600;
+      background: rgba(16, 185, 129, 0.14); color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.28);
+      padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 600;
     }
     .badge-owner {
-      background: rgba(245, 158, 11, 0.16); color: #fbbf24;
-      border: 1px solid rgba(245, 158, 11, 0.35);
+      background: rgba(245, 158, 11, 0.15); color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.32);
     }
 
     .card {
       background: var(--sec-bg); border: 1px solid var(--card-border);
       border-radius: var(--radius); padding: 15px; margin-bottom: 12px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
     }
-    .card h3 { margin: 0 0 12px; font-size: 1.02rem; }
+    .card h3 { margin: 0 0 12px; font-size: 1rem; display: flex; align-items: center; gap: 7px; }
     .btn {
       background: var(--btn); color: var(--btn-text); border: none; border-radius: 12px;
-      padding: 11px 15px; font-size: 0.88rem; font-weight: 600; cursor: pointer;
+      padding: 10px 14px; font-size: 0.86rem; font-weight: 600; cursor: pointer;
       width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
       transition: transform 0.12s, opacity 0.12s;
     }
-    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-    .btn:active:not(:disabled) { opacity: 0.85; transform: scale(0.98); }
+    .btn:disabled { opacity: 0.42; cursor: not-allowed; }
+    .btn:active:not(:disabled) { opacity: 0.86; transform: scale(0.98); }
     .btn-sm { padding: 7px 11px; font-size: 0.78rem; width: auto; border-radius: 10px; }
-    .btn-danger { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .btn-danger { background: rgba(239, 68, 68, 0.14); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.28); }
     .btn-success { background: var(--success); color: #fff; }
-    .btn-outline { background: transparent; border: 1px solid rgba(255,255,255,0.16); color: var(--text); }
+    .btn-outline { background: transparent; border: 1px solid rgba(255, 255, 255, 0.15); color: var(--text); }
 
     input, select, textarea {
       width: 100%; padding: 10px 12px; border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.12); background: var(--bg);
+      border: 1px solid rgba(255, 255, 255, 0.12); background: var(--bg);
       color: var(--text); margin-bottom: 11px; font-size: 0.88rem; outline: none;
     }
     input:focus, select:focus, textarea:focus { border-color: var(--btn); }
@@ -81,12 +101,14 @@
 
     .nav-bar {
       position: fixed; bottom: 0; left: 0; right: 0;
-      background: rgba(22, 32, 50, 0.97); backdrop-filter: blur(12px);
+      background: rgba(22, 32, 50, 0.97); backdrop-filter: blur(14px);
       display: flex; border-top: 1px solid var(--card-border); padding: 7px 2px 9px; z-index: 100;
     }
-    .nav-item { flex: 1; text-align: center; color: var(--hint); font-size: 0.68rem; cursor: pointer; padding: 4px 2px; transition: color 0.15s; }
+    .nav-item {
+      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+      color: var(--hint); font-size: 0.68rem; cursor: pointer; padding: 4px 2px; transition: color 0.15s;
+    }
     .nav-item.active { color: #60a5fa; font-weight: 700; }
-    .nav-item span { display: block; font-size: 1.12rem; margin-bottom: 2px; }
 
     .tab { display: none; }
     .tab.active { display: block; }
@@ -98,11 +120,11 @@
     .modal.open { display: flex; }
     .modal-content { background: var(--sec-bg); border: 1px solid var(--card-border); border-radius: var(--radius); padding: 18px; width: 100%; max-width: 470px; max-height: 90vh; overflow-y: auto; }
 
-    .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 11px; font-size: 0.86rem; }
+    .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 11px; font-size: 0.85rem; }
     .switch-row input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--btn); flex-shrink: 0; }
     .hint-box { background: rgba(59,130,246,0.1); border-right: 3px solid var(--btn); padding: 10px 12px; border-radius: 10px; font-size: 0.8rem; margin-bottom: 13px; color: var(--text); line-height: 1.55; }
 
-    .select-list { max-height: 240px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 8px; background: var(--bg); margin-bottom: 12px; }
+    .select-list { max-height: 230px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 8px; background: var(--bg); margin-bottom: 12px; }
     .select-q-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.83rem; }
     .select-q-item:last-child { border-bottom: none; }
     .select-q-item input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0; }
@@ -112,6 +134,15 @@
     .progress-bar-bg { width: 100%; height: 9px; background: rgba(255,255,255,0.08); border-radius: 99px; overflow: hidden; margin: 9px 0 3px; }
     .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); width: 0%; transition: width 0.3s; }
 
+    .job-card { background: var(--bg); border: 1px solid var(--card-border); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+    .job-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .job-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; }
+    .stat-box { background: var(--sec-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 8px; text-align: center; }
+    .stat-val { font-size: 0.98rem; font-weight: 700; display: block; }
+    .stat-lbl { font-size: 0.7rem; color: var(--hint); }
+    .val-ok { color: #34d399; }
+    .val-err { color: #f87171; }
+
     .perm-pills { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
     .perm-pill { font-size: 0.7rem; padding: 3px 8px; border-radius: 8px; background: rgba(255,255,255,0.06); color: var(--hint); }
     .perm-pill.active { background: rgba(16, 185, 129, 0.14); color: #34d399; }
@@ -120,19 +151,78 @@
     .log-item:last-child { border-bottom: none; }
     .log-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 0.75rem; color: var(--hint); }
     .log-desc { font-size: 0.85rem; line-height: 1.45; }
+    .log-actions { margin-top: 7px; display: flex; gap: 8px; align-items: center; }
   </style>
 </head>
 <body>
 
+  <svg width="0" height="0" style="position:absolute; visibility:hidden;" aria-hidden="true">
+    <defs>
+      <symbol id="i-folder" viewBox="0 0 24 24">
+        <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>
+      </symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24">
+        <path d="M12 16V4m0 0-4 4m4-4 4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+      </symbol>
+      <symbol id="i-globe" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>
+      </symbol>
+      <symbol id="i-send" viewBox="0 0 24 24">
+        <path d="m22 2-7 20-4-9-9-4 20-7zM22 2 11 13"/>
+      </symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24">
+        <path d="M12 3l7 3v6c0 5-3.5 8.5-7 9-3.5-.5-7-4-7-9V6l7-3z"/>
+      </symbol>
+      <symbol id="i-log" viewBox="0 0 24 24">
+        <path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>
+      </symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24">
+        <path d="M12 5v14M5 12h14"/>
+      </symbol>
+      <symbol id="i-edit" viewBox="0 0 24 24">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24">
+        <path d="M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/>
+      </symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24">
+        <rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </symbol>
+      <symbol id="i-move" viewBox="0 0 24 24">
+        <path d="M5 12h14m0 0-4-4m4 4-4 4"/>
+      </symbol>
+      <symbol id="i-undo" viewBox="0 0 24 24">
+        <path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>
+      </symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24">
+        <path d="M21 12a9 9 0 1 1-2.6-6.4L21 8m0-5v5h-5"/>
+      </symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24">
+        <rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+      </symbol>
+      <symbol id="i-back" viewBox="0 0 24 24">
+        <path d="M19 12H5m0 0 6-6m-6 6 6 6"/>
+      </symbol>
+    </defs>
+  </svg>
+
   <div id="authScreen">
-    <h1 id="authIcon">🔒</h1>
-    <h2 id="authTitle" style="margin:0 0 8px;">جاري التحقق من الهوية...</h2>
+    <div class="auth-ring" id="authRing">
+      <svg class="ico-lg"><use href="#i-lock"/></svg>
+    </div>
+    <h2 id="authTitle" style="margin:0 0 8px;">جاري التحقق من الهوية</h2>
     <p id="authMsg">يرجى الانتظار لحظة للتحقق من حسابك وصلاحياتك عبر تيليجرام.</p>
   </div>
 
   <div id="appContainer">
-    <div class="header">
-      <h2>🎯 نظام الاختبارات</h2>
+    <div class="profile-header">
+      <div class="user-identity">
+        <div class="avatar-box" id="userAvatar"></div>
+        <div class="user-names">
+          <div class="user-primary-name" id="userDisplayName">...</div>
+          <div class="user-sub-handle" id="userSubHandle">...</div>
+        </div>
+      </div>
       <div class="header-meta">
         <span id="roleBadge" class="badge">...</span>
         <span id="tagBadge" class="badge-tag">...</span>
@@ -142,8 +232,12 @@
     <!-- تبويب بنوك الأسئلة -->
     <div id="tab-banks" class="tab active">
       <div style="display:flex; gap:8px; margin-bottom:13px;">
-        <button class="btn" id="btnNewBank" onclick="openNewBankModal()">➕ بنك جديد</button>
-        <button class="btn btn-success" id="btnGoUpload" onclick="switchTab('upload')">📤 استيراد CSV</button>
+        <button class="btn" id="btnNewBank" onclick="openNewBankModal()">
+          <svg class="ico"><use href="#i-plus"/></svg> بنك جديد
+        </button>
+        <button class="btn btn-success" id="btnGoUpload" onclick="switchTab('upload')">
+          <svg class="ico"><use href="#i-upload"/></svg> استيراد CSV
+        </button>
       </div>
       <div id="banksList"></div>
     </div>
@@ -152,24 +246,32 @@
     <div id="tab-questions" class="tab">
       <div class="card" style="padding:12px;">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:10px;">
-          <button class="btn btn-outline btn-sm" onclick="switchTab('banks')">🔙 البنوك</button>
+          <button class="btn btn-outline btn-sm" onclick="switchTab('banks')">
+            <svg class="ico ico-sm"><use href="#i-back"/></svg> البنوك
+          </button>
           <strong id="currentBankTitle" style="font-size:1rem; text-align:center;">البنك</strong>
-          <button class="btn btn-outline btn-sm" id="btnRenameBank" onclick="renameCurrentBank()">🏷️ الاسم</button>
+          <button class="btn btn-outline btn-sm" id="btnRenameBank" onclick="renameCurrentBank()">
+            <svg class="ico ico-sm"><use href="#i-edit"/></svg> الاسم
+          </button>
         </div>
         <div style="display:flex; gap:8px;">
-          <button class="btn btn-sm" id="btnAddQ" style="flex:1;" onclick="openQuestionModal()">➕ إضافة سؤال</button>
-          <button class="btn btn-sm btn-success" id="btnAppendCsv" style="flex:1;" onclick="openAppendCsvModal()">📥 دمج CSV</button>
+          <button class="btn btn-sm" id="btnAddQ" style="flex:1;" onclick="openQuestionModal()">
+            <svg class="ico ico-sm"><use href="#i-plus"/></svg> إضافة سؤال
+          </button>
+          <button class="btn btn-sm btn-success" id="btnAppendCsv" style="flex:1;" onclick="openAppendCsvModal()">
+            <svg class="ico ico-sm"><use href="#i-upload"/></svg> دمج CSV
+          </button>
         </div>
       </div>
 
-      <input type="text" id="searchQ" placeholder="🔍 ابحث في أسئلة البنك..." oninput="renderQuestions()" />
+      <input type="text" id="searchQ" placeholder="ابحث في أسئلة البنك..." oninput="renderQuestions()" />
       <div id="questionsList"></div>
     </div>
 
     <!-- تبويب استيراد CSV -->
     <div id="tab-upload" class="tab">
       <div class="card">
-        <h3>📤 استيراد بنك أسئلة من CSV</h3>
+        <h3><svg class="ico"><use href="#i-upload"/></svg> استيراد بنك أسئلة من CSV</h3>
         <div class="hint-box">
           ترتيب الأعمدة المطلوب:<br>
           <code>السؤال | خيار 1 | خيار 2 | خيار 3 | خيار 4 | الإجابة الصحيحة (1-4 أو A-D أو نصها) | شرح (اختياري)</code>
@@ -178,45 +280,46 @@
         <input type="text" id="csvBankName" placeholder="مثال: علم الأدوية - المحاضرة 3" />
         <label>ملف CSV:</label>
         <input type="file" id="csvFile" accept=".csv" />
-        <button class="btn btn-success" id="uploadCsvBtn" onclick="uploadCSV()">🚀 إنشاء البنك واستيراد الأسئلة</button>
+        <button class="btn btn-success" id="uploadCsvBtn" onclick="uploadCSV()">
+          <svg class="ico"><use href="#i-upload"/></svg> إنشاء البنك واستيراد الأسئلة
+        </button>
       </div>
     </div>
 
     <!-- تبويب الوجهات المحفوظة -->
     <div id="tab-communities" class="tab">
       <div class="card">
-        <h3>🌐 إدارة الوجهات المحفوظة</h3>
+        <h3><svg class="ico"><use href="#i-globe"/></svg> إدارة الوجهات المحفوظة</h3>
         <div class="hint-box">
-          1. أضف البوت كـ <b>مشرف</b> في القناة أو المجموعة وامنحه صلاحية النشر.<br>
-          2. أرسل <code>/id</code> داخل الوجهة أو الموضوع (Topic)، أو حوّل رسالة من القناة للبوت لمعرفة المعرّف.
+          أضف البوت كمشرف في القناة أو المجموعة مع صلاحية النشر، ثم أدخل اسم الوجهة ومعرّفها (Chat ID أو @username) ورقم الموضوع (Topic ID) إن وجد.
         </div>
         <label>اسم الوجهة (الاسم الذي يظهر عند الإرسال):</label>
-        <input type="text" id="commTitle" placeholder="مثال: جروب سكشن 1 - اختبارات" />
+        <input type="text" id="commTitle" placeholder="مثال: قناة الاختبارات - سكشن 1" />
         <label>معرّف الوجهة (Chat ID أو @username):</label>
         <input type="text" id="commChatId" placeholder="-1001234567890 أو @channel" />
         <label>رقم الموضوع (Topic ID - اختياري):</label>
         <input type="number" id="commTopicId" placeholder="اتركه فارغاً إذا لم تكن هناك مواضيع" />
         <div style="display:flex; gap:8px;">
-          <button class="btn btn-outline" onclick="testCommunity()">🔌 فحص الصلاحيات</button>
-          <button class="btn btn-success" onclick="saveCommunity()">💾 حفظ الوجهة</button>
+          <button class="btn btn-outline" onclick="testCommunity()">فحص الصلاحيات</button>
+          <button class="btn btn-success" onclick="saveCommunity()">حفظ الوجهة</button>
         </div>
       </div>
       <div id="communitiesList"></div>
     </div>
 
-    <!-- تبويب الإرسال المطور -->
+    <!-- تبويب الإرسال والتقارير -->
     <div id="tab-publish" class="tab">
       <div class="card">
-        <h3>🚀 إرسال الاختبار</h3>
+        <h3><svg class="ico"><use href="#i-send"/></svg> إرسال الاختبار</h3>
 
         <label>عنوان / مقدمة الاختبار (اختياري):</label>
-        <input type="text" id="pubTitle" placeholder="مثال: كويز مراجعة - الأسبوع الرابع" />
+        <input type="text" id="pubTitle" placeholder="مثال: اختبار مراجعة - الأسبوع الرابع" />
 
         <label>بنك الأسئلة:</label>
         <select id="pubBankSelect" onchange="onPublishBankChange()"></select>
 
         <div class="switch-row" style="margin-top:4px; padding-top:10px; border-top:1px solid var(--card-border);">
-          <span>🎛️ تخصيص الأسئلة المرسلة أو المستبعدة</span>
+          <span>تخصيص الأسئلة المرسلة أو المستبعدة</span>
           <input type="checkbox" id="enableSelectiveMode" onchange="toggleSelectiveMode()" />
         </div>
 
@@ -233,8 +336,8 @@
 
         <label>وجهة الإرسال:</label>
         <select id="pubTargetType" onchange="togglePublishTarget()">
-          <option value="private">💬 المحادثة الخاصة مع البوت</option>
-          <option value="saved_comm">🌐 وجهة محفوظة (قناة أو مجموعة)</option>
+          <option value="private">المحادثة الخاصة مع البوت</option>
+          <option value="saved_comm">وجهة محفوظة (قناة أو مجموعة)</option>
         </select>
 
         <div id="savedCommBox" style="display:none;">
@@ -243,7 +346,7 @@
         </div>
 
         <div class="switch-row">
-          <span>🔢 تحديد عدد أقصى للأسئلة المرسلة</span>
+          <span>تحديد عدد أقصى للأسئلة المرسلة</span>
           <input type="checkbox" id="enableLimit" onchange="toggleLimitInput()" />
         </div>
         <div id="limitBox" style="display:none;">
@@ -251,9 +354,9 @@
           <input type="number" id="pubLimit" min="1" placeholder="مثال: 15" />
         </div>
 
-        <label>⏱️ الفاصل الزمني بين الأسئلة:</label>
+        <label>الفاصل الزمني بين الأسئلة:</label>
         <select id="pubDelay">
-          <option value="0">⚡ إرسال متواصل في الخلفية</option>
+          <option value="0">إرسال متواصل في الخلفية</option>
           <option value="2">2 ثانية بين كل سؤال</option>
           <option value="5">5 ثوانٍ بين كل سؤال</option>
           <option value="10">10 ثوانٍ بين كل سؤال</option>
@@ -262,7 +365,7 @@
         </select>
 
         <div class="switch-row">
-          <span>⏳ مؤقت زمني لحل كل سؤال</span>
+          <span>مؤقت زمني لحل كل سؤال</span>
           <input type="checkbox" id="enableTimer" onchange="toggleTimerInput()" />
         </div>
         <div id="timerBox" style="display:none;">
@@ -271,15 +374,17 @@
         </div>
 
         <div class="switch-row">
-          <span>🔀 ترتيب الأسئلة عشوائياً</span>
+          <span>ترتيب الأسئلة عشوائياً</span>
           <input type="checkbox" id="pubShuffleQ" />
         </div>
         <div class="switch-row">
-          <span>🎲 خلط ترتيب الخيارات</span>
+          <span>خلط ترتيب الخيارات</span>
           <input type="checkbox" id="pubShuffleOpt" />
         </div>
 
-        <button id="pubStartBtn" class="btn" onclick="publishQuiz()">📤 بدء الإرسال</button>
+        <button id="pubStartBtn" class="btn" onclick="publishQuiz()">
+          <svg class="ico"><use href="#i-send"/></svg> بدء الإرسال
+        </button>
 
         <div id="progressBox" class="progress-box">
           <div style="display:flex; justify-content:space-between; font-size:0.84rem;">
@@ -291,12 +396,22 @@
           </div>
         </div>
       </div>
+
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <h3 style="margin:0;">تقارير الإرسال ومتابعة المتعذر</h3>
+          <button class="btn btn-outline btn-sm" onclick="loadPublishJobs()">
+            <svg class="ico ico-sm"><use href="#i-refresh"/></svg> تحديث
+          </button>
+        </div>
+        <div id="publishJobsList"></div>
+      </div>
     </div>
 
     <!-- تبويب المشرفين والصلاحيات -->
     <div id="tab-admins" class="tab">
       <div class="card">
-        <h3 id="adminFormTitle">👑 إضافة / تعديل مشرف وصلاحياته</h3>
+        <h3 id="adminFormTitle"><svg class="ico"><use href="#i-shield"/></svg> إضافة أو تعديل مشرف وصلاحياته</h3>
         <label>معرّف المستخدم في تيليجرام (User ID):</label>
         <input type="number" id="newAdminId" placeholder="مثال: 123456789" />
         <label>اسم المشرف:</label>
@@ -326,7 +441,7 @@
         </div>
 
         <div style="display:flex; gap:8px;">
-          <button class="btn" onclick="saveAdminPermissions()">💾 حفظ المشرف والصلاحيات</button>
+          <button class="btn" onclick="saveAdminPermissions()">حفظ المشرف والصلاحيات</button>
           <button class="btn btn-outline btn-sm" onclick="resetAdminForm()">تفريغ</button>
         </div>
       </div>
@@ -337,14 +452,18 @@
     <div id="tab-logs" class="tab">
       <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
-          <h3 style="margin:0;">📜 سجل العمليات (Audit Log)</h3>
+          <h3 style="margin:0;"><svg class="ico"><use href="#i-log"/></svg> سجل العمليات</h3>
           <div style="display:flex; gap:6px;">
-            <button class="btn btn-outline btn-sm" onclick="loadLogs()">🔄 تحديث</button>
-            <button class="btn btn-danger btn-sm" id="btnClearLogs" style="display:none;" onclick="clearLogs()">🗑️ مسح السجل</button>
+            <button class="btn btn-outline btn-sm" onclick="loadLogs()">
+              <svg class="ico ico-sm"><use href="#i-refresh"/></svg> تحديث
+            </button>
+            <button class="btn btn-danger btn-sm" id="btnClearLogs" style="display:none;" onclick="clearLogs()">
+              <svg class="ico ico-sm"><use href="#i-trash"/></svg> مسح السجل
+            </button>
           </div>
         </div>
         <div class="hint-box" style="margin-bottom:8px;">
-          يتم الاحتفاظ بالسجلات لمدة <b>أسبوعين (14 يوماً)</b> وحذف الأقدم تلقائياً.
+          يتم الاحتفاظ بالسجلات لمدة <b>أسبوعين (14 يوماً)</b> وحذف الأقدم تلقائياً، مع دعم التراجع للعمليات الحساسة.
         </div>
         <div id="logsList"></div>
       </div>
@@ -352,12 +471,24 @@
 
     <!-- شريط التنقل السفلي -->
     <div class="nav-bar">
-      <div class="nav-item active" id="nav-banks" onclick="switchTab('banks')"><span>📂</span>البنوك</div>
-      <div class="nav-item" id="nav-upload" onclick="switchTab('upload')"><span>📤</span>استيراد</div>
-      <div class="nav-item" id="nav-communities" onclick="switchTab('communities')"><span>🌐</span>الوجهات</div>
-      <div class="nav-item" id="nav-publish" onclick="switchTab('publish')"><span>🚀</span>الإرسال</div>
-      <div class="nav-item" id="nav-admins" style="display:none;" onclick="switchTab('admins')"><span>👑</span>المشرفون</div>
-      <div class="nav-item" id="nav-logs" onclick="switchTab('logs')"><span>📜</span>السجل</div>
+      <div class="nav-item active" id="nav-banks" onclick="switchTab('banks')">
+        <svg class="ico"><use href="#i-folder"/></svg><span>البنوك</span>
+      </div>
+      <div class="nav-item" id="nav-upload" onclick="switchTab('upload')">
+        <svg class="ico"><use href="#i-upload"/></svg><span>استيراد</span>
+      </div>
+      <div class="nav-item" id="nav-communities" onclick="switchTab('communities')">
+        <svg class="ico"><use href="#i-globe"/></svg><span>الوجهات</span>
+      </div>
+      <div class="nav-item" id="nav-publish" onclick="switchTab('publish')">
+        <svg class="ico"><use href="#i-send"/></svg><span>الإرسال</span>
+      </div>
+      <div class="nav-item" id="nav-admins" style="display:none;" onclick="switchTab('admins')">
+        <svg class="ico"><use href="#i-shield"/></svg><span>المشرفون</span>
+      </div>
+      <div class="nav-item" id="nav-logs" onclick="switchTab('logs')">
+        <svg class="ico"><use href="#i-log"/></svg><span>السجل</span>
+      </div>
     </div>
 
     <!-- نافذة إضافة / تعديل سؤال -->
@@ -381,7 +512,7 @@
         <label>شرح الإجابة (اختياري):</label>
         <input type="text" id="qExpl" placeholder="شرح يظهر بعد الإجابة..." />
         <div style="display:flex; gap:8px;">
-          <button class="btn btn-success" id="saveQBtn" onclick="saveQuestion()">💾 حفظ</button>
+          <button class="btn btn-success" id="saveQBtn" onclick="saveQuestion()">حفظ</button>
           <button class="btn btn-outline" onclick="closeModal('qModal')">إلغاء</button>
         </div>
       </div>
@@ -390,29 +521,30 @@
     <!-- نافذة دمج CSV -->
     <div id="appendCsvModal" class="modal">
       <div class="modal-content">
-        <h3>📥 دمج أسئلة من CSV في البنك</h3>
+        <h3>دمج أسئلة من CSV في البنك</h3>
         <p style="font-size:0.82rem; color:var(--hint); margin-top:0;">
           ستُضاف الأسئلة الجديدة إلى الأسئلة الحالية في هذا البنك.
         </p>
         <label>اختر ملف CSV:</label>
         <input type="file" id="appendCsvFile" accept=".csv" />
         <div style="display:flex; gap:8px;">
-          <button class="btn btn-success" id="appendCsvBtn" onclick="submitAppendCsv()">🚀 بدء الدمج</button>
+          <button class="btn btn-success" id="appendCsvBtn" onclick="submitAppendCsv()">بدء الدمج</button>
           <button class="btn btn-outline" onclick="closeModal('appendCsvModal')">إلغاء</button>
         </div>
       </div>
     </div>
 
-    <!-- نافذة نقل سؤال -->
-    <div id="moveModal" class="modal">
+    <!-- نافذة نقل أو نسخ سؤال -->
+    <div id="transferModal" class="modal">
       <div class="modal-content">
-        <h3>📦 نقل السؤال إلى بنك آخر</h3>
-        <input type="hidden" id="moveQId" />
+        <h3 id="transferModalTitle">نقل أو نسخ السؤال</h3>
+        <input type="hidden" id="transferQId" />
+        <input type="hidden" id="transferMode" value="move" />
         <label>البنك المستهدف:</label>
-        <select id="moveTargetBank"></select>
+        <select id="transferTargetBank"></select>
         <div style="display:flex; gap:8px;">
-          <button class="btn" onclick="confirmMoveQuestion()">✅ تأكيد النقل</button>
-          <button class="btn btn-outline" onclick="closeModal('moveModal')">إلغاء</button>
+          <button class="btn" id="confirmTransferBtn" onclick="confirmTransferQuestion()">تأكيد</button>
+          <button class="btn btn-outline" onclick="closeModal('transferModal')">إلغاء</button>
         </div>
       </div>
     </div>
@@ -422,6 +554,7 @@
     const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
     if (tg) tg.expand();
     const initData = tg ? (tg.initData || "") : "";
+    const tgUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : {};
 
     let currentActor = null;
     let banksCache = [];
@@ -434,12 +567,32 @@
     let activePubBankId = null;
     let banksLoadedOnce = false;
 
+    function renderUserIdentityCard() {
+      const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ").trim();
+      const handle = tgUser.username ? `@${tgUser.username}` : "";
+      const primaryText = fullName || handle || (currentActor ? currentActor.name : "مستخدم");
+      const subText = fullName && handle ? handle : (currentActor ? `ID: ${currentActor.user_id}` : "");
+
+      document.getElementById("userDisplayName").innerText = primaryText;
+      document.getElementById("userSubHandle").innerText = subText;
+
+      const avatarBox = document.getElementById("userAvatar");
+      if (tgUser.photo_url) {
+        avatarBox.innerHTML = `<img src="${tgUser.photo_url}" alt="${primaryText}" onerror="this.remove()" />`;
+      } else {
+        const initials = primaryText.replace(/^@/, "").slice(0, 2);
+        avatarBox.innerText = initials || "U";
+      }
+    }
+
     function blockAccess(reason) {
       document.getElementById("appContainer").remove();
-      document.getElementById("authIcon").innerText = "⛔";
+      document.getElementById("authRing").style.borderColor = "rgba(239, 68, 68, 0.35)";
+      document.getElementById("authRing").style.background = "rgba(239, 68, 68, 0.12)";
+      document.getElementById("authRing").style.color = "#f87171";
       document.getElementById("authTitle").innerText = "تعذر الوصول";
-      document.getElementById("authTitle").style.color = "#ef4444";
-      document.getElementById("authMsg").innerText = reason || "يرجى فتح التطبيق من داخل بوت تيليجرام.";
+      document.getElementById("authTitle").style.color = "#f87171";
+      document.getElementById("authMsg").innerText = reason || "عذراً، أنت لست مشرفاً في البوت.";
     }
 
     async function api(url, options = {}, silent = false) {
@@ -450,7 +603,7 @@
       const res = await fetch(url, options);
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: "حدث خطأ غير متوقع." }));
-        if (!silent) alert("⚠️ " + (err.detail || "تعذر إتمام الطلب."));
+        if (!silent) alert(err.detail || "تعذر إتمام الطلب.");
         throw new Error(err.detail || "Request failed");
       }
       return res.json();
@@ -458,9 +611,10 @@
 
     function applyActorUI() {
       if (!currentActor) return;
+      renderUserIdentityCard();
       const roleBadge = document.getElementById("roleBadge");
       const tagBadge = document.getElementById("tagBadge");
-      roleBadge.innerText = currentActor.role === "owner" ? "👑 المالك" : "🛡️ مشرف";
+      roleBadge.innerText = currentActor.role === "owner" ? "المالك" : "مشرف";
       roleBadge.classList.toggle("badge-owner", currentActor.role === "owner");
       tagBadge.innerText = currentActor.tag || "مشرف";
 
@@ -470,7 +624,7 @@
       document.getElementById("uploadCsvBtn").disabled = !canCreate;
 
       const canMgrAdmins = currentActor.role === "owner" || currentActor.can_manage_admins;
-      document.getElementById("nav-admins").style.display = canMgrAdmins ? "block" : "none";
+      document.getElementById("nav-admins").style.display = canMgrAdmins ? "flex" : "none";
       document.getElementById("permManageRow").style.display = currentActor.role === "owner" ? "flex" : "none";
       document.getElementById("btnClearLogs").style.display = currentActor.role === "owner" ? "inline-flex" : "none";
     }
@@ -487,7 +641,7 @@
         document.getElementById("appContainer").style.display = "block";
         applyActorUI();
 
-        const tasks = [loadBanks(), loadCommunities(), loadLogs()];
+        const tasks = [loadBanks(), loadCommunities(), loadPublishJobs(), loadLogs()];
         if (currentActor.role === "owner" || currentActor.can_manage_admins) {
           tasks.push(loadAdmins());
         }
@@ -510,7 +664,7 @@
         } else {
           syncPublishBanksSelect();
         }
-        await onPublishBankChange();
+        await Promise.all([onPublishBankChange(), loadPublishJobs()]);
       } else if (tabName === "banks") {
         await loadBanks();
       } else if (tabName === "communities") {
@@ -547,26 +701,33 @@
       list.innerHTML = "";
 
       if (banksCache.length === 0) {
-        list.innerHTML = `<div class="card" style="text-align:center; color:var(--hint);">📭 لا توجد بنوك أسئلة بعد.</div>`;
+        list.innerHTML = `<div class="card" style="text-align:center; color:var(--hint);">لا توجد بنوك أسئلة بعد.</div>`;
         syncPublishBanksSelect();
         return;
       }
 
+      const canPublish = currentActor?.role === "owner" || currentActor?.can_publish;
       banksCache.forEach(b => {
-        const canPublish = currentActor?.role === "owner" || currentActor?.can_publish;
+        const safeName = b.name.replace(/'/g, "\\'");
         list.innerHTML += `
           <div class="card" id="bank-card-${b.id}">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
               <div>
-                <strong style="font-size:1rem;">📁 ${b.name}</strong><br>
-                <small style="color:var(--hint);">بواسطة: ${b.owner_name || "المالك"}</small>
+                <strong style="font-size:1rem;">${b.name}</strong><br>
+                <small style="color:var(--hint);">المنشئ: ${b.owner_name || "المالك"}</small>
               </div>
               <span class="badge">${b.count} سؤال</span>
             </div>
             <div class="row-actions">
-              <button class="btn btn-sm" onclick="openBank(${b.id}, '${b.name.replace(/'/g, "\\'")}', ${Boolean(b.can_edit)})">✏️ الأسئلة</button>
-              <button class="btn btn-sm btn-success" ${!canPublish ? "disabled" : ""} onclick="quickPublish(${b.id})">🚀 إرسال</button>
-              <button class="btn btn-sm btn-danger" ${!b.can_delete ? "disabled" : ""} onclick="deleteBank(${b.id})">🗑️ حذف</button>
+              <button class="btn btn-sm" onclick="openBank(${b.id}, '${safeName}', ${Boolean(b.can_edit)})">
+                <svg class="ico ico-sm"><use href="#i-edit"/></svg> الأسئلة
+              </button>
+              <button class="btn btn-sm btn-success" ${!canPublish ? "disabled" : ""} onclick="quickPublish(${b.id})">
+                <svg class="ico ico-sm"><use href="#i-send"/></svg> إرسال
+              </button>
+              <button class="btn btn-sm btn-danger" ${!b.can_delete ? "disabled" : ""} onclick="deleteBank(${b.id})">
+                <svg class="ico ico-sm"><use href="#i-trash"/></svg> حذف
+              </button>
             </div>
           </div>`;
       });
@@ -594,16 +755,14 @@
     }
 
     async function deleteBank(id) {
-      if (!confirm("هل أنت متأكد من حذف هذا البنك وجميع الأسئلة التابعة له؟")) return;
+      if (!confirm("هل أنت متأكد من حذف هذا البنك وجميع الأسئلة التابعة له؟ يمكنك التراجع لاحقاً من السجل.")) return;
       const card = document.getElementById(`bank-card-${id}`);
       if (card) card.style.opacity = "0.5";
       await api(`/api/banks/${id}`, { method: "DELETE" });
       if (card) card.remove();
       banksCache = banksCache.filter(b => b.id !== id);
       syncPublishBanksSelect();
-      if (banksCache.length === 0) {
-        await loadBanks();
-      }
+      await Promise.all([loadBanks(), loadLogs()]);
     }
 
     async function quickPublish(bankId) {
@@ -620,7 +779,7 @@
       document.getElementById("btnRenameBank").disabled = !canEdit;
       document.getElementById("btnAddQ").disabled = !canEdit;
       document.getElementById("btnAppendCsv").disabled = !canEdit;
-      document.getElementById("questionsList").innerHTML = `<div class="card" style="text-align:center; color:var(--hint);">⏳ جاري تحميل الأسئلة...</div>`;
+      document.getElementById("questionsList").innerHTML = `<div class="card" style="text-align:center; color:var(--hint);">جاري تحميل الأسئلة...</div>`;
       switchTab("questions");
       questionsCache = await api(`/api/banks/${bankId}/questions`);
       renderQuestions();
@@ -635,6 +794,7 @@
       const bankObj = banksCache.find(b => b.id === currentBankId);
       const canEdit = bankObj ? Boolean(bankObj.can_edit) : true;
       const canDel = bankObj ? Boolean(bankObj.can_delete) : false;
+      const hasAnyTargetBank = banksCache.some(b => b.id !== currentBankId && b.can_edit);
 
       if (filtered.length === 0) {
         list.innerHTML = `<div class="card" style="text-align:center; color:var(--hint);">لا توجد أسئلة مطابقة في هذا البنك.</div>`;
@@ -648,11 +808,20 @@
           <div class="card" id="q-card-${q.id}">
             <div style="margin-bottom:8px; font-weight:600; line-height:1.45;">${idx + 1}. ${q.question}</div>
             ${optsHtml}
-            ${q.explanation ? `<div style="font-size:0.8rem; color:var(--hint); margin-top:6px;">💡 ${q.explanation}</div>` : ""}
+            ${q.explanation ? `<div style="font-size:0.8rem; color:var(--hint); margin-top:6px;">شرح: ${q.explanation}</div>` : ""}
             <div class="row-actions">
-              <button class="btn btn-sm" ${!canEdit ? "disabled" : ""} onclick="openQuestionModal(${q.id})">✏️ تعديل</button>
-              <button class="btn btn-sm btn-outline" ${!canEdit ? "disabled" : ""} onclick="openMoveModal(${q.id})">📦 نقل</button>
-              <button class="btn btn-sm btn-danger" ${!canDel ? "disabled" : ""} onclick="deleteQuestion(${q.id})">🗑️ حذف</button>
+              <button class="btn btn-sm" ${!canEdit ? "disabled" : ""} onclick="openQuestionModal(${q.id})">
+                <svg class="ico ico-sm"><use href="#i-edit"/></svg> تعديل
+              </button>
+              <button class="btn btn-sm btn-outline" ${!canEdit || !hasAnyTargetBank ? "disabled" : ""} onclick="openTransferModal(${q.id}, 'move')">
+                <svg class="ico ico-sm"><use href="#i-move"/></svg> نقل
+              </button>
+              <button class="btn btn-sm btn-outline" ${!hasAnyTargetBank ? "disabled" : ""} onclick="openTransferModal(${q.id}, 'copy')">
+                <svg class="ico ico-sm"><use href="#i-copy"/></svg> نسخ
+              </button>
+              <button class="btn btn-sm btn-danger" ${!canDel ? "disabled" : ""} onclick="deleteQuestion(${q.id})">
+                <svg class="ico ico-sm"><use href="#i-trash"/></svg> حذف
+              </button>
             </div>
           </div>`;
       });
@@ -675,7 +844,7 @@
 
         const res = await api("/api/upload_csv", { method: "POST", body: fd });
         closeModal("appendCsvModal");
-        alert(`✅ تمت إضافة ${res.added} سؤال إلى البنك بنجاح.`);
+        alert(`تمت إضافة ${res.added} سؤال إلى البنك بنجاح.`);
         questionsCache = await api(`/api/banks/${currentBankId}/questions`);
         renderQuestions();
         await loadBanks();
@@ -688,7 +857,7 @@
       document.getElementById("editQId").value = qId || "";
       if (qId) {
         const q = questionsCache.find(x => x.id === qId);
-        document.getElementById("qModalTitle").innerText = "✏️ تعديل السؤال";
+        document.getElementById("qModalTitle").innerText = "تعديل السؤال";
         document.getElementById("qText").value = q.question;
         document.getElementById("qOpt1").value = q.opt1;
         document.getElementById("qOpt2").value = q.opt2;
@@ -697,7 +866,7 @@
         document.getElementById("qCorrect").value = q.correct_idx;
         document.getElementById("qExpl").value = q.explanation || "";
       } else {
-        document.getElementById("qModalTitle").innerText = "➕ إضافة سؤال جديد";
+        document.getElementById("qModalTitle").innerText = "إضافة سؤال جديد";
         ["qText", "qOpt1", "qOpt2", "qOpt3", "qOpt4", "qExpl"].forEach(id => document.getElementById(id).value = "");
         document.getElementById("qCorrect").value = "0";
       }
@@ -746,25 +915,32 @@
       await loadBanks();
     }
 
-    function openMoveModal(qId) {
-      document.getElementById("moveQId").value = qId;
-      const sel = document.getElementById("moveTargetBank");
-      sel.innerHTML = banksCache
-        .filter(b => b.id !== currentBankId && b.can_edit)
-        .map(b => `<option value="${b.id}">${b.name}</option>`)
-        .join("");
-      if (!sel.innerHTML) return alert("لا يوجد بنك متاح للنقل إليه بصلاحياتك الحالية.");
-      document.getElementById("moveModal").classList.add("open");
+    function openTransferModal(qId, mode = "move") {
+      document.getElementById("transferQId").value = qId;
+      document.getElementById("transferMode").value = mode;
+      const isCopy = mode === "copy";
+      document.getElementById("transferModalTitle").innerText = isCopy ? "نسخ السؤال إلى بنك آخر" : "نقل السؤال إلى بنك آخر";
+      document.getElementById("confirmTransferBtn").innerText = isCopy ? "تأكيد النسخ" : "تأكيد النقل";
+
+      const targets = banksCache.filter(b => b.id !== currentBankId && b.can_edit);
+      const sel = document.getElementById("transferTargetBank");
+      sel.innerHTML = targets.map(b => `<option value="${b.id}">${b.name}</option>`).join("");
+      if (!sel.innerHTML) return alert("لا يوجد بنك متاح للعملية بصلاحياتك الحالية.");
+      document.getElementById("transferModal").classList.add("open");
     }
 
-    async function confirmMoveQuestion() {
-      const qId = parseInt(document.getElementById("moveQId").value);
-      const target_bank_id = parseInt(document.getElementById("moveTargetBank").value);
-      await api(`/api/questions/${qId}/move`, { method: "POST", body: JSON.stringify({ target_bank_id }) });
-      closeModal("moveModal");
+    async function confirmTransferQuestion() {
+      const qId = parseInt(document.getElementById("transferQId").value);
+      const mode = document.getElementById("transferMode").value;
+      const target_bank_id = parseInt(document.getElementById("transferTargetBank").value);
+      const endpoint = mode === "copy" ? `/api/questions/${qId}/copy` : `/api/questions/${qId}/move`;
+
+      await api(endpoint, { method: "POST", body: JSON.stringify({ target_bank_id }) });
+      closeModal("transferModal");
       questionsCache = await api(`/api/banks/${currentBankId}/questions`);
       renderQuestions();
       await loadBanks();
+      alert(mode === "copy" ? "تم نسخ السؤال إلى البنك المحدد." : "تم نقل السؤال إلى البنك المحدد.");
     }
 
     function closeModal(id) { document.getElementById(id).classList.remove("open"); }
@@ -782,7 +958,7 @@
         fd.append("file", fileInput.files[0]);
 
         const res = await api("/api/upload_csv", { method: "POST", body: fd });
-        alert(`✅ تم إنشاء البنك واستيراد ${res.added} سؤال بنجاح.`);
+        alert(`تم إنشاء البنك واستيراد ${res.added} سؤال بنجاح.`);
         document.getElementById("csvBankName").value = "";
         fileInput.value = "";
         activePubBankId = res.bank_id;
@@ -812,7 +988,7 @@
         list.innerHTML += `
           <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
             <div>
-              <strong>🌐 ${c.title}</strong><br>
+              <strong>${c.title}</strong><br>
               <small style="color:var(--hint);">وجهة محفوظة${topicLabel}</small>
             </div>
             <button class="btn btn-sm btn-danger" ${!canDel ? "disabled" : ""} onclick="deleteCommunity(${c.id})">حذف</button>
@@ -825,7 +1001,7 @@
       const topic_id = parseInt(document.getElementById("commTopicId").value) || null;
       if (!chat_id) return alert("يرجى إدخال معرّف الوجهة أولاً.");
       await api("/api/test_community", { method: "POST", body: JSON.stringify({ title: "test", chat_id, topic_id }) });
-      alert("✅ تم التحقق من الاتصال والصلاحيات بنجاح.");
+      alert("تم التحقق من الاتصال والصلاحيات بنجاح.");
     }
 
     async function saveCommunity() {
@@ -838,7 +1014,7 @@
       document.getElementById("commChatId").value = "";
       document.getElementById("commTopicId").value = "";
       await loadCommunities();
-      alert("✅ تم حفظ الوجهة بنجاح.");
+      alert("تم حفظ الوجهة بنجاح.");
     }
 
     async function deleteCommunity(id) {
@@ -859,7 +1035,7 @@
 
       const box = document.getElementById("selectiveQuestionsList");
       if (box && document.getElementById("enableSelectiveMode")?.checked) {
-        box.innerHTML = `<div style="padding:10px; color:var(--hint);">⏳ جاري تحميل الأسئلة...</div>`;
+        box.innerHTML = `<div style="padding:10px; color:var(--hint);">جاري تحميل الأسئلة...</div>`;
       }
 
       pubBankQuestions = await api(`/api/banks/${bankId}/questions`);
@@ -929,7 +1105,7 @@
 
     async function publishQuiz() {
       if (currentActor?.role !== "owner" && !currentActor?.can_publish) {
-        return alert("⛔ لا تملك صلاحية إرسال الاختبارات.");
+        return alert("لا تملك صلاحية إرسال الاختبارات.");
       }
 
       const bankId = parseInt(document.getElementById("pubBankSelect").value);
@@ -949,7 +1125,7 @@
       }
 
       if (questionsToSend.length === 0) {
-        return alert("⚠️ لم يتم تحديد أي سؤال للإرسال.");
+        return alert("لم يتم تحديد أي سؤال للإرسال.");
       }
 
       if (document.getElementById("pubShuffleQ").checked) {
@@ -993,13 +1169,14 @@
       startBtn.disabled = true;
       pBox.style.display = "block";
       pFill.style.width = "35%";
-      pStatus.innerText = `🚀 جاري جدولة الإرسال إلى (${targetLabel})...`;
+      pStatus.innerText = `جاري جدولة الإرسال إلى (${targetLabel})...`;
       pCounter.innerText = `${finalCount} سؤال`;
 
       try {
         const res = await api("/api/publish_batch", {
           method: "POST",
           body: JSON.stringify({
+            bank_id: bankId,
             question_ids: questionsToSend.map(q => q.id),
             target_type: targetMode,
             comm_id: commId,
@@ -1012,12 +1189,70 @@
         });
         const actualCount = typeof res.queued_count === "number" ? res.queued_count : finalCount;
         pFill.style.width = "100%";
-        pStatus.innerText = `✅ تم بدء إرسال ${actualCount} سؤال إلى (${res.target_label || targetLabel}) في الخلفية.`;
+        pStatus.innerText = `تم بدء إرسال ${actualCount} سؤال إلى (${res.target_label || targetLabel}) في الخلفية.`;
         pCounter.innerText = `${actualCount} سؤال`;
-        alert(`✅ تم بدء إرسال ${actualCount} سؤال إلى (${res.target_label || targetLabel}).\nسيصلك تقرير بالعدد المرسل فعلياً فور الانتهاء.`);
+        await loadPublishJobs();
       } finally {
         startBtn.disabled = false;
       }
+    }
+
+    function jobStatusText(st) {
+      if (st === "completed") return "مكتمل";
+      if (st === "partial_failed") return "مكتمل مع متعذرات";
+      if (st === "failed") return "متعذر";
+      if (st === "running") return "قيد الإرسال";
+      return "في الانتظار";
+    }
+
+    async function loadPublishJobs() {
+      const jobs = await api("/api/publish_jobs");
+      const box = document.getElementById("publishJobsList");
+      if (!jobs || jobs.length === 0) {
+        box.innerHTML = `<div style="text-align:center; color:var(--hint); padding:12px;">لا توجد عمليات إرسال مسجلة بعد.</div>`;
+        return;
+      }
+
+      box.innerHTML = jobs.map(j => `
+        <div class="job-card">
+          <div class="job-top">
+            <div>
+              <strong>${j.target_label}</strong>
+              ${j.quiz_title ? `<div style="font-size:0.78rem; color:var(--hint);">${j.quiz_title}</div>` : ""}
+            </div>
+            <span class="badge">${jobStatusText(j.status)} (#${j.id})</span>
+          </div>
+          <div style="font-size:0.75rem; color:var(--hint);">المنفّذ: ${j.actor_name} (${j.actor_tag}) • الإنجاز: ${j.success_rate}%</div>
+          <div class="job-stats">
+            <div class="stat-box">
+              <span class="stat-val">${j.total_count}</span>
+              <span class="stat-lbl">المستهدف</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-val val-ok">${j.sent_count}</span>
+              <span class="stat-lbl">المرسل فعلياً</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-val val-err">${j.failed_count}</span>
+              <span class="stat-lbl">المتعذر</span>
+            </div>
+          </div>
+          ${j.failed_count > 0 ? `
+            <button class="btn btn-sm btn-outline" onclick="retryFailedBatch(${j.id})">
+              <svg class="ico ico-sm"><use href="#i-refresh"/></svg> إعادة إرسال المتعذرة (${j.failed_count})
+            </button>
+          ` : ""}
+        </div>
+      `).join("");
+    }
+
+    async function retryFailedBatch(jobId) {
+      const res = await api("/api/publish_jobs/retry_failed", {
+        method: "POST",
+        body: JSON.stringify({ job_id: jobId })
+      });
+      alert(`تمت جدولة إعادة إرسال ${res.retried_count} سؤال متعذر إلى (${res.target_label}).`);
+      await loadPublishJobs();
     }
 
     async function loadAdmins() {
@@ -1032,8 +1267,8 @@
               <small style="color:var(--hint);">ID: ${a.user_id}</small>
             </div>
             <div style="display:flex; gap:6px;">
-              <button class="btn btn-sm btn-outline" onclick="editAdminForm(${a.user_id})">⚙️ الصلاحيات</button>
-              ${a.is_owner ? '<span class="badge badge-owner">👑 المالك</span>' : `<button class="btn btn-sm btn-danger" onclick="removeAdmin(${a.user_id})">إزالة</button>`}
+              <button class="btn btn-sm btn-outline" onclick="editAdminForm(${a.user_id})">الصلاحيات</button>
+              ${a.is_owner ? '<span class="badge badge-owner">المالك</span>' : `<button class="btn btn-sm btn-danger" onclick="removeAdmin(${a.user_id})">إزالة</button>`}
             </div>
           </div>
           <div class="perm-pills">
@@ -1050,7 +1285,7 @@
     function editAdminForm(userId) {
       const adm = adminsCache.find(x => x.user_id === userId);
       if (!adm) return;
-      document.getElementById("adminFormTitle").innerText = `⚙️ تعديل صلاحيات: ${adm.name}`;
+      document.getElementById("adminFormTitle").innerHTML = `<svg class="ico"><use href="#i-shield"/></svg> تعديل صلاحيات: ${adm.name}`;
       document.getElementById("newAdminId").value = adm.user_id;
       document.getElementById("newAdminName").value = adm.name;
       document.getElementById("newAdminTag").value = adm.tag;
@@ -1063,7 +1298,7 @@
     }
 
     function resetAdminForm() {
-      document.getElementById("adminFormTitle").innerText = "👑 إضافة / تعديل مشرف وصلاحياته";
+      document.getElementById("adminFormTitle").innerHTML = `<svg class="ico"><use href="#i-shield"/></svg> إضافة أو تعديل مشرف وصلاحياته`;
       document.getElementById("newAdminId").value = "";
       document.getElementById("newAdminName").value = "";
       document.getElementById("newAdminTag").value = "";
@@ -1096,7 +1331,7 @@
 
       resetAdminForm();
       await loadAdmins();
-      alert("✅ تم حفظ بيانات وصلاحيات المشرف بنجاح.");
+      alert("تم حفظ بيانات وصلاحيات المشرف بنجاح.");
     }
 
     async function removeAdmin(id) {
@@ -1126,8 +1361,22 @@
             <span>${formatLogDate(item.created_at)}</span>
           </div>
           <div class="log-desc">${item.description}</div>
+          ${item.can_undo ? `
+            <div class="log-actions">
+              <button class="btn btn-sm btn-outline" onclick="undoLogItem(${item.id})">
+                <svg class="ico ico-sm"><use href="#i-undo"/></svg> تراجع واستعادة
+              </button>
+            </div>
+          ` : (item.undone ? `<div style="font-size:0.74rem; color:var(--hint); margin-top:4px;">تم التراجع عن هذه العملية</div>` : "")}
         </div>
       `).join("");
+    }
+
+    async function undoLogItem(logId) {
+      if (!confirm("استعادة البنك المحذوف وجميع أسئلته؟")) return;
+      const res = await api(`/api/logs/${logId}/undo`, { method: "POST", body: JSON.stringify({}) });
+      alert(`تمت الاستعادة بنجاح (${res.restored_questions} سؤال).`);
+      await Promise.all([loadBanks(), loadLogs()]);
     }
 
     async function clearLogs() {
