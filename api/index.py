@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Poll, MenuButtonWebApp
 from telegram.error import RetryAfter
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "9268644584:AAE8woNBoXzueYqpsT4x69efYcDgP1mPP9Y").strip()
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
@@ -142,15 +142,40 @@ def init_db():
                     actor_tag TEXT,
                     action_type TEXT,
                     description TEXT,
-                    snapshot_data JSONB DEFAULT NULL,
+                    payload JSONB DEFAULT NULL,
                     undone BOOLEAN DEFAULT FALSE,
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
                 )
             """)
-            c.execute("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS snapshot_data JSONB DEFAULT NULL")
+            c.execute("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS payload JSONB DEFAULT NULL")
             c.execute("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS undone BOOLEAN DEFAULT FALSE")
+
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS publish_jobs (
+                    id SERIAL PRIMARY KEY,
+                    actor_id BIGINT,
+                    actor_name TEXT,
+                    actor_tag TEXT,
+                    bank_id INTEGER,
+                    target_type TEXT,
+                    comm_id INTEGER,
+                    target_label TEXT,
+                    quiz_title TEXT DEFAULT '',
+                    total_count INTEGER DEFAULT 0,
+                    sent_count INTEGER DEFAULT 0,
+                    failed_count INTEGER DEFAULT 0,
+                    failed_question_ids JSONB DEFAULT '[]'::jsonb,
+                    delay_sec REAL DEFAULT 0.0,
+                    shuffle_options BOOLEAN DEFAULT FALSE,
+                    open_period INTEGER DEFAULT NULL,
+                    status TEXT DEFAULT 'queued',
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    completed_at TIMESTAMP WITH TIME ZONE DEFAULT NULL
+                )
+            """)
             c.execute("CREATE INDEX IF NOT EXISTS idx_questions_bank_id ON questions(bank_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_publish_jobs_actor ON publish_jobs(actor_id, id DESC)")
         conn.commit()
     _db_initialized = True
 
@@ -169,6 +194,7 @@ def cleanup_old_logs():
     with PooledConn() as conn:
         with conn.cursor() as c:
             c.execute("DELETE FROM audit_logs WHERE created_at < %s", (cutoff,))
+            c.execute("DELETE FROM publish_jobs WHERE created_at < %s", (cutoff,))
         conn.commit()
 
 
@@ -180,7 +206,7 @@ def get_owner_id() -> Optional[int]:
     return int(row[0]) if row else None
 
 
-def set_owner_id(user_id: int, name: str = "Owner"):
+def set_owner_id(user_id: int, name: str = "المالك"):
     with PooledConn() as conn:
         with conn.cursor() as c:
             c.execute(
@@ -203,15 +229,26 @@ def set_owner_id(user_id: int, name: str = "Owner"):
         conn.commit()
 
 
-def get_actor_profile(user_id: int, display_name: str, username: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def format_display_name(user_info: dict) -> str:
+    first = (user_info.get("first_name") or "").strip()
+    last = (user_info.get("last_name") or "").strip()
+    username = (user_info.get("username") or "").strip()
+    full_name = f"{first} {last}".strip()
+    if full_name:
+        return full_name
+    if username:
+        return f"@{username}"
+    return "مستخدم"
+
+
+def get_actor_profile(user_id: int, fallback_name: str = "مستخدم") -> Optional[Dict[str, Any]]:
     owner = get_owner_id()
     if owner is None:
         return None
     if user_id == owner:
         return {
             "user_id": user_id,
-            "name": display_name,
-            "username": username or "",
+            "name": fallback_name,
             "role": "owner",
             "role_label": "المالك",
             "tag": "المالك",
@@ -233,8 +270,7 @@ def get_actor_profile(user_id: int, display_name: str, username: Optional[str] =
         return None
     return {
         "user_id": row[0],
-        "name": row[1] or display_name,
-        "username": username or "",
+        "name": row[1] or fallback_name,
         "role": "admin",
         "role_label": "مشرف",
         "tag": row[2] or "مشرف",
@@ -250,13 +286,13 @@ def write_audit_log(
     actor: Dict[str, Any],
     action_type: str,
     description: str,
-    snapshot_data: Optional[Dict[str, Any]] = None,
+    payload: Optional[Dict[str, Any]] = None,
 ):
     cleanup_old_logs()
     with PooledConn() as conn:
         with conn.cursor() as c:
             c.execute(
-                """INSERT INTO audit_logs (actor_id, actor_name, actor_role, actor_tag, action_type, description, snapshot_data, undone)
+                """INSERT INTO audit_logs (actor_id, actor_name, actor_role, actor_tag, action_type, description, payload, undone)
                    VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, FALSE)""",
                 (
                     actor.get("user_id"),
@@ -265,7 +301,7 @@ def write_audit_log(
                     actor.get("tag", "مشرف"),
                     action_type,
                     description,
-                    json.dumps(snapshot_data, ensure_ascii=False) if snapshot_data is not None else None,
+                    json.dumps(payload, ensure_ascii=False) if payload is not None else None,
                 ),
             )
         conn.commit()
@@ -290,21 +326,16 @@ def verify_actor(init_data: str) -> Dict[str, Any]:
 
     user_info = json.loads(parsed.get("user", "{}"))
     user_id = user_info.get("id")
+    display_name = format_display_name(user_info)
     if not user_id:
         raise HTTPException(status_code=403, detail="تعذر قراءة معرف المستخدم.")
 
-    first_name = (user_info.get("first_name") or "").strip()
-    last_name = (user_info.get("last_name") or "").strip()
-    full_name = f"{first_name} {last_name}".strip()
-    username = (user_info.get("username") or "").strip()
-    display_name = full_name or (f"@{username}" if username else f"مستخدم {user_id}")
-
     if get_owner_id() is None:
-        set_owner_id(user_id, display_name)
+        set_owner_id(int(user_id), display_name)
 
-    profile = get_actor_profile(int(user_id), display_name, username)
+    profile = get_actor_profile(int(user_id), display_name)
     if not profile:
-        raise HTTPException(status_code=403, detail="هذا النظام مخصص للمالك والمشرفين المعتمدين فقط.")
+        raise HTTPException(status_code=403, detail="عذراً، أنت لست مشرفاً في البوت.")
     return profile
 
 
@@ -370,7 +401,7 @@ class QuestionCreate(QuestionUpdate):
     bank_id: int
 
 
-class MoveQuestionReq(BaseModel):
+class TransferQuestionReq(BaseModel):
     target_bank_id: int
 
 
@@ -385,6 +416,7 @@ class CommunityCreateReq(BaseModel):
 
 
 class BatchPublishReq(BaseModel):
+    bank_id: Optional[int] = None
     question_ids: List[int]
     target_type: str
     comm_id: Optional[int] = None
@@ -393,6 +425,10 @@ class BatchPublishReq(BaseModel):
     open_period: Optional[int] = None
     limit_count: Optional[int] = None
     quiz_title: Optional[str] = None
+
+
+class RetryFailedReq(BaseModel):
+    job_id: int
 
 
 class AdminUpsertReq(BaseModel):
@@ -412,51 +448,29 @@ def build_bot_app(webapp_url: str = ""):
     async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         init_db()
         user = update.effective_user
-        full_name = f"{(user.first_name or '').strip()} {(user.last_name or '').strip()}".strip()
-        display_name = full_name or (f"@{user.username}" if user.username else f"مستخدم {user.id}")
+        display_name = format_display_name({
+            "first_name": getattr(user, "first_name", ""),
+            "last_name": getattr(user, "last_name", ""),
+            "username": getattr(user, "username", ""),
+        })
 
         if get_owner_id() is None:
             set_owner_id(user.id, display_name)
 
-        profile = get_actor_profile(user.id, display_name, user.username)
+        profile = get_actor_profile(user.id, display_name)
         if not profile:
-            await update.message.reply_text("هذا البوت مخصص للمالك والمشرفين المعتمدين فقط.")
+            await update.message.reply_text("عذراً، أنت لست مشرفاً في البوت.")
             return
 
         url = webapp_url or os.environ.get("RENDER_EXTERNAL_URL", "")
-        keyboard = [[InlineKeyboardButton("فتح نظام إدارة الاختبارات", web_app=WebAppInfo(url=url))]]
+        keyboard = [[InlineKeyboardButton("فتح لوحة إدارة الاختبارات", web_app=WebAppInfo(url=url))]]
         await update.message.reply_text(
-            f"أهلاً بك يا **{display_name}** ({profile['tag']}).\n\n"
-            "• افتح لوحة التحكم لإدارة البنوك، الصلاحيات، الوجهات المحفوظة، وسجل العمليات.\n"
-            "• أرسل `/id` داخل أي مجموعة أو موضوع (Topic) أو حوّل رسالة من القناة لاستخراج المعرّف.",
+            f"أهلاً بك يا **{display_name}** ({profile['tag']}).\nاضغط على الزر أدناه لفتح لوحة التحكم.",
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(keyboard),
         )
 
-    async def get_chat_id_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        chat = update.effective_chat
-        msg = update.effective_message
-        topic_id = getattr(msg, "message_thread_id", None)
-        text = f"بيانات الوجهة:\n• الاسم: `{chat.title or chat.first_name}`\n• Chat ID: `{chat.id}`"
-        if topic_id:
-            text += f"\n• Topic ID: `{topic_id}`"
-        await msg.reply_text(text, parse_mode="Markdown")
-
-    async def handle_forwarded(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        msg = update.effective_message
-        if msg.forward_origin:
-            origin = msg.forward_origin
-            if hasattr(origin, "chat") and origin.chat:
-                await msg.reply_text(
-                    f"تم استخراج بيانات الوجهة:\n"
-                    f"• الاسم: `{origin.chat.title}`\n"
-                    f"• Chat ID: `{origin.chat.id}`",
-                    parse_mode="Markdown",
-                )
-
     application.add_handler(CommandHandler("start", start_cmd))
-    application.add_handler(CommandHandler("id", get_chat_id_cmd))
-    application.add_handler(MessageHandler(filters.FORWARDED, handle_forwarded))
     return application
 
 
@@ -495,8 +509,7 @@ async def telegram_webhook(request: Request):
 @app.get("/api/me")
 @app.get("/me")
 async def get_me(x_telegram_init_data: str = Header(default="")):
-    actor = verify_actor(x_telegram_init_data)
-    return actor
+    return verify_actor(x_telegram_init_data)
 
 
 @app.get("/api/banks")
@@ -599,39 +612,107 @@ async def delete_bank(bank_id: int, x_telegram_init_data: str = Header(default="
     with PooledConn() as conn:
         with conn.cursor() as c:
             c.execute(
-                """SELECT question, opt1, opt2, opt3, opt4, correct_idx, explanation
-                   FROM questions WHERE bank_id = %s ORDER BY id ASC""",
+                "SELECT question, opt1, opt2, opt3, opt4, correct_idx, explanation FROM questions WHERE bank_id = %s ORDER BY id ASC",
                 (bank_id,),
             )
             q_rows = c.fetchall()
-            snapshot = {
-                "entity": "bank",
-                "bank_name": bank["name"],
-                "owner_id": bank["owner_id"],
-                "owner_name": bank["owner_name"],
-                "questions": [
-                    {
-                        "question": q[0],
-                        "opt1": q[1],
-                        "opt2": q[2],
-                        "opt3": q[3],
-                        "opt4": q[4],
-                        "correct_idx": q[5],
-                        "explanation": q[6] or "",
-                    }
-                    for q in q_rows
-                ],
-            }
+            snapshot_questions = [
+                {
+                    "question": r[0],
+                    "opt1": r[1],
+                    "opt2": r[2],
+                    "opt3": r[3],
+                    "opt4": r[4],
+                    "correct_idx": r[5],
+                    "explanation": r[6] or "",
+                }
+                for r in q_rows
+            ]
             c.execute("DELETE FROM banks WHERE id = %s", (bank_id,))
+        conn.commit()
+
+    snapshot_payload = {
+        "undo_kind": "restore_bank",
+        "bank_name": bank["name"],
+        "owner_id": bank["owner_id"],
+        "owner_name": bank["owner_name"],
+        "questions": snapshot_questions,
+    }
+    write_audit_log(
+        actor,
+        "delete_bank",
+        f"حذف بنك الأسئلة «{bank['name']}» ({len(snapshot_questions)} سؤالاً).",
+        payload=snapshot_payload,
+    )
+    return {"status": "ok"}
+
+
+@app.post("/api/logs/{log_id}/undo")
+@app.post("/logs/{log_id}/undo")
+async def undo_audit_log(log_id: int, x_telegram_init_data: str = Header(default="")):
+    actor = verify_actor(x_telegram_init_data)
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute(
+                "SELECT id, actor_id, action_type, payload, undone FROM audit_logs WHERE id = %s",
+                (log_id,),
+            )
+            row = c.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="السجل غير موجود.")
+            if row[4]:
+                raise HTTPException(status_code=400, detail="تم تنفيذ التراجع على هذا السجل مسبقاً.")
+
+            payload = row[3] if isinstance(row[3], dict) else (json.loads(row[3]) if row[3] else None)
+            if not payload or payload.get("undo_kind") != "restore_bank":
+                raise HTTPException(status_code=400, detail="هذه العملية لا تدعم التراجع التلقائي.")
+
+            orig_owner_id = payload.get("owner_id")
+            if actor["role"] != "owner" and not actor["can_edit_others_banks"]:
+                if orig_owner_id is not None and int(orig_owner_id) != int(actor["user_id"]):
+                    raise HTTPException(status_code=403, detail="لا تملك صلاحية استعادة بنك يخص مشرفاً آخر.")
+
+            restored_name = payload["bank_name"]
+            c.execute("SELECT id FROM banks WHERE name = %s", (restored_name,))
+            if c.fetchone():
+                restored_name = f"{restored_name} (مستعاد)"
+
+            c.execute(
+                "INSERT INTO banks (name, owner_id, owner_name) VALUES (%s, %s, %s) RETURNING id",
+                (
+                    restored_name,
+                    payload.get("owner_id") or actor["user_id"],
+                    payload.get("owner_name") or actor["name"],
+                ),
+            )
+            new_bank_id = c.fetchone()[0]
+
+            q_list = payload.get("questions") or []
+            for q in q_list:
+                c.execute(
+                    """INSERT INTO questions (bank_id, question, opt1, opt2, opt3, opt4, correct_idx, explanation)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (
+                        new_bank_id,
+                        q["question"],
+                        q["opt1"],
+                        q["opt2"],
+                        q["opt3"],
+                        q["opt4"],
+                        q["correct_idx"],
+                        q.get("explanation", ""),
+                    ),
+                )
+
+            c.execute("UPDATE audit_logs SET undone = TRUE WHERE id = %s", (log_id,))
         conn.commit()
 
     write_audit_log(
         actor,
-        "delete_bank",
-        f"حذف بنك الأسئلة «{bank['name']}» ({len(q_rows)} سؤال).",
-        snapshot_data=snapshot,
+        "undo_delete_bank",
+        f"استعاد بنك الأسئلة المحذوف «{restored_name}» ({len(q_list)} سؤالاً).",
     )
-    return {"status": "ok"}
+    return {"status": "ok", "bank_id": new_bank_id, "restored_questions": len(q_list)}
 
 
 def parse_correct_index(ans_raw_val, opts: list) -> Optional[int]:
@@ -833,7 +914,7 @@ async def update_question(q_id: int, req: QuestionUpdate, x_telegram_init_data: 
 
 @app.post("/api/questions/{q_id}/move")
 @app.post("/questions/{q_id}/move")
-async def move_question(q_id: int, req: MoveQuestionReq, x_telegram_init_data: str = Header(default="")):
+async def move_question(q_id: int, req: TransferQuestionReq, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     with PooledConn() as conn:
         with conn.cursor() as c:
@@ -863,6 +944,43 @@ async def move_question(q_id: int, req: MoveQuestionReq, x_telegram_init_data: s
     return {"status": "ok"}
 
 
+@app.post("/api/questions/{q_id}/copy")
+@app.post("/questions/{q_id}/copy")
+async def copy_question(q_id: int, req: TransferQuestionReq, x_telegram_init_data: str = Header(default="")):
+    actor = verify_actor(x_telegram_init_data)
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute(
+                "SELECT bank_id, question, opt1, opt2, opt3, opt4, correct_idx, explanation FROM questions WHERE id = %s",
+                (q_id,),
+            )
+            row = c.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="السؤال غير موجود.")
+
+    src_bank = get_bank_record(row[0])
+    dst_bank = get_bank_record(req.target_bank_id)
+    if not dst_bank:
+        raise HTTPException(status_code=404, detail="البنك الهدف غير موجود.")
+    require_bank_edit_access(actor, dst_bank)
+
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute(
+                """INSERT INTO questions (bank_id, question, opt1, opt2, opt3, opt4, correct_idx, explanation)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                (req.target_bank_id, row[1], row[2], row[3], row[4], row[5], row[6], row[7]),
+            )
+        conn.commit()
+
+    write_audit_log(
+        actor,
+        "copy_question",
+        f"نسخ سؤالاً من بنك «{src_bank['name'] if src_bank else ''}» إلى بنك «{dst_bank['name']}».",
+    )
+    return {"status": "ok"}
+
+
 @app.delete("/api/questions/{q_id}")
 @app.delete("/questions/{q_id}")
 async def delete_question(q_id: int, x_telegram_init_data: str = Header(default="")):
@@ -870,38 +988,20 @@ async def delete_question(q_id: int, x_telegram_init_data: str = Header(default=
     require_perm(actor, "can_delete", "لا تملك صلاحية حذف الأسئلة.")
     with PooledConn() as conn:
         with conn.cursor() as c:
-            c.execute(
-                """SELECT bank_id, question, opt1, opt2, opt3, opt4, correct_idx, explanation
-                   FROM questions WHERE id = %s""",
-                (q_id,),
-            )
+            c.execute("SELECT bank_id FROM questions WHERE id = %s", (q_id,))
             row = c.fetchone()
-            if not row:
-                raise HTTPException(status_code=404, detail="السؤال غير موجود.")
-            bank = get_bank_record(row[0])
-            if bank:
-                require_bank_edit_access(actor, bank)
-            snapshot = {
-                "entity": "question",
-                "bank_id": row[0],
-                "bank_name": bank["name"] if bank else "",
-                "question": row[1],
-                "opt1": row[2],
-                "opt2": row[3],
-                "opt3": row[4],
-                "opt4": row[5],
-                "correct_idx": row[6],
-                "explanation": row[7] or "",
-            }
+    if not row:
+        raise HTTPException(status_code=404, detail="السؤال غير موجود.")
+    bank = get_bank_record(row[0])
+    if bank:
+        require_bank_edit_access(actor, bank)
+
+    with PooledConn() as conn:
+        with conn.cursor() as c:
             c.execute("DELETE FROM questions WHERE id = %s", (q_id,))
         conn.commit()
 
-    write_audit_log(
-        actor,
-        "delete_question",
-        f"حذف سؤالاً من بنك «{bank['name'] if bank else ''}».",
-        snapshot_data=snapshot,
-    )
+    write_audit_log(actor, "delete_question", f"حذف سؤالاً من بنك «{bank['name'] if bank else ''}».")
     return {"status": "ok"}
 
 
@@ -944,25 +1044,14 @@ async def delete_community(comm_id: int, x_telegram_init_data: str = Header(defa
     require_perm(actor, "can_delete", "لا تملك صلاحية حذف الوجهات.")
     with PooledConn() as conn:
         with conn.cursor() as c:
-            c.execute("SELECT title, chat_id, topic_id FROM communities WHERE id = %s", (comm_id,))
+            c.execute("SELECT title FROM communities WHERE id = %s", (comm_id,))
             row = c.fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="الوجهة غير موجودة.")
-            snapshot = {
-                "entity": "community",
-                "title": row[0],
-                "chat_id": row[1],
-                "topic_id": row[2],
-            }
             c.execute("DELETE FROM communities WHERE id = %s", (comm_id,))
         conn.commit()
 
-    write_audit_log(
-        actor,
-        "delete_community",
-        f"حذف وجهة الإرسال «{row[0]}».",
-        snapshot_data=snapshot,
-    )
+    write_audit_log(actor, "delete_community", f"حذف وجهة الإرسال «{row[0]}».")
     return {"status": "ok"}
 
 
@@ -985,7 +1074,8 @@ async def test_community(req: CommunityCreateReq, x_telegram_init_data: str = He
             )
 
 
-async def bg_send_all_questions(
+async def execute_publish_job(
+    job_id: int,
     q_ids: List[int],
     target_chat,
     target_label: str,
@@ -995,19 +1085,23 @@ async def bg_send_all_questions(
     open_period: Optional[int],
     quiz_title: Optional[str],
     actor: Dict[str, Any],
+    is_retry: bool = False,
 ):
     with PooledConn() as conn:
         with conn.cursor() as c:
+            c.execute("UPDATE publish_jobs SET status = 'running' WHERE id = %s", (job_id,))
             c.execute(
                 "SELECT id, question, opt1, opt2, opt3, opt4, correct_idx, explanation FROM questions WHERE id = ANY(%s)",
                 (q_ids,),
             )
             q_map = {r[0]: r for r in c.fetchall()}
+        conn.commit()
 
     ordered_rows = [q_map[qid] for qid in q_ids if qid in q_map]
     total_requested = len(ordered_rows)
     sent_count = 0
     failed_count = 0
+    failed_ids: List[int] = []
     admin_id = actor["user_id"]
 
     is_group_or_channel = str(target_chat).startswith("-") or str(target_chat).startswith("@")
@@ -1015,9 +1109,10 @@ async def bg_send_all_questions(
     async with bot_app:
         if quiz_title and quiz_title.strip() and total_requested > 0:
             try:
+                prefix = "إعادة إرسال الأسئلة المتعذرة" if is_retry else "اختبار جديد"
                 intro_kwargs = {
                     "chat_id": target_chat,
-                    "text": f"**{quiz_title.strip()}**\nعدد الأسئلة: **{total_requested}**",
+                    "text": f"**{quiz_title.strip()}**\n{prefix} • عدد الأسئلة: **{total_requested}**",
                     "parse_mode": "Markdown",
                 }
                 if topic_id:
@@ -1027,7 +1122,7 @@ async def bg_send_all_questions(
                 pass
 
         for idx, row in enumerate(ordered_rows):
-            _, q_text, o1, o2, o3, o4, c_idx, expl = row
+            qid, q_text, o1, o2, o3, o4, c_idx, expl = row
             opts = [o1[:98], o2[:98], o3[:98], o4[:98]]
             current_correct = c_idx
 
@@ -1053,7 +1148,9 @@ async def bg_send_all_questions(
                 kwargs["open_period"] = open_period
 
             delivered = False
-            while True:
+            attempts = 0
+            while attempts < 4:
+                attempts += 1
                 try:
                     await bot_app.bot.send_poll(**kwargs)
                     sent_count += 1
@@ -1067,8 +1164,21 @@ async def bg_send_all_questions(
                         m = re.search(r"(\d+)", err_msg)
                         await asyncio.sleep(int(m.group(1)) + 1 if m else 10)
                     else:
-                        failed_count += 1
                         break
+
+            if not delivered:
+                failed_count += 1
+                failed_ids.append(qid)
+
+            with PooledConn() as conn:
+                with conn.cursor() as c:
+                    c.execute(
+                        """UPDATE publish_jobs
+                           SET sent_count = %s, failed_count = %s, failed_question_ids = %s::jsonb
+                           WHERE id = %s""",
+                        (sent_count, failed_count, json.dumps(failed_ids), job_id),
+                    )
+                conn.commit()
 
             if delivered and idx < total_requested - 1:
                 if delay_sec > 0:
@@ -1078,17 +1188,42 @@ async def bg_send_all_questions(
                 else:
                     await asyncio.sleep(0.01)
 
+        final_status = "completed" if failed_count == 0 else ("partial_failed" if sent_count > 0 else "failed")
+        with PooledConn() as conn:
+            with conn.cursor() as c:
+                c.execute(
+                    """UPDATE publish_jobs
+                       SET status = %s, sent_count = %s, failed_count = %s,
+                           failed_question_ids = %s::jsonb, completed_at = NOW()
+                       WHERE id = %s""",
+                    (final_status, sent_count, failed_count, json.dumps(failed_ids), job_id),
+                )
+            conn.commit()
+
+        success_rate = round((sent_count / total_requested) * 100, 1) if total_requested > 0 else 0.0
+        report_lines = [
+            "━━━━━━━━━━━━━━━━━━━━",
+            "📄 **التقرير التفصيلي لعملية الإرسال**",
+            "━━━━━━━━━━━━━━━━━━━━",
+            f"• **رقم العملية:** `#{job_id}`",
+            f"• **المنفّذ:** {actor['name']} ({actor['tag']})",
+            f"• **الوجهة:** {target_label}",
+        ]
+        if quiz_title and quiz_title.strip():
+            report_lines.append(f"• **عنوان الاختبار:** {quiz_title.strip()}")
+        report_lines.extend([
+            f"• **إجمالي الأسئلة المستهدفة:** **{total_requested}**",
+            f"• **الأسئلة المرسلة بنجاح:** **{sent_count}**",
+            f"• **الأسئلة المتعذر إرسالها:** **{failed_count}**",
+            f"• **نسبة الإنجاز الفعلي:** **{success_rate}%**",
+        ])
+        if failed_count > 0:
+            report_lines.append("• **ملاحظة:** يمكنك إعادة إرسال الأسئلة المتعذرة مباشرة من تبويب الإرسال.")
+
         try:
-            summary_lines = [
-                "تقرير إرسال الاختبار",
-                f"• الوجهة: {target_label}",
-                f"• المرسل فعلياً: **{sent_count}** من **{total_requested}**",
-            ]
-            if failed_count > 0:
-                summary_lines.append(f"• المتعذر إرساله: **{failed_count}**")
             await bot_app.bot.send_message(
                 chat_id=admin_id,
-                text="\n".join(summary_lines),
+                text="\n".join(report_lines),
                 parse_mode="Markdown",
             )
         except Exception:
@@ -1098,7 +1233,7 @@ async def bg_send_all_questions(
     write_audit_log(
         actor,
         "publish_quiz",
-        f"قام {actor_desc} بإرسال {sent_count} من {total_requested} سؤالاً إلى «{target_label}».",
+        f"أرسل {sent_count} من {total_requested} سؤالاً إلى «{target_label}» (المتعذر: {failed_count}) بواسطة {actor_desc}.",
     )
 
 
@@ -1140,12 +1275,38 @@ async def publish_batch(
             else:
                 raise HTTPException(status_code=400, detail="نوع الوجهة غير مدعوم.")
 
-    ordered_valid_ids = [qid for qid in q_ids if qid in valid_set]
-    if not ordered_valid_ids:
-        raise HTTPException(status_code=400, detail="الأسئلة المحددة غير متوفرة.")
+            ordered_valid_ids = [qid for qid in q_ids if qid in valid_set]
+            if not ordered_valid_ids:
+                raise HTTPException(status_code=400, detail="الأسئلة المحددة غير متوفرة.")
+
+            c.execute(
+                """INSERT INTO publish_jobs
+                   (actor_id, actor_name, actor_tag, bank_id, target_type, comm_id, target_label,
+                    quiz_title, total_count, sent_count, failed_count, failed_question_ids,
+                    delay_sec, shuffle_options, open_period, status)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0, '[]'::jsonb, %s, %s, %s, 'queued')
+                   RETURNING id""",
+                (
+                    actor["user_id"],
+                    actor["name"],
+                    actor["tag"],
+                    req.bank_id,
+                    req.target_type,
+                    req.comm_id,
+                    target_label,
+                    (req.quiz_title or "").strip(),
+                    len(ordered_valid_ids),
+                    req.delay_sec,
+                    req.shuffle_options,
+                    req.open_period,
+                ),
+            )
+            job_id = c.fetchone()[0]
+        conn.commit()
 
     background_tasks.add_task(
-        bg_send_all_questions,
+        execute_publish_job,
+        job_id,
         ordered_valid_ids,
         target_chat,
         target_label,
@@ -1155,10 +1316,157 @@ async def publish_batch(
         req.open_period,
         req.quiz_title,
         actor,
+        False,
     )
     return {
         "status": "queued",
+        "job_id": job_id,
         "queued_count": len(ordered_valid_ids),
+        "target_label": target_label,
+    }
+
+
+@app.get("/api/publish_jobs")
+@app.get("/publish_jobs")
+async def get_publish_jobs(x_telegram_init_data: str = Header(default="")):
+    actor = verify_actor(x_telegram_init_data)
+    cleanup_old_logs()
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            if actor["role"] == "owner" or actor["can_manage_admins"]:
+                c.execute("""
+                    SELECT id, actor_name, actor_tag, target_label, quiz_title,
+                           total_count, sent_count, failed_count, failed_question_ids,
+                           status, created_at, completed_at
+                    FROM publish_jobs ORDER BY id DESC LIMIT 15
+                """)
+            else:
+                c.execute("""
+                    SELECT id, actor_name, actor_tag, target_label, quiz_title,
+                           total_count, sent_count, failed_count, failed_question_ids,
+                           status, created_at, completed_at
+                    FROM publish_jobs WHERE actor_id = %s ORDER BY id DESC LIMIT 15
+                """, (actor["user_id"],))
+            rows = c.fetchall()
+
+    jobs = []
+    for r in rows:
+        f_ids = r[8] if isinstance(r[8], list) else (json.loads(r[8]) if r[8] else [])
+        total_c = r[5] or 0
+        sent_c = r[6] or 0
+        failed_c = r[7] or 0
+        rate = round((sent_c / total_c) * 100, 1) if total_c > 0 else 0.0
+        jobs.append({
+            "id": r[0],
+            "actor_name": r[1],
+            "actor_tag": r[2],
+            "target_label": r[3],
+            "quiz_title": r[4] or "",
+            "total_count": total_c,
+            "sent_count": sent_c,
+            "failed_count": failed_c,
+            "failed_question_ids": f_ids,
+            "success_rate": rate,
+            "status": r[9],
+            "created_at": r[10].isoformat() if r[10] else None,
+            "completed_at": r[11].isoformat() if r[11] else None,
+        })
+    return jobs
+
+
+@app.post("/api/publish_jobs/retry_failed")
+@app.post("/publish_jobs/retry_failed")
+async def retry_failed_questions(
+    req: RetryFailedReq,
+    background_tasks: BackgroundTasks,
+    x_telegram_init_data: str = Header(default=""),
+):
+    actor = verify_actor(x_telegram_init_data)
+    require_perm(actor, "can_publish", "لا تملك صلاحية إرسال الاختبارات.")
+
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute(
+                """SELECT id, actor_id, bank_id, target_type, comm_id, target_label,
+                          quiz_title, failed_question_ids, delay_sec, shuffle_options, open_period
+                   FROM publish_jobs WHERE id = %s""",
+                (req.job_id,),
+            )
+            row = c.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="سجل عملية الإرسال غير موجود.")
+            if actor["role"] != "owner" and int(row[1]) != int(actor["user_id"]):
+                raise HTTPException(status_code=403, detail="لا تملك صلاحية إعادة إرسال هذه العملية.")
+
+            failed_ids = row[7] if isinstance(row[7], list) else (json.loads(row[7]) if row[7] else [])
+            if not failed_ids:
+                raise HTTPException(status_code=400, detail="لا توجد أسئلة متعذرة لإعادة إرسالها في هذه العملية.")
+
+            target_type = row[3]
+            comm_id = row[4]
+            target_label = row[5]
+            topic_id = None
+            if target_type == "saved_comm" and comm_id:
+                c.execute("SELECT title, chat_id, topic_id FROM communities WHERE id = %s", (comm_id,))
+                comm_row = c.fetchone()
+                if not comm_row:
+                    raise HTTPException(status_code=404, detail="الوجهة المحفوظة غير موجودة.")
+                target_label = comm_row[0]
+                target_chat = comm_row[1].strip()
+                topic_id = comm_row[2]
+            else:
+                target_chat = actor["user_id"]
+                target_label = "المحادثة الخاصة"
+
+            c.execute("SELECT id FROM questions WHERE id = ANY(%s)", (failed_ids,))
+            existing_set = {x[0] for x in c.fetchall()}
+            valid_failed_ids = [qid for qid in failed_ids if qid in existing_set]
+            if not valid_failed_ids:
+                raise HTTPException(status_code=400, detail="الأسئلة المتعذرة لم تعد موجودة في قاعدة البيانات.")
+
+            c.execute(
+                """INSERT INTO publish_jobs
+                   (actor_id, actor_name, actor_tag, bank_id, target_type, comm_id, target_label,
+                    quiz_title, total_count, sent_count, failed_count, failed_question_ids,
+                    delay_sec, shuffle_options, open_period, status)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0, '[]'::jsonb, %s, %s, %s, 'queued')
+                   RETURNING id""",
+                (
+                    actor["user_id"],
+                    actor["name"],
+                    actor["tag"],
+                    row[2],
+                    target_type,
+                    comm_id,
+                    target_label,
+                    row[6] or "",
+                    len(valid_failed_ids),
+                    row[8] or 0.0,
+                    bool(row[9]),
+                    row[10],
+                ),
+            )
+            new_job_id = c.fetchone()[0]
+        conn.commit()
+
+    background_tasks.add_task(
+        execute_publish_job,
+        new_job_id,
+        valid_failed_ids,
+        target_chat,
+        target_label,
+        topic_id,
+        row[8] or 0.0,
+        bool(row[9]),
+        row[10],
+        row[6] or "",
+        actor,
+        True,
+    )
+    return {
+        "status": "queued",
+        "job_id": new_job_id,
+        "retried_count": len(valid_failed_ids),
         "target_label": target_label,
     }
 
@@ -1269,153 +1577,33 @@ async def get_logs(x_telegram_init_data: str = Header(default="")):
     with PooledConn() as conn:
         with conn.cursor() as c:
             if actor["role"] == "owner" or actor["can_manage_admins"]:
-                c.execute(
-                    """SELECT id, actor_id, actor_name, actor_role, actor_tag, action_type, description, snapshot_data, undone, created_at
-                       FROM audit_logs ORDER BY id DESC LIMIT 120"""
-                )
+                c.execute("""
+                    SELECT id, actor_name, actor_role, actor_tag, action_type, description, payload, undone, created_at
+                    FROM audit_logs ORDER BY id DESC LIMIT 120
+                """)
             else:
-                c.execute(
-                    """SELECT id, actor_id, actor_name, actor_role, actor_tag, action_type, description, snapshot_data, undone, created_at
-                       FROM audit_logs WHERE actor_id = %s ORDER BY id DESC LIMIT 80""",
-                    (actor["user_id"],),
-                )
+                c.execute("""
+                    SELECT id, actor_name, actor_role, actor_tag, action_type, description, payload, undone, created_at
+                    FROM audit_logs WHERE actor_id = %s ORDER BY id DESC LIMIT 80
+                """, (actor["user_id"],))
             rows = c.fetchall()
 
-    result = []
+    items = []
     for r in rows:
-        snap = r[7]
-        if isinstance(snap, str):
-            try:
-                snap = json.loads(snap)
-            except Exception:
-                snap = None
-        can_undo = bool(snap) and not bool(r[8]) and (
-            actor["role"] == "owner" or (r[1] is not None and int(r[1]) == int(actor["user_id"]))
-        )
-        result.append({
+        pl = r[6] if isinstance(r[6], dict) else (json.loads(r[6]) if r[6] else None)
+        can_undo = bool(pl and pl.get("undo_kind") == "restore_bank" and not r[7])
+        items.append({
             "id": r[0],
-            "actor_name": r[2],
-            "actor_role": r[3],
-            "actor_tag": r[4] or ("المالك" if r[3] == "owner" else "مشرف"),
-            "action_type": r[5],
-            "description": r[6],
+            "actor_name": r[1],
+            "actor_role": r[2],
+            "actor_tag": r[3] or ("المالك" if r[2] == "owner" else "مشرف"),
+            "action_type": r[4],
+            "description": r[5],
             "can_undo": can_undo,
-            "undone": bool(r[8]),
-            "created_at": r[9].isoformat() if r[9] else None,
+            "undone": bool(r[7]),
+            "created_at": r[8].isoformat() if r[8] else None,
         })
-    return result
-
-
-@app.post("/api/logs/{log_id}/undo")
-@app.post("/logs/{log_id}/undo")
-async def undo_log_action(log_id: int, x_telegram_init_data: str = Header(default="")):
-    actor = verify_actor(x_telegram_init_data)
-    cleanup_old_logs()
-
-    with PooledConn() as conn:
-        with conn.cursor() as c:
-            c.execute(
-                """SELECT id, actor_id, action_type, description, snapshot_data, undone
-                   FROM audit_logs WHERE id = %s""",
-                (log_id,),
-            )
-            row = c.fetchone()
-            if not row:
-                raise HTTPException(status_code=404, detail="السجل غير موجود أو انتهت صلاحيته.")
-            if bool(row[5]):
-                raise HTTPException(status_code=400, detail="تم التراجع عن هذه العملية مسبقاً.")
-
-            if actor["role"] != "owner" and (row[1] is None or int(row[1]) != int(actor["user_id"])):
-                raise HTTPException(status_code=403, detail="غير مسموح بالتراجع عن عملية قام بها مستخدم آخر.")
-
-            snap = row[4]
-            if isinstance(snap, str):
-                snap = json.loads(snap)
-            if not isinstance(snap, dict) or not snap.get("entity"):
-                raise HTTPException(status_code=400, detail="هذه العملية لا تدعم التراجع.")
-
-            entity = snap.get("entity")
-            restored_msg = ""
-
-            if entity == "bank":
-                bank_name = snap.get("bank_name")
-                c.execute("SELECT id FROM banks WHERE name = %s", (bank_name,))
-                existing = c.fetchone()
-                if existing:
-                    target_bank_id = existing[0]
-                    restored_name = f"{bank_name} (مستعاد)"
-                    c.execute(
-                        "INSERT INTO banks (name, owner_id, owner_name) VALUES (%s, %s, %s) RETURNING id",
-                        (restored_name, snap.get("owner_id") or actor["user_id"], snap.get("owner_name") or actor["name"]),
-                    )
-                    target_bank_id = c.fetchone()[0]
-                else:
-                    restored_name = bank_name
-                    c.execute(
-                        "INSERT INTO banks (name, owner_id, owner_name) VALUES (%s, %s, %s) RETURNING id",
-                        (restored_name, snap.get("owner_id") or actor["user_id"], snap.get("owner_name") or actor["name"]),
-                    )
-                    target_bank_id = c.fetchone()[0]
-
-                q_list = snap.get("questions") or []
-                for q in q_list:
-                    c.execute(
-                        """INSERT INTO questions (bank_id, question, opt1, opt2, opt3, opt4, correct_idx, explanation)
-                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                        (
-                            target_bank_id,
-                            q["question"],
-                            q["opt1"],
-                            q["opt2"],
-                            q["opt3"],
-                            q["opt4"],
-                            q["correct_idx"],
-                            q.get("explanation", ""),
-                        ),
-                    )
-                restored_msg = f"تراجع عن حذف البنك «{restored_name}» واستعاد {len(q_list)} سؤالاً."
-
-            elif entity == "question":
-                target_bank_id = snap.get("bank_id")
-                c.execute("SELECT id, name FROM banks WHERE id = %s", (target_bank_id,))
-                b_row = c.fetchone()
-                if not b_row:
-                    raise HTTPException(status_code=400, detail="البنك الأصلي للسؤال لم يعد موجوداً.")
-                c.execute(
-                    """INSERT INTO questions (bank_id, question, opt1, opt2, opt3, opt4, correct_idx, explanation)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                    (
-                        target_bank_id,
-                        snap["question"],
-                        snap["opt1"],
-                        snap["opt2"],
-                        snap["opt3"],
-                        snap["opt4"],
-                        snap["correct_idx"],
-                        snap.get("explanation", ""),
-                    ),
-                )
-                restored_msg = f"تراجع عن حذف سؤال من بنك «{b_row[1]}»."
-
-            elif entity == "community":
-                c.execute(
-                    "INSERT INTO communities (title, chat_id, topic_id) VALUES (%s, %s, %s)",
-                    (snap["title"], snap["chat_id"], snap.get("topic_id")),
-                )
-                restored_msg = f"تراجع عن حذف الوجهة «{snap['title']}»."
-
-            else:
-                raise HTTPException(status_code=400, detail="نوع العملية غير مدعوم للتراجع.")
-
-            c.execute("UPDATE audit_logs SET undone = TRUE WHERE id = %s", (log_id,))
-            c.execute(
-                """INSERT INTO audit_logs (actor_id, actor_name, actor_role, actor_tag, action_type, description, snapshot_data, undone)
-                   VALUES (%s, %s, %s, %s, 'undo_action', %s, NULL, FALSE)""",
-                (actor["user_id"], actor["name"], actor["role"], actor["tag"], restored_msg),
-            )
-        conn.commit()
-
-    return {"status": "ok", "message": restored_msg}
+    return items
 
 
 @app.delete("/api/logs")
