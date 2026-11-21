@@ -30,9 +30,15 @@ def _is_arabic_dominant(text: str) -> bool:
 
 def _clean_question_text(raw: str) -> str:
     txt = str(raw or "").strip()
-    # إزالة أي بادئة Q1. أو Q.1 أو رقم مكرر في البداية
-    txt = re.sub(r"^\s*Q\.?\s*\d+\s*[\.\:\-–—]?\s*", "", txt, flags=re.IGNORECASE)
-    # إزالة النقاط المتكررة المزعجة في النهاية مثل .... أو ….
+    # إزالة أي بادئة رقمية مكررة في بداية السؤال مثل:
+    # 453.this is question / 453. this / 453) / 453 - / Q1. / Q.1 / #453
+    txt = re.sub(
+        r"^\s*(?:Q\.?\s*|#)?\d+\s*(?:[\.\)\:\-–—]+|\s+(?=[\u0600-\u06FFA-Za-z]))\s*",
+        "",
+        txt,
+        flags=re.IGNORECASE,
+    )
+    # إزالة النقاط المتكررة في النهاية مثل .... أو ….
     txt = re.sub(r"[\.…]{2,}\s*$", "", txt).strip()
     return txt
 
@@ -149,7 +155,6 @@ def build_bank_pdf_bytes(
 ) -> bytes:
     cfg = settings or {}
 
-    # ألوان مريحة للعين وواضحة
     col_page_bg = _hex_to_rgb(cfg.get("col_page_bg"), (0.996, 0.992, 0.984))
     col_card_bg = _hex_to_rgb(cfg.get("col_card_bg"), (0.965, 0.978, 0.992))
     col_card_border = _hex_to_rgb(cfg.get("col_card_border"), (0.855, 0.894, 0.941))
@@ -163,7 +168,6 @@ def build_bank_pdf_bytes(
     opt_style = str(cfg.get("opt_style") or "A")
     font_style = str(cfg.get("font_style") or "soft_rounded")
 
-    # حجم خط مريح للعين وللأطفال مع تباعد سطور واضح
     raw_body_font = float(cfg.get("body_font") or 13.0)
     body_size = max(10.0, min(17.5, raw_body_font * 0.92))
     opt_size = max(9.5, body_size - 0.3)
@@ -235,7 +239,6 @@ def build_bank_pdf_bytes(
         c_idx = int(q.get("correct_idx", 0) or 0)
         expl_raw = str(q.get("explanation", "") or "").strip()
 
-        # نص السؤال يبدأ برقم السؤال مباشرة بدون Q.1 ولا نقط زائدة
         q_full_str = f"{idx}. {q_raw}"
         q_lines = _wrap_text(q_full_str, font_bold, body_size, inner_w)
         q_block_h = max(1, len(q_lines)) * line_height
@@ -259,7 +262,6 @@ def build_bank_pdf_bytes(
 
         card_h = card_pad_y + q_block_h + gap_q_opts + opts_total_h + expl_block_h + card_pad_y
 
-        # منع تقطيع السؤال بين صفحتين
         if cur_y + card_h > (page_h - margin_bottom) and cur_y > margin_top + 10.0:
             page, cur_y = _new_page(is_first=False)
 
