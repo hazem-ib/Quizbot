@@ -16,7 +16,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Requ
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Poll, MenuButtonWebApp, Bot
-from telegram.error import RetryAfter, TelegramError, TimedOut
+from telegram.error import RetryAfter, TelegramError
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "9268644584:AAE8woNBoXzueYqpsT4x69efYcDgP1mPP9Y").strip()
@@ -1111,6 +1111,24 @@ def _sanitize_poll_options(o1: Any, o2: Any, o3: Any, o4: Any) -> List[str]:
     return cleaned[:4]
 
 
+async def _send_finish_message(
+    parsed_chat: Any,
+    active_topic_id: Optional[int],
+    text: str,
+):
+    try:
+        async with Bot(token=BOT_TOKEN) as bot:
+            kwargs: Dict[str, Any] = {
+                "chat_id": parsed_chat,
+                "text": text,
+            }
+            if active_topic_id:
+                kwargs["message_thread_id"] = active_topic_id
+            await bot.send_message(**kwargs)
+    except Exception:
+        pass
+
+
 @app.post("/api/publish_batch")
 @app.post("/publish_batch")
 async def publish_batch(
@@ -1129,9 +1147,11 @@ async def publish_batch(
 
     with PooledConn() as conn:
         with conn.cursor() as c:
-            c.execute("SELECT id, question, opt1, opt2, opt3, opt4, correct_idx, explanation FROM questions WHERE id = ANY(%s)", (q_ids,))
-            q_rows = c.fetchall()
-            q_map = {r[0]: r for r in q_rows}
+            c.execute(
+                "SELECT id, question, opt1, opt2, opt3, opt4, correct_idx, explanation FROM questions WHERE id = ANY(%s)",
+                (q_ids,),
+            )
+            q_map = {r[0]: r for r in c.fetchall()}
 
             if req.target_type == "saved_comm":
                 if not req.comm_id:
@@ -1160,6 +1180,7 @@ async def publish_batch(
     failed_count = 0
     failed_ids: List[int] = []
     last_err = ""
+    stopped_by_user = False
     active_topic_id: Optional[int] = int(topic_id) if topic_id else None
 
     with PooledConn() as conn:
@@ -1215,6 +1236,14 @@ async def publish_batch(
                     pass
 
     for idx, row in enumerate(ordered_rows):
+        with PooledConn() as conn:
+            with conn.cursor() as c:
+                c.execute("SELECT status FROM publish_jobs WHERE id = %s", (job_id,))
+                st_row = c.fetchone()
+        if not st_row or st_row[0] in ("cancelled", "stopped"):
+            stopped_by_user = True
+            break
+
         qid, q_text, o1, o2, o3, o4, c_idx, expl = row
         opts = _sanitize_poll_options(o1, o2, o3, o4)
         current_correct = int(c_idx or 0)
@@ -1227,9 +1256,7 @@ async def publish_batch(
             opts = [x[1] for x in indexed]
             current_correct = [i for i, x in enumerate(indexed) if x[0] == current_correct][0]
 
-        q_str = str(q_text or "").strip()[:290]
-        if not q_str:
-            q_str = "سؤال"
+        q_str = str(q_text or "").strip()[:290] or "سؤال"
 
         delivered = False
         attempts = 0
@@ -1272,19 +1299,26 @@ async def publish_batch(
                     break
             except Exception as e:
                 last_err = str(e)
-                if "timed out" in last_err.lower() or "timeout" in last_err.lower():
-                    await asyncio.sleep(1.5)
-                else:
-                    break
+                break
 
         if not delivered:
             failed_count += 1
             failed_ids.append(qid)
 
+        with PooledConn() as conn:
+            with conn.cursor() as c:
+                c.execute(
+                    """UPDATE publish_jobs
+                       SET sent_count = %s, failed_count = %s, failed_question_ids = %s::jsonb, last_error = %s
+                       WHERE id = %s""",
+                    (sent_count, failed_count, json.dumps(failed_ids), last_err[:250], job_id),
+                )
+            conn.commit()
+
         if idx < total_requested - 1 and req.delay_sec and req.delay_sec > 0:
             await asyncio.sleep(req.delay_sec)
 
-    final_status = "completed" if failed_count == 0 else ("partial_failed" if sent_count > 0 else "failed")
+    final_status = "cancelled" if stopped_by_user else ("completed" if failed_count == 0 else ("partial_failed" if sent_count > 0 else "failed"))
 
     with PooledConn() as conn:
         with conn.cursor() as c:
@@ -1297,12 +1331,13 @@ async def publish_batch(
             )
         conn.commit()
 
-    if sent_count > 0:
-        write_audit_log(
-            actor,
-            "publish_batch",
-            f"أرسل {sent_count} من أصل {total_requested} سؤالاً إلى «{target_label}».",
-        )
+    finish_msg = (
+        f"تم إيقاف الإرسال ({sent_count}/{total_requested}) إلى {target_label}."
+        if stopped_by_user
+        else f"تمت عملية الإرسال بنجاح ({sent_count}/{total_requested}) إلى {target_label}."
+    )
+    await _send_finish_message(parsed_chat, active_topic_id, finish_msg)
+    write_audit_log(actor, "publish_batch", finish_msg)
 
     return {
         "status": final_status,
@@ -1400,7 +1435,25 @@ async def get_single_publish_job(job_id: int, x_telegram_init_data: str = Header
 @app.post("/publish_jobs/control")
 async def control_publish_job(req: JobControlReq, x_telegram_init_data: str = Header(default="")):
     verify_actor(x_telegram_init_data)
-    return {"status": "ok", "job_id": req.job_id, "job_status": "completed"}
+    action = (req.action or "").strip().lower()
+    if action not in ("stop", "cancel"):
+        raise HTTPException(status_code=400, detail="المتاح هو إيقاف العملية فقط.")
+
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute("SELECT id, status FROM publish_jobs WHERE id = %s", (req.job_id,))
+            row = c.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="العملية غير موجودة.")
+            if row[1] in ("completed", "partial_failed", "failed", "cancelled"):
+                return {"status": "ok", "job_id": req.job_id, "job_status": row[1]}
+            c.execute(
+                "UPDATE publish_jobs SET status = 'cancelled', completed_at = NOW() WHERE id = %s",
+                (req.job_id,),
+            )
+        conn.commit()
+
+    return {"status": "ok", "job_id": req.job_id, "job_status": "cancelled"}
 
 
 @app.get("/api/admins")
