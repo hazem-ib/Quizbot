@@ -14,12 +14,13 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Requ
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Poll, MenuButtonWebApp
+from telegram.error import RetryAfter
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "9268644584:AAE8woNBoXzueYqpsT4x69efYcDgP1mPP9Y")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
-app = FastAPI(title="Telegram Quiz Mini App v3.2")
+app = FastAPI(title="Telegram Quiz Mini App v3.3")
 
 def get_conn():
     if not DATABASE_URL:
@@ -141,13 +142,11 @@ class CommunityCreateReq(BaseModel):
     chat_id: str
     topic_id: Optional[int] = None
 
-class PublishReq(BaseModel):
-    bank_id: int
+class SinglePublishReq(BaseModel):
+    question_id: int
     target_type: str
     chat_id: Optional[str] = None
     topic_id: Optional[int] = None
-    delay_sec: float = 0.0
-    shuffle_questions: bool = False
     shuffle_options: bool = False
     open_period: Optional[int] = None
 
@@ -219,7 +218,7 @@ async def setup_webhook(request: Request):
             menu_button=MenuButtonWebApp(text="📱 فتح التطبيق", web_app=WebAppInfo(url=base_url))
         )
     return {
-        "status": "Webhook & Menu Button configured successfully! (v3.2)",
+        "status": "Webhook & Menu Button configured successfully! (v3.3)",
         "app_url": base_url,
         "webhook_url": webhook_url
     }
@@ -305,19 +304,16 @@ def parse_correct_index(ans_raw_val, opts: list) -> Optional[int]:
     if not s or s.lower() == 'nan':
         return None
 
-    # 1. المطابقة المباشرة مع نص الإجابة بالضبط
     s_norm = " ".join(s.split()).lower()
     for i, opt in enumerate(opts):
         opt_norm = " ".join(str(opt).split()).lower()
         if s_norm == opt_norm and opt_norm != "-":
             return i
 
-    # 2. المطابقة مع الأرقام (1, 2, 3, 4)
     num_map = {'1': 0, '2': 1, '3': 2, '4': 3, '1.0': 0, '2.0': 1, '3.0': 2, '4.0': 3}
     if s in num_map:
         return num_map[s]
 
-    # 3. المطابقة مع الحروف (a, b, c, d / A, B, C, D / أ, ب, ج, د)
     s_clean = s.upper().rstrip('.').rstrip(')').strip()
     letter_map = {'A': 0, 'B': 1, 'C': 2, 'D': 3, 'أ': 0, 'ا': 0, 'ب': 1, 'ج': 2, 'د': 3}
     if s_clean in letter_map:
@@ -511,9 +507,10 @@ async def test_community(req: CommunityCreateReq, x_telegram_init_data: str = He
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"فشل الاتصال: تأكد أن البوت مشرف (Admin) ولديه صلاحية إرسال الرسائل. ({e})")
 
-@app.post("/api/publish")
-@app.post("/publish")
-async def publish_quiz(req: PublishReq, x_telegram_init_data: str = Header(default="")):
+# إرسال سؤال واحد في كل طلب لتجاوز مهلة Vercel ومعالجة قيود تيليجرام
+@app.post("/api/publish_single")
+@app.post("/publish_single")
+async def publish_single_question(req: SinglePublishReq, x_telegram_init_data: str = Header(default="")):
     user = verify_telegram_init_data(x_telegram_init_data)
     target_chat = user.get("id") if req.target_type == "private" else req.chat_id
     if not target_chat:
@@ -521,48 +518,46 @@ async def publish_quiz(req: PublishReq, x_telegram_init_data: str = Header(defau
 
     conn = get_conn()
     c = conn.cursor()
-    c.execute("SELECT question, opt1, opt2, opt3, opt4, correct_idx, explanation FROM questions WHERE bank_id = %s ORDER BY id ASC", (req.bank_id,))
-    questions = c.fetchall()
+    c.execute("SELECT question, opt1, opt2, opt3, opt4, correct_idx, explanation FROM questions WHERE id = %s", (req.question_id,))
+    row = c.fetchone()
     c.close()
     conn.close()
 
-    if not questions:
-        raise HTTPException(status_code=400, detail="المجموعة فارغة من الأسئلة")
+    if not row:
+        return {"status": "skipped"}
 
-    if req.shuffle_questions:
-        random.shuffle(questions)
+    q_text, o1, o2, o3, o4, c_idx, expl = row
+    opts = [o1[:98], o2[:98], o3[:98], o4[:98]]
+    if req.shuffle_options:
+        indexed = list(enumerate(opts))
+        random.shuffle(indexed)
+        opts = [x[1] for x in indexed]
+        c_idx = [i for i, x in enumerate(indexed) if x[0] == c_idx][0]
+
+    kwargs = {
+        "chat_id": target_chat,
+        "question": q_text[:295],
+        "options": opts,
+        "type": Poll.QUIZ,
+        "correct_option_id": c_idx,
+        "is_anonymous": True
+    }
+    if expl:
+        kwargs["explanation"] = expl[:195]
+    if req.topic_id:
+        kwargs["message_thread_id"] = req.topic_id
+    if req.open_period and 5 <= req.open_period <= 600:
+        kwargs["open_period"] = req.open_period
 
     bot_app = build_bot_app()
     async with bot_app:
-        for idx, (q_text, o1, o2, o3, o4, c_idx, expl) in enumerate(questions):
-            opts = [o1[:98], o2[:98], o3[:98], o4[:98]]
-            if req.shuffle_options:
-                indexed = list(enumerate(opts))
-                random.shuffle(indexed)
-                opts = [x[1] for x in indexed]
-                c_idx = [i for i, x in enumerate(indexed) if x[0] == c_idx][0]
-
-            kwargs = {
-                "chat_id": target_chat,
-                "question": q_text[:295],
-                "options": opts,
-                "type": Poll.QUIZ,
-                "correct_option_id": c_idx,
-                "is_anonymous": True
-            }
-            if expl:
-                kwargs["explanation"] = expl[:195]
-            if req.topic_id:
-                kwargs["message_thread_id"] = req.topic_id
-            if req.open_period and 5 <= req.open_period <= 600:
-                kwargs["open_period"] = req.open_period
-
+        try:
             await bot_app.bot.send_poll(**kwargs)
-            wait_time = 0.35 if req.delay_sec <= 0 else req.delay_sec
-            if idx < len(questions) - 1:
-                await asyncio.sleep(wait_time)
-
-    return {"status": "completed", "count": len(questions)}
+            return {"status": "sent"}
+        except RetryAfter as e:
+            return {"status": "retry_after", "wait_seconds": int(e.retry_after) + 1}
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"فشل إرسال السؤال: {str(e)}")
 
 @app.get("/api/admins")
 @app.get("/admins")
