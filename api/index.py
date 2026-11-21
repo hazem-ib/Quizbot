@@ -26,7 +26,7 @@ def get_conn():
     if not DATABASE_URL:
         raise HTTPException(status_code=500, detail="متغير DATABASE_URL غير مضاف في إعدادات البيئة")
     clean_url = DATABASE_URL.replace("&channel_binding=require", "").replace("?channel_binding=require", "")
-    return psycopg2.connect(clean_url, sslmode="require")
+    return psycopg2.connect(clean_url, sslmode="require", connect_timeout=10)
 
 def init_db():
     conn = get_conn()
@@ -539,55 +539,66 @@ async def bg_send_all_questions(
     conn.close()
 
     sent = 0
+    is_group_or_channel = str(target_chat).startswith("-") or str(target_chat).startswith("@")
     bot_app = build_bot_app()
     async with bot_app:
-        for idx, qid in enumerate(q_ids):
-            row = q_map.get(qid)
-            if not row:
-                continue
+        await bot_app.bot.initialize()
+        try:
+            for idx, qid in enumerate(q_ids):
+                row = q_map.get(qid)
+                if not row:
+                    continue
 
-            _, q_text, o1, o2, o3, o4, c_idx, expl = row
-            opts = [o1[:98], o2[:98], o3[:98], o4[:98]]
-            if shuffle_options:
-                indexed = list(enumerate(opts))
-                random.shuffle(indexed)
-                opts = [x[1] for x in indexed]
-                c_idx = [i for i, x in enumerate(indexed) if x[0] == c_idx][0]
+                _, q_text, o1, o2, o3, o4, c_idx, expl = row
+                opts = [o1[:98], o2[:98], o3[:98], o4[:98]]
+                if shuffle_options:
+                    indexed = list(enumerate(opts))
+                    random.shuffle(indexed)
+                    opts = [x[1] for x in indexed]
+                    c_idx = [i for i, x in enumerate(indexed) if x[0] == c_idx][0]
 
-            kwargs = {
-                "chat_id": target_chat,
-                "question": q_text[:295],
-                "options": opts,
-                "type": Poll.QUIZ,
-                "correct_option_id": c_idx,
-                "is_anonymous": True
-            }
-            if expl:
-                kwargs["explanation"] = expl[:195]
-            if topic_id:
-                kwargs["message_thread_id"] = topic_id
-            if open_period and 5 <= open_period <= 600:
-                kwargs["open_period"] = open_period
+                kwargs = {
+                    "chat_id": target_chat,
+                    "question": q_text[:295],
+                    "options": opts,
+                    "type": Poll.QUIZ,
+                    "correct_option_id": c_idx,
+                    "is_anonymous": True
+                }
+                if expl:
+                    kwargs["explanation"] = expl[:195]
+                if topic_id:
+                    kwargs["message_thread_id"] = topic_id
+                if open_period and 5 <= open_period <= 600:
+                    kwargs["open_period"] = open_period
 
-            while True:
-                try:
-                    await bot_app.bot.send_poll(**kwargs)
-                    sent += 1
-                    break
-                except RetryAfter as e:
-                    await asyncio.sleep(int(e.retry_after) + 2)
-                except Exception as e:
-                    err_msg = str(e)
-                    if "retry after" in err_msg.lower() or "too many requests" in err_msg.lower():
-                        m = re.search(r'(\d+)', err_msg)
-                        await asyncio.sleep(int(m.group(1)) + 2 if m else 35)
-                    else:
+                while True:
+                    try:
+                        await bot_app.bot.send_poll(**kwargs)
+                        sent += 1
                         break
+                    except RetryAfter as e:
+                        await asyncio.sleep(int(e.retry_after) + 1)
+                    except Exception as e:
+                        err_msg = str(e)
+                        if "retry after" in err_msg.lower() or "too many requests" in err_msg.lower():
+                            m = re.search(r'(\d+)', err_msg)
+                            await asyncio.sleep(int(m.group(1)) + 1 if m else 15)
+                        else:
+                            break
 
-            if idx < len(q_ids) - 1:
-                await asyncio.sleep(delay_sec if delay_sec > 0 else 0.15)
+                if idx < len(q_ids) - 1:
+                    if delay_sec > 0:
+                        await asyncio.sleep(delay_sec)
+                    elif is_group_or_channel:
+                        await asyncio.sleep(0.05)
+                    else:
+                        await asyncio.sleep(0.02)
+        finally:
+            await bot_app.bot.shutdown()
 
         try:
+            await bot_app.bot.initialize()
             await bot_app.bot.send_message(
                 chat_id=admin_id,
                 text=f"✅ اكتمل إرسال الاختبار في الخلفية! تم إرسال **{sent}** من **{len(q_ids)}** سؤال.",
@@ -595,6 +606,11 @@ async def bg_send_all_questions(
             )
         except Exception:
             pass
+        finally:
+            try:
+                await bot_app.bot.shutdown()
+            except Exception:
+                pass
 
 @app.post("/api/publish_batch")
 @app.post("/publish_batch")
