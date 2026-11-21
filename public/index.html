@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>منظومة إدارة الاختبارات</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     :root {
       --bg: var(--tg-theme-bg-color, #090e1a);
@@ -97,6 +98,9 @@
       border: 1px solid rgba(255, 255, 255, 0.12); background: var(--bg);
       color: var(--text); margin-bottom: 11px; font-size: 0.88rem; outline: none;
     }
+    input[type="color"] {
+      width: 44px; height: 32px; padding: 2px; margin-bottom: 0; border-radius: 8px; cursor: pointer;
+    }
     input:focus, select:focus, textarea:focus { border-color: var(--btn); }
     label { display: block; font-size: 0.8rem; color: var(--hint); margin-bottom: 5px; font-weight: 500; }
 
@@ -127,18 +131,31 @@
 
     .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.82); backdrop-filter: blur(4px); z-index: 200; align-items: center; justify-content: center; padding: 14px; }
     .modal.open { display: flex; }
-    .modal-content { background: var(--sec-bg); border: 1px solid var(--card-border); border-radius: var(--radius); padding: 18px; width: 100%; max-width: 540px; max-height: 85vh; overflow-y: auto; }
+    .modal-content { background: var(--sec-bg); border: 1px solid var(--card-border); border-radius: var(--radius); padding: 18px; width: 100%; max-width: 640px; max-height: 88vh; overflow-y: auto; }
 
     .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 11px; font-size: 0.85rem; }
     .switch-row input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--btn); flex-shrink: 0; }
     .hint-box { background: rgba(59,130,246,0.09); border-right: 3px solid var(--btn); padding: 10px 12px; border-radius: 10px; font-size: 0.8rem; margin-bottom: 13px; color: var(--text); line-height: 1.55; }
     .warn-box { background: rgba(245,158,11,0.11); border-right: 3px solid var(--warn); padding: 11px 13px; border-radius: 12px; font-size: 0.8rem; margin-top: 12px; color: #fde68a; line-height: 1.6; }
 
-    .select-list { max-height: 240px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 8px; background: var(--bg); margin-bottom: 12px; }
+    .select-list { max-height: 220px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 8px; background: var(--bg); margin-bottom: 12px; }
     .select-q-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.83rem; }
     .select-q-item:last-child { border-bottom: none; }
     .select-q-item input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0; }
     .select-q-item.excluded { opacity: 0.4; text-decoration: line-through; }
+
+    .color-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .color-chip { display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 7px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); font-size: 0.8rem; }
+
+    /* حاوية التوليد المحلي المخفية */
+    #localPdfRenderStage {
+      position: fixed;
+      left: -10000px;
+      top: 0;
+      width: 794px;
+      pointer-events: none;
+      z-index: -1;
+    }
 
     .progress-box { background: var(--bg); border-radius: 12px; padding: 13px; margin-top: 13px; border: 1px solid rgba(59,130,246,0.35); display: none; }
     .progress-bar-bg { width: 100%; height: 9px; background: rgba(255,255,255,0.08); border-radius: 99px; overflow: hidden; margin: 9px 0 3px; }
@@ -264,7 +281,7 @@
             <svg class="ico ico-sm"><use href="#i-upload"/></svg> دمج CSV
           </button>
           <button class="btn btn-sm btn-outline" style="flex:1; min-width:130px;" onclick="openPdfStudioModal(currentBankId, currentBankName, questionsCache)">
-            <svg class="ico ico-sm"><use href="#i-download"/></svg> تصدير PDF
+            <svg class="ico ico-sm"><use href="#i-download"/></svg> تصدير PDF (جهازك)
           </button>
           <button class="btn btn-sm btn-outline" style="flex:1; min-width:130px;" onclick="openExportCsvModal(currentBankId, currentBankName, questionsCache)">
             <svg class="ico ico-sm"><use href="#i-download"/></svg> تحميل CSV للخاص
@@ -505,10 +522,11 @@
       </div>
     </div>
 
+    <!-- استوديو تصدير PDF المحلي على جهازك -->
     <div id="pdfStudioModal" class="modal">
-      <div class="modal-content" style="max-width:620px;">
-        <h3><svg class="ico"><use href="#i-download"/></svg> استوديو تصدير PDF (نسختان: محلولة + غير محلولة)</h3>
-        <p id="pdfStudioSubtitle" style="font-size:0.82rem; color:var(--hint); margin-top:0;"></p>
+      <div class="modal-content" style="max-width:650px;">
+        <h3><svg class="ico"><use href="#i-download"/></svg> استوديو PDF (توليد على جهازك — نسختان)</h3>
+        <p id="pdfStudioSubtitle" style="font-size:0.8rem; color:var(--hint); margin-top:0;"></p>
 
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
           <label style="margin:0;">تحديد الأسئلة وترتيبها (<span id="pdfSelCount">0</span>):</label>
@@ -517,78 +535,104 @@
             <button type="button" class="btn btn-sm btn-outline" onclick="setAllPdfQuestions(false)">إلغاء التحديد</button>
           </div>
         </div>
-        <div id="pdfQuestionsOrderList" class="select-list" style="max-height:200px;"></div>
+        <div id="pdfQuestionsOrderList" class="select-list" style="max-height:185px;"></div>
 
+        <!-- الألوان بالكامل -->
         <div class="card" style="padding:12px; margin-bottom:10px;">
-          <strong style="display:block; margin-bottom:8px; font-size:0.9rem;">محرر العناوين في أي موضع (Custom Headings Editor)</strong>
-          <label>نص العنوان الرئيسي:</label>
-          <input type="text" id="pdfHeadingText" placeholder="مثال: Mid-Term Exam — Pharmacology" />
-          <label>عنوان فرعي / ملاحظة (اختياري):</label>
-          <input type="text" id="pdfHeadingSub" placeholder="مثال: Answer Key Highlighted in Red Underline" />
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <strong style="font-size:0.88rem;">تخصيص الألوان (Colors)</strong>
+            <button type="button" class="btn btn-sm btn-outline" onclick="resetPdfColorsToCardStyle()">ألوان البطاقة الافتراضية</button>
+          </div>
+          <div class="color-grid">
+            <div class="color-chip">
+              <span>رقم السؤال (Q1.)</span>
+              <input type="color" id="pdfColQNum" value="#2b6cb0" onchange="savePdfPrefs()" />
+            </div>
+            <div class="color-chip">
+              <span>دائرة الخيار (A/B/C/D)</span>
+              <input type="color" id="pdfColBadge" value="#ebf4ff" onchange="savePdfPrefs()" />
+            </div>
+            <div class="color-chip">
+              <span>نص دوائر الخيارات</span>
+              <input type="color" id="pdfColBadgeText" value="#2b6cb0" onchange="savePdfPrefs()" />
+            </div>
+            <div class="color-chip">
+              <span>خلفية بطاقة السؤال</span>
+              <input type="color" id="pdfColCardBg" value="#f4f8fb" onchange="savePdfPrefs()" />
+            </div>
+            <div class="color-chip">
+              <span>إطار بطاقة السؤال</span>
+              <input type="color" id="pdfColCardBorder" value="#dbe6ef" onchange="savePdfPrefs()" />
+            </div>
+            <div class="color-chip">
+              <span>خلفية الصفحة</span>
+              <input type="color" id="pdfColPageBg" value="#ffffff" onchange="savePdfPrefs()" />
+            </div>
+            <div class="color-chip">
+              <span>نص السؤال والخيارات</span>
+              <input type="color" id="pdfColText" value="#1e293b" onchange="savePdfPrefs()" />
+            </div>
+            <div class="color-chip">
+              <span>الصح (نسخة محلولة)</span>
+              <input type="color" id="pdfColCorrect" value="#dc2626" onchange="savePdfPrefs()" />
+            </div>
+          </div>
+          <div class="switch-row" style="margin-top:8px; margin-bottom:0;">
+            <span>تسطير الإجابة الصحيحة (Underline) في النسخة المحلولة</span>
+            <input type="checkbox" id="pdfCorrectUnderline" checked onchange="savePdfPrefs()" />
+          </div>
+        </div>
+
+        <!-- محرر العناوين في أي موضع -->
+        <div class="card" style="padding:12px; margin-bottom:10px;">
+          <strong style="display:block; margin-bottom:8px; font-size:0.88rem;">محرر العناوين في أي موضع (Custom Headings)</strong>
+          <label>نص العنوان:</label>
+          <input type="text" id="pdfHeadingText" placeholder="مثال: PHYSIOLOGY — HOMEOSTASIS" />
+          <label>عنوان فرعي (اختياري):</label>
+          <input type="text" id="pdfHeadingSub" placeholder="مثال: Section 1 & 2 Revision Sheet" />
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
             <div>
               <label>موضع العنوان:</label>
               <select id="pdfHeadingPlacement">
                 <option value="top_first">أعلى الصفحة الأولى</option>
                 <option value="running_header">ترويسة متكررة أعلى الصفحات</option>
-                <option value="running_footer">تذييل متكرر أسفل الصفحات</option>
                 <option value="before_q_1">قبل السؤال رقم 1</option>
                 <option value="before_q_5">قبل السؤال رقم 5</option>
                 <option value="before_q_10">قبل السؤال رقم 10</option>
+                <option value="before_q_20">قبل السؤال رقم 20</option>
               </select>
             </div>
             <div>
               <label>المحاذاة وحجم الخط:</label>
               <div style="display:flex; gap:6px;">
                 <select id="pdfHeadingAlign" style="margin-bottom:0;">
-                  <option value="center">وسط</option>
                   <option value="right">يمين</option>
+                  <option value="center">وسط</option>
                   <option value="left">يسار</option>
                 </select>
-                <input type="number" id="pdfHeadingSize" value="17" min="11" max="32" style="margin-bottom:0; width:76px;" />
+                <input type="number" id="pdfHeadingSize" value="16" min="11" max="32" style="margin-bottom:0; width:74px;" />
               </div>
             </div>
           </div>
           <div style="display:flex; gap:10px; align-items:center; margin-top:8px; flex-wrap:wrap;">
             <label style="margin:0; display:flex; align-items:center; gap:5px;">
-              لون الخط <input type="color" id="pdfHeadingColor" value="#0f172a" style="width:36px; height:28px; padding:0; margin:0;" />
+              لون العنوان <input type="color" id="pdfHeadingColor" value="#1e3a8a" />
             </label>
             <label style="margin:0; display:flex; align-items:center; gap:5px;">
-              <input type="checkbox" id="pdfHeadingBorder" style="width:auto; margin:0;" /> إطار حول العنوان
+              <input type="checkbox" id="pdfHeadingBorder" style="width:auto; margin:0;" /> إطار للعنوان
             </label>
             <button type="button" class="btn btn-sm btn-outline" onclick="addCustomPdfHeading()">+ إضافة العنوان</button>
           </div>
           <div id="pdfHeadingsList" style="margin-top:8px;"></div>
         </div>
 
+        <!-- إعدادات المسافات والتنسيق -->
         <div class="card" style="padding:12px; margin-bottom:12px;">
-          <strong style="display:block; margin-bottom:8px; font-size:0.9rem;">إعدادات التخطيط والمسافات</strong>
+          <strong style="display:block; margin-bottom:8px; font-size:0.88rem;">المسافات والتخطيط</strong>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
             <div>
-              <label>نمط التصميم:</label>
-              <select id="pdfTheme">
-                <option value="academic">أكاديمي نظيف (Academic)</option>
-                <option value="modern">بطاقات عصرية (Modern Cards)</option>
-                <option value="exam">ورقة امتحان رسمية (Exam Sheet)</option>
-              </select>
-            </div>
-            <div>
-              <label>عدد الأعمدة:</label>
-              <select id="pdfColumns">
-                <option value="1">عمود واحد (1 Column)</option>
-                <option value="2">عمودان (2 Columns)</option>
-              </select>
-            </div>
-            <div>
-              <label>توزيع الخيارات:</label>
-              <select id="pdfOptLayout">
-                <option value="vertical">قائمة رأسية</option>
-                <option value="grid">شبكة (2x2)</option>
-              </select>
-            </div>
-            <div>
               <label>ترقيم الخيارات:</label>
-              <select id="pdfOptStyle">
+              <select id="pdfOptStyle" onchange="savePdfPrefs()">
                 <option value="A">A, B, C, D</option>
                 <option value="1">1, 2, 3, 4</option>
                 <option value="a">a, b, c, d</option>
@@ -596,51 +640,44 @@
               </select>
             </div>
             <div>
-              <label>حجم خط الأسئلة (px):</label>
-              <input type="number" id="pdfBodyFont" value="12.5" step="0.5" min="9.5" max="20" />
-            </div>
-            <div>
-              <label>هوامش الصفحة (mm):</label>
-              <input type="number" id="pdfMarginMm" value="14" min="8" max="28" />
+              <label>حجم خط السؤال والخيارات (px):</label>
+              <input type="number" id="pdfBodyFont" value="14" step="0.5" min="10" max="20" onchange="savePdfPrefs()" />
             </div>
             <div>
               <label>المسافة بين السؤال والخيارات (px):</label>
-              <input type="number" id="pdfGapQOpts" value="8" min="2" max="32" />
+              <input type="number" id="pdfGapQOpts" value="10" min="2" max="32" onchange="savePdfPrefs()" />
             </div>
             <div>
               <label>المسافة بين الخيارات (px):</label>
-              <input type="number" id="pdfGapOpts" value="5" min="1" max="24" />
+              <input type="number" id="pdfGapOpts" value="6" min="2" max="24" onchange="savePdfPrefs()" />
             </div>
             <div>
-              <label>المسافة بين الأسئلة (px):</label>
-              <input type="number" id="pdfGapQuestions" value="16" min="6" max="42" />
+              <label>المسافة بين بطاقات الأسئلة (px):</label>
+              <input type="number" id="pdfGapQuestions" value="14" min="4" max="40" onchange="savePdfPrefs()" />
             </div>
             <div>
               <label>بداية الترقيم من رقم:</label>
-              <input type="number" id="pdfStartNum" value="1" min="1" />
+              <input type="number" id="pdfStartNum" value="1" min="1" onchange="savePdfPrefs()" />
             </div>
           </div>
 
           <div class="switch-row">
-            <span>ترتيب الأسئلة عشوائياً قبل التصدير</span>
+            <span>ترتيب الأسئلة عشوائياً</span>
             <input type="checkbox" id="pdfShuffleQ" />
           </div>
           <div class="switch-row">
             <span>إظهار الشرح في النسخة المحلولة (إن وجد)</span>
-            <input type="checkbox" id="pdfShowExpl" checked />
-          </div>
-          <div class="switch-row">
-            <span>إظهار أرقام الصفحات</span>
-            <input type="checkbox" id="pdfShowPageNums" checked />
+            <input type="checkbox" id="pdfShowExpl" checked onchange="savePdfPrefs()" />
           </div>
         </div>
 
-        <div style="display:flex; gap:8px;">
-          <button class="btn btn-success" id="confirmPdfPairBtn" onclick="confirmExportPdfPair()">
-            <svg class="ico ico-sm"><use href="#i-send"/></svg> إرسال النسختين (محلولة + غير محلولة)
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-success" style="flex:1; min-width:200px;" id="confirmPdfPairBtn" onclick="generateBothPdfsLocally()">
+            <svg class="ico ico-sm"><use href="#i-download"/></svg> توليد وتحميل النسختين على جهازي
           </button>
           <button class="btn btn-outline" onclick="closeModal('pdfStudioModal')">إغلاق</button>
         </div>
+        <div id="localPdfStatus" style="font-size:0.8rem; color:#34d399; margin-top:8px; text-align:center;"></div>
       </div>
     </div>
 
@@ -738,6 +775,9 @@
     </div>
   </div>
 
+  <!-- مساحة مخفية لتوليد PDF محلياً على جهازك -->
+  <div id="localPdfRenderStage"></div>
+
   <script>
     const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
     if (tg) {
@@ -761,8 +801,11 @@
     let exportCandidateQuestions = [];
 
     let pdfStudioBankId = null;
+    let pdfStudioBankName = "";
     let pdfStudioItems = [];
     let pdfCustomHeadings = [];
+
+    const PDF_PREFS_KEY = "quiz_local_pdf_prefs_v1";
 
     function getQuestionOptions(q) {
       if (Array.isArray(q.options) && q.options.length >= 2) {
@@ -946,10 +989,76 @@
       syncPublishBanksSelect();
     }
 
+    /* ================= استوديو PDF المحلي على جهازك ================= */
+    function resetPdfColorsToCardStyle() {
+      document.getElementById("pdfColQNum").value = "#2b6cb0";
+      document.getElementById("pdfColBadge").value = "#e6f0fa";
+      document.getElementById("pdfColBadgeText").value = "#2563eb";
+      document.getElementById("pdfColCardBg").value = "#f5f8fb";
+      document.getElementById("pdfColCardBorder").value = "#dce6f0";
+      document.getElementById("pdfColPageBg").value = "#ffffff";
+      document.getElementById("pdfColText").value = "#1e293b";
+      document.getElementById("pdfColCorrect").value = "#dc2626";
+      document.getElementById("pdfCorrectUnderline").checked = true;
+      savePdfPrefs();
+    }
+
+    function savePdfPrefs() {
+      try {
+        const prefs = {
+          colQNum: document.getElementById("pdfColQNum").value,
+          colBadge: document.getElementById("pdfColBadge").value,
+          colBadgeText: document.getElementById("pdfColBadgeText").value,
+          colCardBg: document.getElementById("pdfColCardBg").value,
+          colCardBorder: document.getElementById("pdfColCardBorder").value,
+          colPageBg: document.getElementById("pdfColPageBg").value,
+          colText: document.getElementById("pdfColText").value,
+          colCorrect: document.getElementById("pdfColCorrect").value,
+          correctUnderline: document.getElementById("pdfCorrectUnderline").checked,
+          optStyle: document.getElementById("pdfOptStyle").value,
+          bodyFont: document.getElementById("pdfBodyFont").value,
+          gapQOpts: document.getElementById("pdfGapQOpts").value,
+          gapOpts: document.getElementById("pdfGapOpts").value,
+          gapQuestions: document.getElementById("pdfGapQuestions").value,
+          startNum: document.getElementById("pdfStartNum").value,
+          showExpl: document.getElementById("pdfShowExpl").checked
+        };
+        localStorage.setItem(PDF_PREFS_KEY, JSON.stringify(prefs));
+      } catch (_) {}
+    }
+
+    function loadPdfPrefs() {
+      try {
+        const raw = localStorage.getItem(PDF_PREFS_KEY);
+        if (!raw) return;
+        const p = JSON.parse(raw);
+        if (p.colQNum) document.getElementById("pdfColQNum").value = p.colQNum;
+        if (p.colBadge) document.getElementById("pdfColBadge").value = p.colBadge;
+        if (p.colBadgeText) document.getElementById("pdfColBadgeText").value = p.colBadgeText;
+        if (p.colCardBg) document.getElementById("pdfColCardBg").value = p.colCardBg;
+        if (p.colCardBorder) document.getElementById("pdfColCardBorder").value = p.colCardBorder;
+        if (p.colPageBg) document.getElementById("pdfColPageBg").value = p.colPageBg;
+        if (p.colText) document.getElementById("pdfColText").value = p.colText;
+        if (p.colCorrect) document.getElementById("pdfColCorrect").value = p.colCorrect;
+        if (typeof p.correctUnderline === "boolean") document.getElementById("pdfCorrectUnderline").checked = p.correctUnderline;
+        if (p.optStyle) document.getElementById("pdfOptStyle").value = p.optStyle;
+        if (p.bodyFont) document.getElementById("pdfBodyFont").value = p.bodyFont;
+        if (p.gapQOpts) document.getElementById("pdfGapQOpts").value = p.gapQOpts;
+        if (p.gapOpts) document.getElementById("pdfGapOpts").value = p.gapOpts;
+        if (p.gapQuestions) document.getElementById("pdfGapQuestions").value = p.gapQuestions;
+        if (p.startNum) document.getElementById("pdfStartNum").value = p.startNum;
+        if (typeof p.showExpl === "boolean") document.getElementById("pdfShowExpl").checked = p.showExpl;
+      } catch (_) {}
+    }
+
     async function openPdfStudioModal(bankId, bankName, preloadedQuestions = null) {
       pdfStudioBankId = bankId;
+      pdfStudioBankName = bankName;
       pdfCustomHeadings = [];
-      document.getElementById("pdfStudioSubtitle").innerText = `البنك: ${bankName} — سيتم إرسال النسخة المحلولة (إجابة حمراء + underline) والنسخة غير المحلولة إلى الخاص.`;
+      document.getElementById("localPdfStatus").innerText = "";
+      document.getElementById("pdfStudioSubtitle").innerText = `البنك: ${bankName} — التوليد يتم محلياً على جهازك (نسخة محلولة بالأحمر + underline ونسخة غير محلولة).`;
+
+      loadPdfPrefs();
 
       const rawList = (Array.isArray(preloadedQuestions) && bankId === currentBankId)
         ? preloadedQuestions
@@ -1016,8 +1125,8 @@
         subtitle: document.getElementById("pdfHeadingSub").value.trim(),
         placement: document.getElementById("pdfHeadingPlacement").value,
         align: document.getElementById("pdfHeadingAlign").value,
-        font_size: parseInt(document.getElementById("pdfHeadingSize").value) || 17,
-        color: document.getElementById("pdfHeadingColor").value || "#0f172a",
+        font_size: parseInt(document.getElementById("pdfHeadingSize").value) || 16,
+        color: document.getElementById("pdfHeadingColor").value || "#1e3a8a",
         bordered: document.getElementById("pdfHeadingBorder").checked
       });
       document.getElementById("pdfHeadingText").value = "";
@@ -1044,46 +1153,178 @@
       `).join("");
     }
 
-    async function confirmExportPdfPair() {
-      if (!pdfStudioBankId) return;
-      const selectedIds = pdfStudioItems.filter(x => x._checked).map(x => x.id);
-      if (!selectedIds.length) {
-        return alert("يرجى تحديد سؤال واحد على الأقل لتوليد ملفات PDF.");
-      }
-      const orderedIds = pdfStudioItems.map(x => x.id);
+    function escapeHtml(s) {
+      return String(s || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
 
-      const settings = {
-        theme: document.getElementById("pdfTheme").value,
-        columns: parseInt(document.getElementById("pdfColumns").value) || 1,
-        option_layout: document.getElementById("pdfOptLayout").value,
-        option_style: document.getElementById("pdfOptStyle").value,
-        body_font_size: parseFloat(document.getElementById("pdfBodyFont").value) || 12.5,
-        margin_mm: parseFloat(document.getElementById("pdfMarginMm").value) || 14,
-        gap_q_opts: parseFloat(document.getElementById("pdfGapQOpts").value) || 8,
-        gap_opts: parseFloat(document.getElementById("pdfGapOpts").value) || 5,
-        gap_questions: parseFloat(document.getElementById("pdfGapQuestions").value) || 16,
-        start_number: parseInt(document.getElementById("pdfStartNum").value) || 1,
-        show_explanations: document.getElementById("pdfShowExpl").checked,
-        show_page_numbers: document.getElementById("pdfShowPageNums").checked,
-        custom_headings: pdfCustomHeadings
+    function optionBadgeLabel(idx, style) {
+      const up = "ABCDEFGHIJ";
+      const lo = "abcdefghij";
+      const ar = ["أ", "ب", "ج", "د", "هـ", "و", "ز", "ح", "ط", "ي"];
+      if (style === "1") return String(idx + 1);
+      if (style === "a") return lo[idx] || String(idx + 1);
+      if (style === "ar") return ar[idx] || String(idx + 1);
+      return up[idx] || String(idx + 1);
+    }
+
+    function renderHeadingHtml(h) {
+      const dir = /[\u0600-\u06FF]/.test(h.text) ? "rtl" : "ltr";
+      const borderCss = h.bordered ? `border: 1.5px solid ${h.color}; padding: 8px 14px; border-radius: 10px;` : "padding: 4px 2px;";
+      const subHtml = h.subtitle
+        ? `<div style="font-size:${Math.max(10, h.font_size - 4)}px; font-weight:500; opacity:0.8; margin-top:3px;">${escapeHtml(h.subtitle)}</div>`
+        : "";
+      return `
+        <div dir="${dir}" style="text-align:${h.align}; color:${h.color}; font-size:${h.font_size}px; font-weight:700; margin-bottom:12px; line-height:1.45; ${borderCss} break-inside:avoid; page-break-inside:avoid;">
+          ${escapeHtml(h.text)}${subHtml}
+        </div>
+      `;
+    }
+
+    function buildCardSheetHtml(questionsList, solved, cfg) {
+      const topFirst = pdfCustomHeadings.filter(h => h.placement === "top_first").map(renderHeadingHtml).join("");
+      const runningHeader = pdfCustomHeadings.filter(h => h.placement === "running_header").map(renderHeadingHtml).join("");
+      const beforeMap = {};
+      pdfCustomHeadings.forEach(h => {
+        const m = /^before_q_(\d+)$/.exec(h.placement || "");
+        if (m) {
+          const n = parseInt(m[1]);
+          if (!beforeMap[n]) beforeMap[n] = [];
+          beforeMap[n].push(h);
+        }
+      });
+
+      const cardsHtml = questionsList.map((q, idx) => {
+        const qNum = cfg.startNum + idx;
+        const beforeHtml = beforeMap[qNum] ? beforeMap[qNum].map(renderHeadingHtml).join("") : "";
+        const qText = String(q.question || "").trim();
+        const qDir = /[\u0600-\u06FF]/.test(qText) ? "rtl" : "ltr";
+        const opts = getQuestionOptions(q);
+        const cIdx = (typeof q.correct_idx === "number" && q.correct_idx >= 0 && q.correct_idx < opts.length) ? q.correct_idx : 0;
+
+        const optsHtml = opts.map((optVal, oIdx) => {
+          const optStr = String(optVal || "").trim();
+          const optDir = /[\u0600-\u06FF]/.test(optStr) ? "rtl" : "ltr";
+          const lbl = optionBadgeLabel(oIdx, cfg.optStyle);
+          const isCorrect = solved && (oIdx === cIdx);
+
+          const textStyle = isCorrect
+            ? `color:${cfg.colCorrect}; font-weight:700; ${cfg.correctUnderline ? "text-decoration:underline; text-underline-offset:3px;" : ""}`
+            : `color:${cfg.colText}; font-weight:400;`;
+
+          const badgeBg = isCorrect ? cfg.colCorrect : cfg.colBadge;
+          const badgeFg = isCorrect ? "#ffffff" : cfg.colBadgeText;
+
+          return `
+            <div dir="${optDir}" style="display:flex; align-items:center; gap:12px; margin-bottom:${oIdx < opts.length - 1 ? cfg.gapOpts : 0}px; font-size:${cfg.bodyFont}px; line-height:1.45;">
+              <span style="width:24px; height:24px; border-radius:999px; background:${badgeBg}; color:${badgeFg}; font-size:${Math.max(10, cfg.bodyFont - 2.5)}px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;">${escapeHtml(lbl)}</span>
+              <span style="${textStyle}">${escapeHtml(optStr)}</span>
+            </div>
+          `;
+        }).join("");
+
+        const explHtml = (solved && cfg.showExpl && q.explanation && String(q.explanation).trim())
+          ? `<div style="margin-top:${Math.max(6, cfg.gapQOpts - 2)}px; padding:7px 11px; border-radius:8px; background:rgba(217,119,6,0.08); border-right:3px solid #d97706; font-size:${Math.max(10, cfg.bodyFont - 1.5)}px; color:#78350f;"><b>Explanation:</b> ${escapeHtml(q.explanation)}</div>`
+          : "";
+
+        return `
+          ${beforeHtml}
+          <div style="background:${cfg.colCardBg}; border:1px solid ${cfg.colCardBorder}; border-radius:14px; padding:16px 20px; margin-bottom:${cfg.gapQuestions}px; break-inside:avoid; page-break-inside:avoid;">
+            <div style="display:flex; align-items:flex-start; gap:14px; margin-bottom:${cfg.gapQOpts}px;">
+              <span style="color:${cfg.colQNum}; font-weight:800; font-size:${cfg.bodyFont}px; min-width:34px; flex-shrink:0;">Q${qNum}.</span>
+              <span dir="${qDir}" style="color:${cfg.colText}; font-weight:700; font-size:${cfg.bodyFont}px; line-height:1.5; flex:1;">${escapeHtml(qText)}</span>
+            </div>
+            <div style="padding-inline-start:48px;">
+              ${optsHtml}
+            </div>
+            ${explHtml}
+          </div>
+        `;
+      }).join("");
+
+      const modeTag = solved ? "SOLVED (Answer Key)" : "UNSOLVED";
+      return `
+        <div style="background:${cfg.colPageBg}; padding:18px 22px; color:${cfg.colText}; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          ${runningHeader}
+          ${topFirst}
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:8px; border-bottom:1px solid ${cfg.colCardBorder};">
+            <div style="font-size:13px; font-weight:700; color:${cfg.colQNum};">${escapeHtml(pdfStudioBankName)} (${questionsList.length} Questions)</div>
+            <div style="font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px; background:${cfg.colCardBg}; border:1px solid ${cfg.colCardBorder}; color:${solved ? cfg.colCorrect : cfg.colQNum};">${modeTag}</div>
+          </div>
+          ${cardsHtml}
+        </div>
+      `;
+    }
+
+    async function renderSingleLocalPdf(questionsList, solved, cfg, fileName) {
+      const stage = document.getElementById("localPdfRenderStage");
+      stage.innerHTML = buildCardSheetHtml(questionsList, solved, cfg);
+      const targetEl = stage.firstElementChild;
+
+      const opt = {
+        margin: [10, 8, 10, 8],
+        filename: fileName,
+        image: { type: "jpeg", quality: 0.92 },
+        html2canvas: { scale: 1.5, useCORS: true, backgroundColor: cfg.colPageBg },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        pagebreak: { mode: ["css", "legacy"] }
       };
 
+      await html2pdf().set(opt).from(targetEl).save();
+      stage.innerHTML = "";
+    }
+
+    async function generateBothPdfsLocally() {
+      if (!pdfStudioBankId) return;
+      let chosen = pdfStudioItems.filter(x => x._checked);
+      if (!chosen.length) {
+        return alert("يرجى تحديد سؤال واحد على الأقل لتوليد ملفات PDF.");
+      }
+      if (document.getElementById("pdfShuffleQ").checked) {
+        chosen = [...chosen].sort(() => Math.random() - 0.5);
+      }
+
+      savePdfPrefs();
+      const cfg = {
+        colQNum: document.getElementById("pdfColQNum").value,
+        colBadge: document.getElementById("pdfColBadge").value,
+        colBadgeText: document.getElementById("pdfColBadgeText").value,
+        colCardBg: document.getElementById("pdfColCardBg").value,
+        colCardBorder: document.getElementById("pdfColCardBorder").value,
+        colPageBg: document.getElementById("pdfColPageBg").value,
+        colText: document.getElementById("pdfColText").value,
+        colCorrect: document.getElementById("pdfColCorrect").value,
+        correctUnderline: document.getElementById("pdfCorrectUnderline").checked,
+        optStyle: document.getElementById("pdfOptStyle").value,
+        bodyFont: parseFloat(document.getElementById("pdfBodyFont").value) || 14,
+        gapQOpts: parseFloat(document.getElementById("pdfGapQOpts").value) || 10,
+        gapOpts: parseFloat(document.getElementById("pdfGapOpts").value) || 6,
+        gapQuestions: parseFloat(document.getElementById("pdfGapQuestions").value) || 14,
+        startNum: parseInt(document.getElementById("pdfStartNum").value) || 1,
+        showExpl: document.getElementById("pdfShowExpl").checked
+      };
+
+      const safeSlug = pdfStudioBankName.replace(/[^\w\u0600-\u06FF-]+/g, "_").replace(/^_+|_+$/g, "") || "bank";
+      const solvedFile = `${safeSlug}_Solved.pdf`;
+      const unsolvedFile = `${safeSlug}_Unsolved.pdf`;
+
       const btn = document.getElementById("confirmPdfPairBtn");
+      const statusEl = document.getElementById("localPdfStatus");
       btn.disabled = true;
       try {
-        const res = await api("/api/export_pdf_pair", {
-          method: "POST",
-          body: JSON.stringify({
-            bank_id: pdfStudioBankId,
-            question_ids: selectedIds,
-            ordered_question_ids: orderedIds,
-            shuffle_questions: document.getElementById("pdfShuffleQ").checked,
-            settings
-          })
-        });
-        closeModal("pdfStudioModal");
-        alert(`تم إرسال النسختين (${res.solved_file} و ${res.unsolved_file}) لـ ${res.exported_count} سؤال إلى محادثتك الخاصة.`);
-        await loadLogs();
+        statusEl.innerText = "جاري توليد النسخة المحلولة (Solved) على جهازك...";
+        await renderSingleLocalPdf(chosen, true, cfg, solvedFile);
+
+        statusEl.innerText = "جاري توليد النسخة غير المحلولة (Unsolved) على جهازك...";
+        await renderSingleLocalPdf(chosen, false, cfg, unsolvedFile);
+
+        statusEl.innerText = `تم توليد وتحميل النسختين (${solvedFile} و ${unsolvedFile}) لـ ${chosen.length} سؤال بنجاح.`;
+      } catch (err) {
+        statusEl.innerText = "";
+        alert("تعذر توليد ملف PDF على الجهاز: " + (err && err.message ? err.message : err));
       } finally {
         btn.disabled = false;
       }
