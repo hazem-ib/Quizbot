@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Quiz Manager Mini App</title>
+  <title>لوحة إدارة الاختبارات</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     :root {
       --bg: var(--tg-theme-bg-color, #0b1120);
       --sec-bg: var(--tg-theme-secondary-bg-color, #162032);
-      --card-border: rgba(255, 255, 255, 0.07);
+      --card-border: rgba(255, 255, 255, 0.08);
       --text: var(--tg-theme-text-color, #f8fafc);
       --hint: var(--tg-theme-hint-color, #94a3b8);
       --btn: var(--tg-theme-button-color, #3b82f6);
@@ -19,7 +19,7 @@
       --radius: 16px;
     }
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { margin: 0; padding: 16px 16px 90px; background: var(--bg); color: var(--text); }
+    body { margin: 0; padding: 16px 16px 92px; background: var(--bg); color: var(--text); }
 
     #authScreen {
       position: fixed; inset: 0; background: #070b14; z-index: 9999;
@@ -34,7 +34,7 @@
       display: flex; justify-content: space-between; align-items: center;
       margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--card-border);
     }
-    .header h2 { margin: 0; font-size: 1.25rem; font-weight: 700; letter-spacing: -0.3px; }
+    .header h2 { margin: 0; font-size: 1.2rem; font-weight: 700; }
     .badge {
       background: rgba(59, 130, 246, 0.16); color: #60a5fa;
       border: 1px solid rgba(59, 130, 246, 0.3);
@@ -50,9 +50,9 @@
       background: var(--btn); color: var(--btn-text); border: none; border-radius: 12px;
       padding: 11px 16px; font-size: 0.9rem; font-weight: 600; cursor: pointer;
       width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-      transition: transform 0.15s, opacity 0.15s;
+      transition: transform 0.12s, opacity 0.12s;
     }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
     .btn:active { opacity: 0.85; transform: scale(0.98); }
     .btn-sm { padding: 7px 12px; font-size: 0.8rem; width: auto; border-radius: 10px; }
     .btn-danger { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
@@ -69,10 +69,10 @@
 
     .nav-bar {
       position: fixed; bottom: 0; left: 0; right: 0;
-      background: rgba(22, 32, 50, 0.94); backdrop-filter: blur(12px);
+      background: rgba(22, 32, 50, 0.96); backdrop-filter: blur(12px);
       display: flex; border-top: 1px solid var(--card-border); padding: 8px 0 10px; z-index: 100;
     }
-    .nav-item { flex: 1; text-align: center; color: var(--hint); font-size: 0.72rem; cursor: pointer; padding: 4px; transition: color 0.2s; }
+    .nav-item { flex: 1; text-align: center; color: var(--hint); font-size: 0.72rem; cursor: pointer; padding: 4px; transition: color 0.15s; }
     .nav-item.active { color: #60a5fa; font-weight: 700; }
     .nav-item span { display: block; font-size: 1.2rem; margin-bottom: 3px; }
 
@@ -88,7 +88,7 @@
 
     .switch-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 0.9rem; }
     .switch-row input { width: 18px; height: 18px; margin: 0; accent-color: var(--btn); }
-    .hint-box { background: rgba(59,130,246,0.1); border-right: 3px solid var(--btn); padding: 11px 12px; border-radius: 10px; font-size: 0.82rem; margin-bottom: 14px; color: var(--text); line-height: 1.5; }
+    .hint-box { background: rgba(59,130,246,0.1); border-right: 3px solid var(--btn); padding: 11px 12px; border-radius: 10px; font-size: 0.82rem; margin-bottom: 14px; color: var(--text); line-height: 1.55; }
 
     .select-list { max-height: 260px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 8px; background: var(--bg); margin-bottom: 12px; }
     .select-q-item { display: flex; align-items: flex-start; gap: 10px; padding: 9px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.84rem; }
@@ -111,85 +111,90 @@
 
   <div id="appContainer">
     <div class="header">
-      <h2>🎯 مدير الاختبارات</h2>
+      <h2>🎯 لوحة إدارة الاختبارات</h2>
       <span id="roleBadge" class="badge">...</span>
     </div>
 
+    <!-- تبويب بنوك الأسئلة -->
     <div id="tab-banks" class="tab active">
       <div style="display:flex; gap:8px; margin-bottom:14px;">
-        <button class="btn" onclick="openNewBankModal()">➕ مجموعة جديدة</button>
-        <button class="btn btn-success" onclick="switchTab('upload')">📤 رفع CSV جديد</button>
+        <button class="btn" onclick="openNewBankModal()">➕ بنك جديد</button>
+        <button class="btn btn-success" onclick="switchTab('upload')">📤 استيراد CSV</button>
       </div>
       <div id="banksList"></div>
     </div>
 
+    <!-- تبويب أسئلة البنك -->
     <div id="tab-questions" class="tab">
       <div class="card" style="padding:12px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-          <button class="btn btn-outline btn-sm" onclick="switchTab('banks')">🔙 رجوع</button>
-          <strong id="currentBankTitle" style="font-size:1.05rem;">المجموعة</strong>
-          <button class="btn btn-outline btn-sm" onclick="renameCurrentBank()">🏷️ تعديل الاسم</button>
+          <button class="btn btn-outline btn-sm" onclick="switchTab('banks')">🔙 البنوك</button>
+          <strong id="currentBankTitle" style="font-size:1.05rem;">البنك</strong>
+          <button class="btn btn-outline btn-sm" onclick="renameCurrentBank()">🏷️ إعادة تسمية</button>
         </div>
         <div style="display:flex; gap:8px;">
-          <button class="btn btn-sm" style="flex:1;" onclick="openQuestionModal()">➕ سؤال يدوي</button>
-          <button class="btn btn-sm btn-success" style="flex:1;" onclick="openAppendCsvModal()">📥 إضافة من CSV</button>
+          <button class="btn btn-sm" style="flex:1;" onclick="openQuestionModal()">➕ إضافة سؤال</button>
+          <button class="btn btn-sm btn-success" style="flex:1;" onclick="openAppendCsvModal()">📥 دمج ملف CSV</button>
         </div>
       </div>
 
-      <input type="text" id="searchQ" placeholder="🔍 ابحث داخل أسئلة المجموعة..." oninput="renderQuestions()" />
+      <input type="text" id="searchQ" placeholder="🔍 ابحث في أسئلة هذا البنك..." oninput="renderQuestions()" />
       <div id="questionsList"></div>
     </div>
 
+    <!-- تبويب استيراد CSV -->
     <div id="tab-upload" class="tab">
       <div class="card">
-        <h3>📤 إنشاء مجموعة من ملف CSV</h3>
+        <h3>📤 استيراد بنك أسئلة من CSV</h3>
         <div class="hint-box">
           ترتيب الأعمدة المطلوب في الملف:<br>
-          <code>السؤال | إجابة 1 | إجابة 2 | إجابة 3 | إجابة 4 | الصحيحة (1-4 أو A-D أو نصها) | شرح (اختياري)</code>
+          <code>السؤال | خيار 1 | خيار 2 | خيار 3 | خيار 4 | الإجابة الصحيحة (1-4 أو A-D أو نصها) | شرح (اختياري)</code>
         </div>
-        <label>اسم المجموعة:</label>
-        <input type="text" id="csvBankName" placeholder="مثال: اختبار الفسيولوجي" />
-        <label>اختر ملف CSV:</label>
+        <label>اسم بنك الأسئلة:</label>
+        <input type="text" id="csvBankName" placeholder="مثال: علم التشريح - الوحدة الأولى" />
+        <label>ملف CSV:</label>
         <input type="file" id="csvFile" accept=".csv" />
-        <button class="btn btn-success" onclick="uploadCSV()">🚀 استيراد وإنشاء المجموعة</button>
+        <button class="btn btn-success" id="uploadCsvBtn" onclick="uploadCSV()">🚀 إنشاء البنك واستيراد الأسئلة</button>
       </div>
     </div>
 
+    <!-- تبويب القنوات والمجموعات -->
     <div id="tab-communities" class="tab">
       <div class="card">
-        <h3>🌐 ربط مجتمع أو قناة</h3>
+        <h3>🌐 إضافة وجهة إرسال (قناة أو مجموعة)</h3>
         <div class="hint-box">
-          1. أضف البوت كـ <b>مشرف (Admin)</b> في المجتمع أو القناة.<br>
-          2. أرسل <code>/id</code> داخل القناة الفرعية (Topic)، أو حوّل رسالة من القناة للبوت لاستخراج الـ <b>Chat ID</b> تلقائياً.
+          1. أضف البوت كـ <b>مشرف</b> في القناة أو المجموعة وامنحه صلاحية النشر.<br>
+          2. أرسل <code>/id</code> داخل الوجهة أو الموضوع (Topic)، أو حوّل رسالة من القناة للبوت لمعرفة المعرّف.
         </div>
-        <label>اسم تعريفي للمجتمع / القناة:</label>
-        <input type="text" id="commTitle" placeholder="مثال: قناة الاختبارات الرئيسية" />
-        <label>معرّف المجتمع أو القناة (Chat ID أو @username):</label>
-        <input type="text" id="commChatId" placeholder="-1001234567890 أو @channel" />
-        <label>رقم القناة الفرعية (Topic ID - اختياري):</label>
-        <input type="number" id="commTopicId" placeholder="اتركه فارغاً إذا لم يكن مقسماً لمواضيع" />
+        <label>اسم الوجهة (يظهر في قوائم الإرسال):</label>
+        <input type="text" id="commTitle" placeholder="مثال: دفعة 67 - قناة الاختبارات" />
+        <label>معرّف الوجهة (Chat ID أو @username):</label>
+        <input type="text" id="commChatId" placeholder="-1001234567890 أو @channel_username" />
+        <label>رقم الموضوع الفرعي (Topic ID - اختياري):</label>
+        <input type="number" id="commTopicId" placeholder="اتركه فارغاً إذا لم تكن هناك مواضيع" />
         <div style="display:flex; gap:8px;">
-          <button class="btn btn-outline" onclick="testCommunity()">🔌 فحص الاتصال</button>
-          <button class="btn btn-success" onclick="saveCommunity()">💾 حفظ الربط</button>
+          <button class="btn btn-outline" onclick="testCommunity()">🔌 اختبار الصلاحيات</button>
+          <button class="btn btn-success" onclick="saveCommunity()">💾 حفظ الوجهة</button>
         </div>
       </div>
       <div id="communitiesList"></div>
     </div>
 
+    <!-- تبويب الإرسال -->
     <div id="tab-publish" class="tab">
       <div class="card">
         <h3>🚀 إرسال الاختبار</h3>
-        <label>اختر مجموعة الأسئلة:</label>
+        <label>بنك الأسئلة:</label>
         <select id="pubBankSelect" onchange="onPublishBankChange()"></select>
 
         <div class="switch-row" style="margin-top:4px; padding-top:10px; border-top:1px solid var(--card-border);">
-          <span>🎛️ متقدم: تحديد الأسئلة المرسلة / المستبعدة</span>
+          <span>🎛️ تخصيص الأسئلة المرسلة أو المستبعدة</span>
           <input type="checkbox" id="enableSelectiveMode" onchange="toggleSelectiveMode()" />
         </div>
 
         <div id="selectiveBox" style="display:none;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <small id="selectedCountBadge" style="color:var(--success); font-weight:bold;">سيتم إرسال الكل</small>
+            <small id="selectedCountBadge" style="color:var(--success); font-weight:bold;">الأسئلة المحددة: 0</small>
             <div style="display:flex; gap:6px;">
               <button type="button" class="btn btn-sm btn-outline" onclick="toggleAllSelective(true)">تحديد الكل</button>
               <button type="button" class="btn btn-sm btn-outline" onclick="toggleAllSelective(false)">إلغاء الكل</button>
@@ -200,39 +205,41 @@
 
         <label>وجهة الإرسال:</label>
         <select id="pubTargetType" onchange="togglePublishTarget()">
-          <option value="private">💬 المحادثة الخاصة بيني وبين البوت</option>
-          <option value="saved_comm">🌐 مجتمع / قناة من القائمة المحفوظة</option>
-          <option value="manual_group">✍️ إدخال Chat ID / يوزر قناة يدوياً</option>
+          <option value="private">💬 المحادثة الخاصة مع البوت</option>
+          <option value="saved_comm">🌐 وجهة محفوظة (قناة أو مجموعة)</option>
+          <option value="manual_group">✍️ إدخال وجهة مؤقتة يدوياً</option>
         </select>
 
         <div id="savedCommBox" style="display:none;">
-          <label>اختر المجتمع / القناة المتصلة:</label>
+          <label>اختر الوجهة:</label>
           <select id="pubSavedCommSelect"></select>
         </div>
 
         <div id="manualGroupBox" style="display:none;">
-          <label>Chat ID أو @username:</label>
+          <label>اسم تعريفي للوجهة (اختياري):</label>
+          <input type="text" id="pubManualTitle" placeholder="مثال: قناة المراجعة" />
+          <label>معرّف الوجهة (Chat ID أو @username):</label>
           <input type="text" id="pubChatId" placeholder="-1001234567890 أو @channel" />
-          <label>Topic ID (اختياري):</label>
-          <input type="number" id="pubTopicId" placeholder="رقم الموضوع داخل المجتمع" />
+          <label>رقم الموضوع (Topic ID - اختياري):</label>
+          <input type="number" id="pubTopicId" placeholder="رقم الموضوع إن وجد" />
         </div>
 
-        <label>⏱️ سرعة الإرسال:</label>
+        <label>⏱️ الفاصل الزمني بين الأسئلة:</label>
         <select id="pubDelay">
-          <option value="0">⚡ إرسال الكل في الخلفية</option>
+          <option value="0">⚡ إرسال متواصل في الخلفية</option>
           <option value="2">2 ثانية بين كل سؤال</option>
           <option value="5">5 ثوانٍ بين كل سؤال</option>
           <option value="10">10 ثوانٍ بين كل سؤال</option>
           <option value="30">30 ثانية بين كل سؤال</option>
-          <option value="60">دقيقة واحدة (60 ثانية)</option>
+          <option value="60">60 ثانية بين كل سؤال</option>
         </select>
 
         <div class="switch-row">
-          <span>⏳ تفعيل تايمر لحل كل سؤال</span>
+          <span>⏳ مؤقت زمني للإجابة على كل سؤال</span>
           <input type="checkbox" id="enableTimer" onchange="toggleTimerInput()" />
         </div>
         <div id="timerBox" style="display:none;">
-          <label>مدة التايمر لكل سؤال (بالثواني - من 5 إلى 600):</label>
+          <label>مدة المؤقت بالثواني (من 5 إلى 600):</label>
           <input type="number" id="pubTimer" value="30" min="5" max="600" />
         </div>
 
@@ -241,7 +248,7 @@
           <input type="checkbox" id="pubShuffleQ" />
         </div>
         <div class="switch-row">
-          <span>🎲 خلط ترتيب الإجابات</span>
+          <span>🎲 خلط ترتيب الخيارات</span>
           <input type="checkbox" id="pubShuffleOpt" />
         </div>
 
@@ -249,8 +256,8 @@
 
         <div id="progressBox" class="progress-box">
           <div style="display:flex; justify-content:space-between; font-size:0.85rem;">
-            <span id="progressStatus">جاري التجهيز...</span>
-            <strong id="progressCounter">0 / 0</strong>
+            <span id="progressStatus">جاري جدولة الإرسال...</span>
+            <strong id="progressCounter">0 سؤال</strong>
           </div>
           <div class="progress-bar-bg">
             <div id="progressBarFill" class="progress-bar-fill"></div>
@@ -259,75 +266,80 @@
       </div>
     </div>
 
+    <!-- تبويب المشرفين -->
     <div id="tab-admins" class="tab">
       <div class="card">
         <h3>👑 إدارة المشرفين</h3>
-        <label>Telegram ID للأدمن الجديد:</label>
+        <label>معرّف المستخدم في تيليجرام (User ID):</label>
         <input type="number" id="newAdminId" placeholder="مثال: 123456789" />
         <label>الاسم:</label>
-        <input type="text" id="newAdminName" placeholder="مثال: أحمد" />
-        <button class="btn" onclick="addAdmin()">➕ إضافة أدمن</button>
+        <input type="text" id="newAdminName" placeholder="مثال: د. أحمد" />
+        <button class="btn" onclick="addAdmin()">➕ إضافة مشرف</button>
       </div>
       <div id="adminsList"></div>
     </div>
 
+    <!-- شريط التنقل السفلي -->
     <div class="nav-bar">
-      <div class="nav-item active" id="nav-banks" onclick="switchTab('banks')"><span>📂</span>المجموعات</div>
-      <div class="nav-item" id="nav-upload" onclick="switchTab('upload')"><span>📤</span>رفع CSV</div>
-      <div class="nav-item" id="nav-communities" onclick="switchTab('communities')"><span>🌐</span>المجتمعات</div>
-      <div class="nav-item" id="nav-publish" onclick="switchTab('publish')"><span>🚀</span>نشر</div>
-      <div class="nav-item" id="nav-admins" style="display:none;" onclick="switchTab('admins')"><span>👑</span>الأدمنز</div>
+      <div class="nav-item active" id="nav-banks" onclick="switchTab('banks')"><span>📂</span>البنوك</div>
+      <div class="nav-item" id="nav-upload" onclick="switchTab('upload')"><span>📤</span>استيراد</div>
+      <div class="nav-item" id="nav-communities" onclick="switchTab('communities')"><span>🌐</span>الوجهات</div>
+      <div class="nav-item" id="nav-publish" onclick="switchTab('publish')"><span>🚀</span>الإرسال</div>
+      <div class="nav-item" id="nav-admins" style="display:none;" onclick="switchTab('admins')"><span>👑</span>المشرفون</div>
     </div>
 
+    <!-- نافذة إضافة / تعديل سؤال -->
     <div id="qModal" class="modal">
       <div class="modal-content">
-        <h3 id="qModalTitle">إضافة / تعديل سؤال</h3>
+        <h3 id="qModalTitle">إضافة سؤال</h3>
         <input type="hidden" id="editQId" />
         <label>نص السؤال:</label>
-        <textarea id="qText" rows="2" placeholder="اكتب نص السؤال هنا..."></textarea>
-        <label>الإجابة 1:</label><input type="text" id="qOpt1" />
-        <label>الإجابة 2:</label><input type="text" id="qOpt2" />
-        <label>الإجابة 3:</label><input type="text" id="qOpt3" />
-        <label>الإجابة 4:</label><input type="text" id="qOpt4" />
-        <label>الإجابة الصحيحة:</label>
+        <textarea id="qText" rows="2" placeholder="اكتب نص السؤال..."></textarea>
+        <label>الخيار 1:</label><input type="text" id="qOpt1" />
+        <label>الخيار 2:</label><input type="text" id="qOpt2" />
+        <label>الخيار 3:</label><input type="text" id="qOpt3" />
+        <label>الخيار 4:</label><input type="text" id="qOpt4" />
+        <label>الخيار الصحيح:</label>
         <select id="qCorrect">
-          <option value="0">الإجابة 1</option>
-          <option value="1">الإجابة 2</option>
-          <option value="2">الإجابة 3</option>
-          <option value="3">الإجابة 4</option>
+          <option value="0">الخيار 1</option>
+          <option value="1">الخيار 2</option>
+          <option value="2">الخيار 3</option>
+          <option value="3">الخيار 4</option>
         </select>
         <label>شرح الإجابة (اختياري):</label>
-        <input type="text" id="qExpl" placeholder="توضيح يظهر بعد الإجابة..." />
+        <input type="text" id="qExpl" placeholder="شرح يظهر بعد الإجابة..." />
         <div style="display:flex; gap:8px;">
-          <button class="btn btn-success" onclick="saveQuestion()">💾 حفظ</button>
+          <button class="btn btn-success" id="saveQBtn" onclick="saveQuestion()">💾 حفظ</button>
           <button class="btn btn-outline" onclick="closeModal('qModal')">إلغاء</button>
         </div>
       </div>
     </div>
 
+    <!-- نافذة دمج CSV -->
     <div id="appendCsvModal" class="modal">
       <div class="modal-content">
-        <h3>📥 إضافة أسئلة من CSV للمجموعة</h3>
+        <h3>📥 دمج أسئلة من CSV في البنك</h3>
         <p style="font-size:0.82rem; color:var(--hint); margin-top:0;">
-          سيتم دمج الأسئلة الجديدة مباشرة مع أسئلة هذه المجموعة.
+          ستُضاف الأسئلة الجديدة إلى الأسئلة الحالية في هذا البنك.
         </p>
         <label>اختر ملف CSV:</label>
         <input type="file" id="appendCsvFile" accept=".csv" />
         <div style="display:flex; gap:8px;">
-          <button class="btn btn-success" onclick="submitAppendCsv()">🚀 استيراد الآن</button>
+          <button class="btn btn-success" id="appendCsvBtn" onclick="submitAppendCsv()">🚀 بدء الدمج</button>
           <button class="btn btn-outline" onclick="closeModal('appendCsvModal')">إلغاء</button>
         </div>
       </div>
     </div>
 
+    <!-- نافذة نقل سؤال -->
     <div id="moveModal" class="modal">
       <div class="modal-content">
-        <h3>📦 نقل السؤال لمجموعة أخرى</h3>
+        <h3>📦 نقل السؤال إلى بنك آخر</h3>
         <input type="hidden" id="moveQId" />
-        <label>اختر المجموعة الوجهة:</label>
+        <label>البنك المستهدف:</label>
         <select id="moveTargetBank"></select>
         <div style="display:flex; gap:8px;">
-          <button class="btn" onclick="confirmMoveQuestion()">✅ نقل الآن</button>
+          <button class="btn" onclick="confirmMoveQuestion()">✅ تأكيد النقل</button>
           <button class="btn btn-outline" onclick="closeModal('moveModal')">إلغاء</button>
         </div>
       </div>
@@ -345,13 +357,15 @@
     let currentBankName = "";
     let questionsCache = [];
     let pubBankQuestions = [];
+    let activePubBankId = null;
+    let banksLoadedOnce = false;
 
     function blockAccess(reason) {
       document.getElementById("appContainer").remove();
       document.getElementById("authIcon").innerText = "⛔";
-      document.getElementById("authTitle").innerText = "الوصول مرفوض";
+      document.getElementById("authTitle").innerText = "تعذر الوصول";
       document.getElementById("authTitle").style.color = "#ef4444";
-      document.getElementById("authMsg").innerText = reason || "هذا الموقع محمي ولا يمكن فتحه إلا من داخل تيليجرام.";
+      document.getElementById("authMsg").innerText = reason || "يرجى فتح التطبيق من داخل بوت تيليجرام.";
     }
 
     async function api(url, options = {}, silent = false) {
@@ -361,16 +375,16 @@
       }
       const res = await fetch(url, options);
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: "حدث خطأ" }));
-        if (!silent) alert("⚠️ " + (err.detail || "خطأ في الاتصال"));
-        throw new Error(err.detail || "Unauthorized");
+        const err = await res.json().catch(() => ({ detail: "حدث خطأ غير متوقع." }));
+        if (!silent) alert("⚠️ " + (err.detail || "تعذر إتمام الطلب."));
+        throw new Error(err.detail || "Request failed");
       }
       return res.json();
     }
 
     async function initApp() {
       if (!initData || initData.trim() === "") {
-        blockAccess("غير مصرح بالدخول من المتصفح. يرجى فتح التطبيق من داخل بوت تيليجرام.");
+        blockAccess("هذا التطبيق متاح فقط من داخل بوت تيليجرام.");
         return;
       }
 
@@ -379,7 +393,7 @@
         document.getElementById("authScreen").style.display = "none";
         document.getElementById("appContainer").style.display = "block";
 
-        document.getElementById("roleBadge").innerText = me.is_owner ? "👑 المالك" : "🛡️ أدمن";
+        document.getElementById("roleBadge").innerText = me.is_owner ? "👑 المالك" : "🛡️ مشرف";
         if (me.is_owner) {
           document.getElementById("nav-admins").style.display = "block";
           loadAdmins();
@@ -390,75 +404,111 @@
       }
     }
 
-    function switchTab(tabName) {
+    async function switchTab(tabName) {
       document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
       document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
       document.getElementById("tab-" + tabName).classList.add("active");
       const nav = document.getElementById("nav-" + tabName);
       if (nav) nav.classList.add("active");
+
       if (tabName === "publish") {
-        onPublishBankChange();
+        if (!banksLoadedOnce || banksCache.length === 0) {
+          await loadBanks();
+        } else {
+          syncPublishBanksSelect();
+        }
+        await onPublishBankChange();
+      } else if (tabName === "banks") {
+        await loadBanks();
+      } else if (tabName === "communities") {
+        await loadCommunities();
+      }
+    }
+
+    function syncPublishBanksSelect(preferredId = null) {
+      const pubSel = document.getElementById("pubBankSelect");
+      if (!pubSel) return;
+      const prevVal = preferredId || pubSel.value || activePubBankId;
+      pubSel.innerHTML = "";
+      banksCache.forEach(b => {
+        const opt = document.createElement("option");
+        opt.value = String(b.id);
+        opt.textContent = `${b.name} (${b.count} سؤال)`;
+        pubSel.appendChild(opt);
+      });
+      if (prevVal && banksCache.some(b => String(b.id) === String(prevVal))) {
+        pubSel.value = String(prevVal);
+      } else if (banksCache.length > 0) {
+        pubSel.value = String(banksCache[0].id);
       }
     }
 
     async function loadBanks() {
       banksCache = await api("/api/banks");
+      banksLoadedOnce = true;
       const list = document.getElementById("banksList");
-      const pubSel = document.getElementById("pubBankSelect");
       list.innerHTML = "";
-      pubSel.innerHTML = "";
 
       if (banksCache.length === 0) {
-        list.innerHTML = `<div class="card" style="text-align:center; color:var(--hint);">📭 لا توجد مجموعات بعد. أنشئ مجموعة أو ارفع ملف CSV!</div>`;
+        list.innerHTML = `<div class="card" style="text-align:center; color:var(--hint);">📭 لا توجد بنوك أسئلة بعد. أنشئ بنكاً جديداً أو استورد ملف CSV.</div>`;
+        syncPublishBanksSelect();
         return;
       }
 
       banksCache.forEach(b => {
-        pubSel.innerHTML += `<option value="${b.id}">${b.name} (${b.count} سؤال)</option>`;
         list.innerHTML += `
-          <div class="card">
+          <div class="card" id="bank-card-${b.id}">
             <div style="display:flex; justify-content:space-between; align-items:center;">
               <strong style="font-size:1rem;">📁 ${b.name}</strong>
               <span class="badge">${b.count} سؤال</span>
             </div>
             <div class="row-actions">
-              <button class="btn btn-sm" onclick="openBank(${b.id}, '${b.name.replace(/'/g, "\\'")}')">✏️ إدارة المجموعة</button>
-              <button class="btn btn-sm btn-success" onclick="quickPublish(${b.id})">🚀 نشر</button>
-              <button class="btn btn-sm btn-danger" onclick="deleteBank(${b.id})">🗑️</button>
+              <button class="btn btn-sm" onclick="openBank(${b.id}, '${b.name.replace(/'/g, "\\'")}')">✏️ إدارة الأسئلة</button>
+              <button class="btn btn-sm btn-success" onclick="quickPublish(${b.id})">🚀 إرسال</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteBank(${b.id})">🗑️ حذف</button>
             </div>
           </div>`;
       });
 
-      if (document.getElementById("tab-publish")?.classList.contains("active")) {
-        await onPublishBankChange();
-      }
+      syncPublishBanksSelect();
     }
 
     async function openNewBankModal() {
-      const name = prompt("أدخل اسم المجموعة الجديدة:");
-      if (!name) return;
-      await api("/api/banks", { method: "POST", body: JSON.stringify({ name }) });
+      const name = prompt("أدخل اسم بنك الأسئلة الجديد:");
+      if (!name || !name.trim()) return;
+      const created = await api("/api/banks", { method: "POST", body: JSON.stringify({ name: name.trim() }) });
       await loadBanks();
+      if (created && created.id) {
+        syncPublishBanksSelect(created.id);
+      }
     }
 
     async function renameCurrentBank() {
-      const name = prompt("الاسم الجديد للمجموعة:", currentBankName);
-      if (!name || name === currentBankName) return;
-      await api(`/api/banks/${currentBankId}`, { method: "PUT", body: JSON.stringify({ name }) });
-      currentBankName = name;
-      document.getElementById("currentBankTitle").innerText = name;
+      const name = prompt("الاسم الجديد للبنك:", currentBankName);
+      if (!name || !name.trim() || name.trim() === currentBankName) return;
+      await api(`/api/banks/${currentBankId}`, { method: "PUT", body: JSON.stringify({ name: name.trim() }) });
+      currentBankName = name.trim();
+      document.getElementById("currentBankTitle").innerText = currentBankName;
       await loadBanks();
     }
 
     async function deleteBank(id) {
-      if (!confirm("هل أنت متأكد من حذف المجموعة وجميع أسئلتها؟")) return;
+      if (!confirm("هل أنت متأكد من حذف هذا البنك وجميع الأسئلة التابعة له؟")) return;
+      const card = document.getElementById(`bank-card-${id}`);
+      if (card) card.style.opacity = "0.5";
       await api(`/api/banks/${id}`, { method: "DELETE" });
-      await loadBanks();
+      if (card) card.remove();
+      banksCache = banksCache.filter(b => b.id !== id);
+      syncPublishBanksSelect();
+      if (banksCache.length === 0) {
+        await loadBanks();
+      }
     }
 
     async function quickPublish(bankId) {
-      document.getElementById("pubBankSelect").value = bankId;
+      activePubBankId = bankId;
       switchTab("publish");
+      syncPublishBanksSelect(bankId);
       await onPublishBankChange();
     }
 
@@ -466,27 +516,28 @@
       currentBankId = bankId;
       currentBankName = bankName;
       document.getElementById("currentBankTitle").innerText = bankName;
+      document.getElementById("questionsList").innerHTML = `<div class="card" style="text-align:center; color:var(--hint);">⏳ جاري تحميل الأسئلة...</div>`;
+      switchTab("questions");
       questionsCache = await api(`/api/banks/${bankId}/questions`);
       renderQuestions();
-      switchTab("questions");
     }
 
     function renderQuestions() {
-      const qFilter = document.getElementById("searchQ").value.toLowerCase();
+      const qFilter = (document.getElementById("searchQ").value || "").toLowerCase();
       const list = document.getElementById("questionsList");
       list.innerHTML = "";
       const filtered = questionsCache.filter(q => q.question.toLowerCase().includes(qFilter));
 
       if (filtered.length === 0) {
-        list.innerHTML = `<div class="card" style="text-align:center; color:var(--hint);">لا توجد أسئلة هنا بعد. أضف سؤالاً يدوياً أو استورد من CSV!</div>`;
+        list.innerHTML = `<div class="card" style="text-align:center; color:var(--hint);">لا توجد أسئلة مطابقة في هذا البنك.</div>`;
         return;
       }
 
       filtered.forEach((q, idx) => {
         const opts = [q.opt1, q.opt2, q.opt3, q.opt4];
-        const optsHtml = opts.map((o, i) => `<div class="opt-item ${i === q.correct_idx ? 'correct' : ''}">${i+1}. ${o}</div>`).join("");
+        const optsHtml = opts.map((o, i) => `<div class="opt-item ${i === q.correct_idx ? 'correct' : ''}">${i + 1}. ${o}</div>`).join("");
         list.innerHTML += `
-          <div class="card">
+          <div class="card" id="q-card-${q.id}">
             <div style="margin-bottom:8px; font-weight:600; line-height:1.45;">${idx + 1}. ${q.question}</div>
             ${optsHtml}
             ${q.explanation ? `<div style="font-size:0.8rem; color:var(--hint); margin-top:6px;">💡 ${q.explanation}</div>` : ""}
@@ -506,18 +557,23 @@
 
     async function submitAppendCsv() {
       const fileInput = document.getElementById("appendCsvFile");
-      if (!fileInput.files.length) return alert("يرجى اختيار ملف CSV أولاً");
+      if (!fileInput.files.length) return alert("يرجى اختيار ملف CSV أولاً.");
+      const btn = document.getElementById("appendCsvBtn");
+      btn.disabled = true;
+      try {
+        const fd = new FormData();
+        fd.append("bank_id", currentBankId);
+        fd.append("file", fileInput.files[0]);
 
-      const fd = new FormData();
-      fd.append("bank_id", currentBankId);
-      fd.append("file", fileInput.files[0]);
-
-      const res = await api("/api/upload_csv", { method: "POST", body: fd });
-      closeModal("appendCsvModal");
-      alert(`✅ تم إضافة ${res.added} سؤال للمجموعة بنجاح!`);
-      questionsCache = await api(`/api/banks/${currentBankId}/questions`);
-      renderQuestions();
-      loadBanks();
+        const res = await api("/api/upload_csv", { method: "POST", body: fd });
+        closeModal("appendCsvModal");
+        alert(`✅ تمت إضافة ${res.added} سؤال إلى البنك بنجاح.`);
+        questionsCache = await api(`/api/banks/${currentBankId}/questions`);
+        renderQuestions();
+        await loadBanks();
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     function openQuestionModal(qId = null) {
@@ -534,7 +590,7 @@
         document.getElementById("qExpl").value = q.explanation || "";
       } else {
         document.getElementById("qModalTitle").innerText = "➕ إضافة سؤال جديد";
-        ["qText","qOpt1","qOpt2","qOpt3","qOpt4","qExpl"].forEach(id => document.getElementById(id).value = "");
+        ["qText", "qOpt1", "qOpt2", "qOpt3", "qOpt4", "qExpl"].forEach(id => document.getElementById(id).value = "");
         document.getElementById("qCorrect").value = "0";
       }
       document.getElementById("qModal").classList.add("open");
@@ -552,43 +608,52 @@
         correct_idx: parseInt(document.getElementById("qCorrect").value),
         explanation: document.getElementById("qExpl").value.trim()
       };
-      if (!payload.question || !payload.opt1 || !payload.opt2) return alert("يرجى كتابة نص السؤال وخيارين على الأقل");
+      if (!payload.question || !payload.opt1 || !payload.opt2) return alert("يرجى إدخال نص السؤال وخيارين على الأقل.");
 
-      if (qId) {
-        await api(`/api/questions/${qId}`, { method: "PUT", body: JSON.stringify(payload) });
-      } else {
-        await api(`/api/questions`, { method: "POST", body: JSON.stringify(payload) });
+      const btn = document.getElementById("saveQBtn");
+      btn.disabled = true;
+      try {
+        if (qId) {
+          await api(`/api/questions/${qId}`, { method: "PUT", body: JSON.stringify(payload) });
+        } else {
+          await api(`/api/questions`, { method: "POST", body: JSON.stringify(payload) });
+        }
+        closeModal("qModal");
+        questionsCache = await api(`/api/banks/${currentBankId}/questions`);
+        renderQuestions();
+        await loadBanks();
+      } finally {
+        btn.disabled = false;
       }
-      closeModal("qModal");
-      questionsCache = await api(`/api/banks/${currentBankId}/questions`);
-      renderQuestions();
-      loadBanks();
     }
 
     async function deleteQuestion(qId) {
       if (!confirm("حذف هذا السؤال؟")) return;
+      const card = document.getElementById(`q-card-${qId}`);
+      if (card) card.style.opacity = "0.4";
       await api(`/api/questions/${qId}`, { method: "DELETE" });
-      questionsCache = await api(`/api/banks/${currentBankId}/questions`);
+      if (card) card.remove();
+      questionsCache = questionsCache.filter(q => q.id !== qId);
       renderQuestions();
-      loadBanks();
+      await loadBanks();
     }
 
     function openMoveModal(qId) {
       document.getElementById("moveQId").value = qId;
       const sel = document.getElementById("moveTargetBank");
       sel.innerHTML = banksCache.filter(b => b.id !== currentBankId).map(b => `<option value="${b.id}">${b.name}</option>`).join("");
-      if (!sel.innerHTML) return alert("أنشئ مجموعة أخرى أولاً لتتمكن من النقل إليها.");
+      if (!sel.innerHTML) return alert("أضف بنكاً آخر أولاً ليتمكن من نقل السؤال إليه.");
       document.getElementById("moveModal").classList.add("open");
     }
 
     async function confirmMoveQuestion() {
-      const qId = document.getElementById("moveQId").value;
+      const qId = parseInt(document.getElementById("moveQId").value);
       const target_bank_id = parseInt(document.getElementById("moveTargetBank").value);
       await api(`/api/questions/${qId}/move`, { method: "POST", body: JSON.stringify({ target_bank_id }) });
       closeModal("moveModal");
       questionsCache = await api(`/api/banks/${currentBankId}/questions`);
       renderQuestions();
-      loadBanks();
+      await loadBanks();
     }
 
     function closeModal(id) { document.getElementById(id).classList.remove("open"); }
@@ -596,18 +661,25 @@
     async function uploadCSV() {
       const bankName = document.getElementById("csvBankName").value.trim();
       const fileInput = document.getElementById("csvFile");
-      if (!bankName || !fileInput.files.length) return alert("يرجى إدخال اسم المجموعة واختيار ملف CSV");
+      if (!bankName || !fileInput.files.length) return alert("يرجى إدخال اسم البنك واختيار ملف CSV.");
 
-      const fd = new FormData();
-      fd.append("bank_name", bankName);
-      fd.append("file", fileInput.files[0]);
+      const btn = document.getElementById("uploadCsvBtn");
+      btn.disabled = true;
+      try {
+        const fd = new FormData();
+        fd.append("bank_name", bankName);
+        fd.append("file", fileInput.files[0]);
 
-      const res = await api("/api/upload_csv", { method: "POST", body: fd });
-      alert(`✅ تم استيراد ${res.added} سؤال بنجاح!`);
-      document.getElementById("csvBankName").value = "";
-      fileInput.value = "";
-      await loadBanks();
-      switchTab("banks");
+        const res = await api("/api/upload_csv", { method: "POST", body: fd });
+        alert(`✅ تم إنشاء البنك واستيراد ${res.added} سؤال بنجاح.`);
+        document.getElementById("csvBankName").value = "";
+        fileInput.value = "";
+        activePubBankId = res.bank_id;
+        await loadBanks();
+        switchTab("banks");
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     async function loadCommunities() {
@@ -618,18 +690,18 @@
       sel.innerHTML = "";
 
       if (commsCache.length === 0) {
-        list.innerHTML = `<div class="card" style="text-align:center; color:var(--hint);">لا توجد مجتمعات أو قنوات محفوظة بعد.</div>`;
+        list.innerHTML = `<div class="card" style="text-align:center; color:var(--hint);">لا توجد وجهات محفوظة بعد.</div>`;
         return;
       }
 
       commsCache.forEach(c => {
-        const topicLabel = c.topic_id ? ` | موضوع #${c.topic_id}` : "";
-        sel.innerHTML += `<option value="${c.id}">${c.title} (${c.chat_id}${topicLabel})</option>`;
+        const topicLabel = c.topic_id ? ` • موضوع #${c.topic_id}` : "";
+        sel.innerHTML += `<option value="${c.id}">${c.title}${topicLabel}</option>`;
         list.innerHTML += `
           <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
             <div>
               <strong>🌐 ${c.title}</strong><br>
-              <small style="color:var(--hint);">${c.chat_id}${topicLabel}</small>
+              <small style="color:var(--hint);">وجهة محفوظة${topicLabel}</small>
             </div>
             <button class="btn btn-sm btn-danger" onclick="deleteCommunity(${c.id})">حذف</button>
           </div>`;
@@ -639,22 +711,22 @@
     async function testCommunity() {
       const chat_id = document.getElementById("commChatId").value.trim();
       const topic_id = parseInt(document.getElementById("commTopicId").value) || null;
-      if (!chat_id) return alert("أدخل Chat ID أو @username أولاً");
+      if (!chat_id) return alert("يرجى إدخال معرّف الوجهة أولاً.");
       await api("/api/test_community", { method: "POST", body: JSON.stringify({ title: "test", chat_id, topic_id }) });
-      alert("✅ الاتصال ناجح! تم إرسال رسالة تجريبية إلى القناة/المجتمع.");
+      alert("✅ تم التحقق من الاتصال والصلاحيات بنجاح.");
     }
 
     async function saveCommunity() {
       const title = document.getElementById("commTitle").value.trim();
       const chat_id = document.getElementById("commChatId").value.trim();
       const topic_id = parseInt(document.getElementById("commTopicId").value) || null;
-      if (!title || !chat_id) return alert("يرجى إدخال اسم المجتمع والـ Chat ID");
+      if (!title || !chat_id) return alert("يرجى إدخال اسم الوجهة ومعرّفها.");
       await api("/api/communities", { method: "POST", body: JSON.stringify({ title, chat_id, topic_id }) });
       document.getElementById("commTitle").value = "";
       document.getElementById("commChatId").value = "";
       document.getElementById("commTopicId").value = "";
       await loadCommunities();
-      alert("✅ تم حفظ المجتمع/القناة بنجاح!");
+      alert("✅ تم حفظ الوجهة بنجاح.");
     }
 
     async function deleteCommunity(id) {
@@ -665,15 +737,19 @@
     async function onPublishBankChange() {
       const bankSelect = document.getElementById("pubBankSelect");
       const bankId = bankSelect ? bankSelect.value : "";
+      activePubBankId = bankId ? parseInt(bankId) : null;
+
       if (!bankId) {
         pubBankQuestions = [];
         renderSelectiveList();
         return;
       }
+
       const box = document.getElementById("selectiveQuestionsList");
       if (box && document.getElementById("enableSelectiveMode")?.checked) {
         box.innerHTML = `<div style="padding:10px; color:var(--hint);">⏳ جاري تحميل الأسئلة...</div>`;
       }
+
       pubBankQuestions = await api(`/api/banks/${bankId}/questions`);
       renderSelectiveList();
     }
@@ -690,7 +766,7 @@
       const box = document.getElementById("selectiveQuestionsList");
       if (!box) return;
       if (!pubBankQuestions || pubBankQuestions.length === 0) {
-        box.innerHTML = `<div style="padding:10px; color:var(--hint);">لا توجد أسئلة في هذه المجموعة.</div>`;
+        box.innerHTML = `<div style="padding:10px; color:var(--hint);">لا توجد أسئلة متاحة في هذا البنك.</div>`;
         updateSelectiveCount();
         return;
       }
@@ -712,7 +788,7 @@
       }
       const total = pubBankQuestions.length;
       const checked = document.querySelectorAll(".pub-q-chk:checked").length;
-      document.getElementById("selectedCountBadge").innerText = `المحدد للإرسال: ${checked} من ${total}`;
+      document.getElementById("selectedCountBadge").innerText = `الأسئلة المحددة: ${checked} من ${total}`;
     }
 
     function toggleAllSelective(state) {
@@ -744,10 +820,11 @@
 
     async function publishQuiz() {
       const bankId = parseInt(document.getElementById("pubBankSelect").value);
-      if (!bankId) return alert("يرجى اختيار مجموعة أسئلة");
+      if (!bankId) return alert("يرجى اختيار بنك الأسئلة.");
 
-      if (pubBankQuestions.length === 0) {
+      if (pubBankQuestions.length === 0 || activePubBankId !== bankId) {
         pubBankQuestions = await api(`/api/banks/${bankId}/questions`);
+        activePubBankId = bankId;
       }
 
       let questionsToSend = [...pubBankQuestions];
@@ -758,25 +835,30 @@
         questionsToSend = questionsToSend.filter(q => selectedIds.has(q.id));
       }
 
-      if (questionsToSend.length === 0) {
-        return alert("⚠️ لم يتم تحديد أي سؤال للإرسال!");
+      const finalCount = questionsToSend.length;
+      if (finalCount === 0) {
+        return alert("⚠️ لم يتم تحديد أي سؤال للإرسال.");
       }
 
       const targetMode = document.getElementById("pubTargetType").value;
       let target_type = "private";
       let chat_id = null;
+      let target_name = "المحادثة الخاصة";
       let topic_id = null;
 
       if (targetMode === "saved_comm") {
         target_type = "group";
         const commId = parseInt(document.getElementById("pubSavedCommSelect").value);
         const comm = commsCache.find(x => x.id === commId);
-        if (!comm) return alert("يرجى إضافة مجتمع/قناة أولاً من تبويب المجتمعات");
+        if (!comm) return alert("يرجى إضافة وجهة من تبويب الوجهات أولاً.");
         chat_id = comm.chat_id;
+        target_name = comm.title;
         topic_id = comm.topic_id;
       } else if (targetMode === "manual_group") {
         target_type = "group";
         chat_id = document.getElementById("pubChatId").value.trim() || null;
+        if (!chat_id) return alert("يرجى إدخال معرّف الوجهة.");
+        target_name = document.getElementById("pubManualTitle").value.trim() || "وجهة مخصصة";
         topic_id = parseInt(document.getElementById("pubTopicId").value) || null;
       }
 
@@ -797,9 +879,9 @@
 
       startBtn.disabled = true;
       pBox.style.display = "block";
-      pFill.style.width = "30%";
-      pStatus.innerText = "🚀 جاري إرسال الأسئلة في الخلفية...";
-      pCounter.innerText = `${questionsToSend.length} سؤال`;
+      pFill.style.width = "35%";
+      pStatus.innerText = `🚀 جاري جدولة الإرسال إلى (${target_name})...`;
+      pCounter.innerText = `${finalCount} سؤال`;
 
       try {
         const res = await api("/api/publish_batch", {
@@ -808,16 +890,18 @@
             question_ids: questionsToSend.map(q => q.id),
             target_type,
             chat_id,
+            target_name,
             topic_id,
             delay_sec,
             shuffle_options,
             open_period
           })
         });
+        const actualCount = typeof res.queued_count === "number" ? res.queued_count : finalCount;
         pFill.style.width = "100%";
-        pStatus.innerText = `✅ بدأ إرسال ${res.sent} سؤال في الخلفية! يمكنك إغلاق التطبيق الآن.`;
-        pCounter.innerText = `${res.sent} / ${res.sent}`;
-        alert(`✅ تم بدء إرسال ${res.sent} سؤال في الخلفية بنجاح!\nيمكنك إغلاق التطبيق الآن وسيصلك إشعار عند الانتهاء.`);
+        pStatus.innerText = `✅ تم بدء إرسال ${actualCount} سؤال إلى (${res.target_label || target_name}) في الخلفية.`;
+        pCounter.innerText = `${actualCount} سؤال`;
+        alert(`✅ تم بدء إرسال ${actualCount} سؤال إلى (${res.target_label || target_name}).\nسيصلك تقرير بالعدد المرسل فعلياً فور الانتهاء.`);
       } finally {
         startBtn.disabled = false;
       }
@@ -829,15 +913,15 @@
       list.innerHTML = admins.map(a => `
         <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
           <div><strong>${a.name}</strong><br><small style="color:var(--hint);">${a.user_id}</small></div>
-          ${a.is_owner ? '<span class="badge">👑 المالك</span>' : `<button class="btn btn-sm btn-danger" onclick="removeAdmin(${a.user_id})">حذف</button>`}
+          ${a.is_owner ? '<span class="badge">👑 المالك</span>' : `<button class="btn btn-sm btn-danger" onclick="removeAdmin(${a.user_id})">إزالة</button>`}
         </div>
       `).join("");
     }
 
     async function addAdmin() {
       const user_id = parseInt(document.getElementById("newAdminId").value);
-      const name = document.getElementById("newAdminName").value.trim() || "Admin";
-      if (!user_id) return alert("أدخل Telegram ID صحيح");
+      const name = document.getElementById("newAdminName").value.trim() || "مشرف";
+      if (!user_id) return alert("يرجى إدخال معرّف مستخدم صحيح.");
       await api("/api/admins", { method: "POST", body: JSON.stringify({ user_id, name }) });
       document.getElementById("newAdminId").value = "";
       document.getElementById("newAdminName").value = "";
