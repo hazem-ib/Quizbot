@@ -27,15 +27,6 @@ app = FastAPI(title="Quiz Management & Governance System")
 db_pool: Optional[pool.ThreadedConnectionPool] = None
 _db_initialized = False
 
-DEFAULT_ADMIN_PERMS = {
-    "tag": "مشرف",
-    "can_create_bank": True,
-    "can_edit_others_banks": False,
-    "can_delete": False,
-    "can_publish": True,
-    "can_manage_admins": False,
-}
-
 
 def _clean_db_url(url: str) -> str:
     return url.replace("&channel_binding=require", "").replace("?channel_binding=require", "")
@@ -151,9 +142,13 @@ def init_db():
                     actor_tag TEXT,
                     action_type TEXT,
                     description TEXT,
+                    snapshot_data JSONB DEFAULT NULL,
+                    undone BOOLEAN DEFAULT FALSE,
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
                 )
             """)
+            c.execute("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS snapshot_data JSONB DEFAULT NULL")
+            c.execute("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS undone BOOLEAN DEFAULT FALSE")
             c.execute("CREATE INDEX IF NOT EXISTS idx_questions_bank_id ON questions(bank_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at)")
         conn.commit()
@@ -208,14 +203,15 @@ def set_owner_id(user_id: int, name: str = "Owner"):
         conn.commit()
 
 
-def get_actor_profile(user_id: int, fallback_name: str = "مستخدم") -> Optional[Dict[str, Any]]:
+def get_actor_profile(user_id: int, display_name: str, username: Optional[str] = None) -> Optional[Dict[str, Any]]:
     owner = get_owner_id()
     if owner is None:
         return None
     if user_id == owner:
         return {
             "user_id": user_id,
-            "name": fallback_name,
+            "name": display_name,
+            "username": username or "",
             "role": "owner",
             "role_label": "المالك",
             "tag": "المالك",
@@ -237,7 +233,8 @@ def get_actor_profile(user_id: int, fallback_name: str = "مستخدم") -> Opti
         return None
     return {
         "user_id": row[0],
-        "name": row[1] or fallback_name,
+        "name": row[1] or display_name,
+        "username": username or "",
         "role": "admin",
         "role_label": "مشرف",
         "tag": row[2] or "مشرف",
@@ -249,13 +246,18 @@ def get_actor_profile(user_id: int, fallback_name: str = "مستخدم") -> Opti
     }
 
 
-def write_audit_log(actor: Dict[str, Any], action_type: str, description: str):
+def write_audit_log(
+    actor: Dict[str, Any],
+    action_type: str,
+    description: str,
+    snapshot_data: Optional[Dict[str, Any]] = None,
+):
     cleanup_old_logs()
     with PooledConn() as conn:
         with conn.cursor() as c:
             c.execute(
-                """INSERT INTO audit_logs (actor_id, actor_name, actor_role, actor_tag, action_type, description)
-                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                """INSERT INTO audit_logs (actor_id, actor_name, actor_role, actor_tag, action_type, description, snapshot_data, undone)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, FALSE)""",
                 (
                     actor.get("user_id"),
                     actor.get("name", "مستخدم"),
@@ -263,6 +265,7 @@ def write_audit_log(actor: Dict[str, Any], action_type: str, description: str):
                     actor.get("tag", "مشرف"),
                     action_type,
                     description,
+                    json.dumps(snapshot_data, ensure_ascii=False) if snapshot_data is not None else None,
                 ),
             )
         conn.commit()
@@ -271,32 +274,37 @@ def write_audit_log(actor: Dict[str, Any], action_type: str, description: str):
 def verify_actor(init_data: str) -> Dict[str, Any]:
     init_db()
     if not init_data or not init_data.strip():
-        raise HTTPException(status_code=403, detail="⛔ غير مصرح: يجب فتح التطبيق من داخل تيليجرام.")
+        raise HTTPException(status_code=403, detail="غير مصرح: يجب فتح التطبيق من داخل تيليجرام.")
 
     parsed = dict(urllib.parse.parse_qsl(init_data))
     hash_val = parsed.pop("hash", None)
     if not hash_val:
-        raise HTTPException(status_code=403, detail="⛔ توقيع تيليجرام مفقود.")
+        raise HTTPException(status_code=403, detail="توقيع تيليجرام مفقود.")
 
     data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
     secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
     calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
 
     if calculated_hash != hash_val:
-        raise HTTPException(status_code=403, detail="⛔ فشل التحقق الأمني من هوية تيليجرام.")
+        raise HTTPException(status_code=403, detail="فشل التحقق الأمني من هوية تيليجرام.")
 
     user_info = json.loads(parsed.get("user", "{}"))
     user_id = user_info.get("id")
-    first_name = user_info.get("first_name") or user_info.get("username") or "مستخدم"
     if not user_id:
-        raise HTTPException(status_code=403, detail="⛔ تعذر قراءة معرف المستخدم.")
+        raise HTTPException(status_code=403, detail="تعذر قراءة معرف المستخدم.")
+
+    first_name = (user_info.get("first_name") or "").strip()
+    last_name = (user_info.get("last_name") or "").strip()
+    full_name = f"{first_name} {last_name}".strip()
+    username = (user_info.get("username") or "").strip()
+    display_name = full_name or (f"@{username}" if username else f"مستخدم {user_id}")
 
     if get_owner_id() is None:
-        set_owner_id(user_id, first_name)
+        set_owner_id(user_id, display_name)
 
-    profile = get_actor_profile(int(user_id), first_name)
+    profile = get_actor_profile(int(user_id), display_name, username)
     if not profile:
-        raise HTTPException(status_code=403, detail="⛔ هذا النظام مخصص للمالك والمشرفين المعتمدين فقط.")
+        raise HTTPException(status_code=403, detail="هذا النظام مخصص للمالك والمشرفين المعتمدين فقط.")
     return profile
 
 
@@ -327,7 +335,7 @@ def require_bank_edit_access(actor: Dict[str, Any], bank: Dict[str, Any]):
         owner_label = bank.get("owner_name") or "مشرف آخر"
         raise HTTPException(
             status_code=403,
-            detail=f"⛔ لا تملك صلاحية التعديل على بنك أنشأه ({owner_label}).",
+            detail=f"لا تملك صلاحية التعديل على بنك أنشأه ({owner_label}).",
         )
 
 
@@ -404,18 +412,21 @@ def build_bot_app(webapp_url: str = ""):
     async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         init_db()
         user = update.effective_user
-        if get_owner_id() is None:
-            set_owner_id(user.id, user.first_name)
+        full_name = f"{(user.first_name or '').strip()} {(user.last_name or '').strip()}".strip()
+        display_name = full_name or (f"@{user.username}" if user.username else f"مستخدم {user.id}")
 
-        profile = get_actor_profile(user.id, user.first_name)
+        if get_owner_id() is None:
+            set_owner_id(user.id, display_name)
+
+        profile = get_actor_profile(user.id, display_name, user.username)
         if not profile:
-            await update.message.reply_text("⛔ هذا البوت مخصص للمالك والمشرفين المعتمدين فقط.")
+            await update.message.reply_text("هذا البوت مخصص للمالك والمشرفين المعتمدين فقط.")
             return
 
         url = webapp_url or os.environ.get("RENDER_EXTERNAL_URL", "")
-        keyboard = [[InlineKeyboardButton("🚀 فتح نظام إدارة الاختبارات", web_app=WebAppInfo(url=url))]]
+        keyboard = [[InlineKeyboardButton("فتح نظام إدارة الاختبارات", web_app=WebAppInfo(url=url))]]
         await update.message.reply_text(
-            f"👋 أهلاً بك يا **{user.first_name}** ({profile['tag']})!\n\n"
+            f"أهلاً بك يا **{display_name}** ({profile['tag']}).\n\n"
             "• افتح لوحة التحكم لإدارة البنوك، الصلاحيات، الوجهات المحفوظة، وسجل العمليات.\n"
             "• أرسل `/id` داخل أي مجموعة أو موضوع (Topic) أو حوّل رسالة من القناة لاستخراج المعرّف.",
             parse_mode="Markdown",
@@ -426,9 +437,9 @@ def build_bot_app(webapp_url: str = ""):
         chat = update.effective_chat
         msg = update.effective_message
         topic_id = getattr(msg, "message_thread_id", None)
-        text = f"📌 **بيانات الوجهة:**\n• **الاسم:** `{chat.title or chat.first_name}`\n• **Chat ID:** `{chat.id}`"
+        text = f"بيانات الوجهة:\n• الاسم: `{chat.title or chat.first_name}`\n• Chat ID: `{chat.id}`"
         if topic_id:
-            text += f"\n• **Topic ID:** `{topic_id}`"
+            text += f"\n• Topic ID: `{topic_id}`"
         await msg.reply_text(text, parse_mode="Markdown")
 
     async def handle_forwarded(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -437,9 +448,9 @@ def build_bot_app(webapp_url: str = ""):
             origin = msg.forward_origin
             if hasattr(origin, "chat") and origin.chat:
                 await msg.reply_text(
-                    f"✅ **تم استخراج بيانات الوجهة:**\n"
-                    f"• **الاسم:** `{origin.chat.title}`\n"
-                    f"• **Chat ID:** `{origin.chat.id}`",
+                    f"تم استخراج بيانات الوجهة:\n"
+                    f"• الاسم: `{origin.chat.title}`\n"
+                    f"• Chat ID: `{origin.chat.id}`",
                     parse_mode="Markdown",
                 )
 
@@ -460,7 +471,7 @@ async def setup_webhook(request: Request):
     async with bot_app:
         await bot_app.bot.set_webhook(url=webhook_url)
         await bot_app.bot.set_chat_menu_button(
-            menu_button=MenuButtonWebApp(text="📱 إدارة الاختبارات", web_app=WebAppInfo(url=base_url))
+            menu_button=MenuButtonWebApp(text="إدارة الاختبارات", web_app=WebAppInfo(url=base_url))
         )
     return {
         "status": "Webhook & Menu Button configured successfully on Render!",
@@ -529,7 +540,7 @@ async def get_banks(x_telegram_init_data: str = Header(default="")):
 @app.post("/banks")
 async def create_bank(req: BankRenameReq, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
-    require_perm(actor, "can_create_bank", "⛔ لا تملك صلاحية إنشاء بنوك أسئلة جديدة.")
+    require_perm(actor, "can_create_bank", "لا تملك صلاحية إنشاء بنوك أسئلة جديدة.")
     name = req.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="يرجى إدخال اسم البنك.")
@@ -579,7 +590,7 @@ async def rename_bank(bank_id: int, req: BankRenameReq, x_telegram_init_data: st
 @app.delete("/banks/{bank_id}")
 async def delete_bank(bank_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
-    require_perm(actor, "can_delete", "⛔ لا تملك صلاحية الحذف.")
+    require_perm(actor, "can_delete", "لا تملك صلاحية الحذف.")
     bank = get_bank_record(bank_id)
     if not bank:
         raise HTTPException(status_code=404, detail="البنك غير موجود.")
@@ -587,10 +598,39 @@ async def delete_bank(bank_id: int, x_telegram_init_data: str = Header(default="
 
     with PooledConn() as conn:
         with conn.cursor() as c:
+            c.execute(
+                """SELECT question, opt1, opt2, opt3, opt4, correct_idx, explanation
+                   FROM questions WHERE bank_id = %s ORDER BY id ASC""",
+                (bank_id,),
+            )
+            q_rows = c.fetchall()
+            snapshot = {
+                "entity": "bank",
+                "bank_name": bank["name"],
+                "owner_id": bank["owner_id"],
+                "owner_name": bank["owner_name"],
+                "questions": [
+                    {
+                        "question": q[0],
+                        "opt1": q[1],
+                        "opt2": q[2],
+                        "opt3": q[3],
+                        "opt4": q[4],
+                        "correct_idx": q[5],
+                        "explanation": q[6] or "",
+                    }
+                    for q in q_rows
+                ],
+            }
             c.execute("DELETE FROM banks WHERE id = %s", (bank_id,))
         conn.commit()
 
-    write_audit_log(actor, "delete_bank", f"حذف بنك الأسئلة «{bank['name']}» وجميع أسئلته.")
+    write_audit_log(
+        actor,
+        "delete_bank",
+        f"حذف بنك الأسئلة «{bank['name']}» ({len(q_rows)} سؤال).",
+        snapshot_data=snapshot,
+    )
     return {"status": "ok"}
 
 
@@ -681,7 +721,7 @@ async def upload_csv(
                     target_bank_id = bank_id
                     target_bank_name = existing_bank["name"]
                 else:
-                    require_perm(actor, "can_create_bank", "⛔ لا تملك صلاحية إنشاء بنوك جديدة.")
+                    require_perm(actor, "can_create_bank", "لا تملك صلاحية إنشاء بنوك جديدة.")
                     clean_bank = bank_name.strip()
                     if not clean_bank:
                         raise HTTPException(status_code=400, detail="يرجى إدخال اسم البنك.")
@@ -827,23 +867,41 @@ async def move_question(q_id: int, req: MoveQuestionReq, x_telegram_init_data: s
 @app.delete("/questions/{q_id}")
 async def delete_question(q_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
-    require_perm(actor, "can_delete", "⛔ لا تملك صلاحية حذف الأسئلة.")
+    require_perm(actor, "can_delete", "لا تملك صلاحية حذف الأسئلة.")
     with PooledConn() as conn:
         with conn.cursor() as c:
-            c.execute("SELECT bank_id FROM questions WHERE id = %s", (q_id,))
+            c.execute(
+                """SELECT bank_id, question, opt1, opt2, opt3, opt4, correct_idx, explanation
+                   FROM questions WHERE id = %s""",
+                (q_id,),
+            )
             row = c.fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="السؤال غير موجود.")
-    bank = get_bank_record(row[0])
-    if bank:
-        require_bank_edit_access(actor, bank)
-
-    with PooledConn() as conn:
-        with conn.cursor() as c:
+            if not row:
+                raise HTTPException(status_code=404, detail="السؤال غير موجود.")
+            bank = get_bank_record(row[0])
+            if bank:
+                require_bank_edit_access(actor, bank)
+            snapshot = {
+                "entity": "question",
+                "bank_id": row[0],
+                "bank_name": bank["name"] if bank else "",
+                "question": row[1],
+                "opt1": row[2],
+                "opt2": row[3],
+                "opt3": row[4],
+                "opt4": row[5],
+                "correct_idx": row[6],
+                "explanation": row[7] or "",
+            }
             c.execute("DELETE FROM questions WHERE id = %s", (q_id,))
         conn.commit()
 
-    write_audit_log(actor, "delete_question", f"حذف سؤالاً من بنك «{bank['name'] if bank else ''}».")
+    write_audit_log(
+        actor,
+        "delete_question",
+        f"حذف سؤالاً من بنك «{bank['name'] if bank else ''}».",
+        snapshot_data=snapshot,
+    )
     return {"status": "ok"}
 
 
@@ -883,17 +941,28 @@ async def add_community(req: CommunityCreateReq, x_telegram_init_data: str = Hea
 @app.delete("/communities/{comm_id}")
 async def delete_community(comm_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
-    require_perm(actor, "can_delete", "⛔ لا تملك صلاحية حذف الوجهات.")
+    require_perm(actor, "can_delete", "لا تملك صلاحية حذف الوجهات.")
     with PooledConn() as conn:
         with conn.cursor() as c:
-            c.execute("SELECT title FROM communities WHERE id = %s", (comm_id,))
+            c.execute("SELECT title, chat_id, topic_id FROM communities WHERE id = %s", (comm_id,))
             row = c.fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="الوجهة غير موجودة.")
+            snapshot = {
+                "entity": "community",
+                "title": row[0],
+                "chat_id": row[1],
+                "topic_id": row[2],
+            }
             c.execute("DELETE FROM communities WHERE id = %s", (comm_id,))
         conn.commit()
 
-    write_audit_log(actor, "delete_community", f"حذف وجهة الإرسال «{row[0]}».")
+    write_audit_log(
+        actor,
+        "delete_community",
+        f"حذف وجهة الإرسال «{row[0]}».",
+        snapshot_data=snapshot,
+    )
     return {"status": "ok"}
 
 
@@ -904,7 +973,7 @@ async def test_community(req: CommunityCreateReq, x_telegram_init_data: str = He
     bot_app = build_bot_app()
     async with bot_app:
         try:
-            kwargs = {"chat_id": req.chat_id.strip(), "text": "✅ تم التحقق من صلاحيات البوت والاتصال بالوجهة بنجاح."}
+            kwargs = {"chat_id": req.chat_id.strip(), "text": "تم التحقق من صلاحيات البوت والاتصال بالوجهة بنجاح."}
             if req.topic_id:
                 kwargs["message_thread_id"] = req.topic_id
             await bot_app.bot.send_message(**kwargs)
@@ -948,7 +1017,7 @@ async def bg_send_all_questions(
             try:
                 intro_kwargs = {
                     "chat_id": target_chat,
-                    "text": f"📝 **{quiz_title.strip()}**\nعدد الأسئلة: **{total_requested}**",
+                    "text": f"**{quiz_title.strip()}**\nعدد الأسئلة: **{total_requested}**",
                     "parse_mode": "Markdown",
                 }
                 if topic_id:
@@ -1011,12 +1080,12 @@ async def bg_send_all_questions(
 
         try:
             summary_lines = [
-                "📊 **تقرير إرسال الاختبار**",
-                f"• **الوجهة:** {target_label}",
-                f"• **المرسل فعلياً:** **{sent_count}** من **{total_requested}**",
+                "تقرير إرسال الاختبار",
+                f"• الوجهة: {target_label}",
+                f"• المرسل فعلياً: **{sent_count}** من **{total_requested}**",
             ]
             if failed_count > 0:
-                summary_lines.append(f"• **المتعذر إرساله:** **{failed_count}**")
+                summary_lines.append(f"• المتعذر إرساله: **{failed_count}**")
             await bot_app.bot.send_message(
                 chat_id=admin_id,
                 text="\n".join(summary_lines),
@@ -1041,7 +1110,7 @@ async def publish_batch(
     x_telegram_init_data: str = Header(default=""),
 ):
     actor = verify_actor(x_telegram_init_data)
-    require_perm(actor, "can_publish", "⛔ لا تملك صلاحية إرسال الاختبارات.")
+    require_perm(actor, "can_publish", "لا تملك صلاحية إرسال الاختبارات.")
 
     q_ids = list(req.question_ids or [])
     if req.limit_count and req.limit_count > 0:
@@ -1098,7 +1167,7 @@ async def publish_batch(
 @app.get("/admins")
 async def list_admins(x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
-    require_perm(actor, "can_manage_admins", "⛔ إدارة المشرفين غير متاحة لصلاحياتك الحالية.")
+    require_perm(actor, "can_manage_admins", "إدارة المشرفين غير متاحة لصلاحياتك الحالية.")
     owner = get_owner_id()
     with PooledConn() as conn:
         with conn.cursor() as c:
@@ -1128,7 +1197,7 @@ async def list_admins(x_telegram_init_data: str = Header(default="")):
 @app.post("/admins")
 async def upsert_admin(req: AdminUpsertReq, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
-    require_perm(actor, "can_manage_admins", "⛔ لا تملك صلاحية إدارة المشرفين.")
+    require_perm(actor, "can_manage_admins", "لا تملك صلاحية إدارة المشرفين.")
     owner = get_owner_id()
     if req.user_id == owner and actor["role"] != "owner":
         raise HTTPException(status_code=403, detail="لا يمكن تعديل بيانات المالك.")
@@ -1174,7 +1243,7 @@ async def upsert_admin(req: AdminUpsertReq, x_telegram_init_data: str = Header(d
 @app.delete("/admins/{admin_id}")
 async def remove_admin(admin_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
-    require_perm(actor, "can_manage_admins", "⛔ لا تملك صلاحية إزالة المشرفين.")
+    require_perm(actor, "can_manage_admins", "لا تملك صلاحية إزالة المشرفين.")
     owner = get_owner_id()
     if admin_id == owner:
         raise HTTPException(status_code=403, detail="لا يمكن إزالة حساب المالك.")
@@ -1201,29 +1270,152 @@ async def get_logs(x_telegram_init_data: str = Header(default="")):
         with conn.cursor() as c:
             if actor["role"] == "owner" or actor["can_manage_admins"]:
                 c.execute(
-                    """SELECT id, actor_name, actor_role, actor_tag, action_type, description, created_at
+                    """SELECT id, actor_id, actor_name, actor_role, actor_tag, action_type, description, snapshot_data, undone, created_at
                        FROM audit_logs ORDER BY id DESC LIMIT 120"""
                 )
             else:
                 c.execute(
-                    """SELECT id, actor_name, actor_role, actor_tag, action_type, description, created_at
+                    """SELECT id, actor_id, actor_name, actor_role, actor_tag, action_type, description, snapshot_data, undone, created_at
                        FROM audit_logs WHERE actor_id = %s ORDER BY id DESC LIMIT 80""",
                     (actor["user_id"],),
                 )
             rows = c.fetchall()
 
-    return [
-        {
+    result = []
+    for r in rows:
+        snap = r[7]
+        if isinstance(snap, str):
+            try:
+                snap = json.loads(snap)
+            except Exception:
+                snap = None
+        can_undo = bool(snap) and not bool(r[8]) and (
+            actor["role"] == "owner" or (r[1] is not None and int(r[1]) == int(actor["user_id"]))
+        )
+        result.append({
             "id": r[0],
-            "actor_name": r[1],
-            "actor_role": r[2],
-            "actor_tag": r[3] or ("المالك" if r[2] == "owner" else "مشرف"),
-            "action_type": r[4],
-            "description": r[5],
-            "created_at": r[6].isoformat() if r[6] else None,
-        }
-        for r in rows
-    ]
+            "actor_name": r[2],
+            "actor_role": r[3],
+            "actor_tag": r[4] or ("المالك" if r[3] == "owner" else "مشرف"),
+            "action_type": r[5],
+            "description": r[6],
+            "can_undo": can_undo,
+            "undone": bool(r[8]),
+            "created_at": r[9].isoformat() if r[9] else None,
+        })
+    return result
+
+
+@app.post("/api/logs/{log_id}/undo")
+@app.post("/logs/{log_id}/undo")
+async def undo_log_action(log_id: int, x_telegram_init_data: str = Header(default="")):
+    actor = verify_actor(x_telegram_init_data)
+    cleanup_old_logs()
+
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute(
+                """SELECT id, actor_id, action_type, description, snapshot_data, undone
+                   FROM audit_logs WHERE id = %s""",
+                (log_id,),
+            )
+            row = c.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="السجل غير موجود أو انتهت صلاحيته.")
+            if bool(row[5]):
+                raise HTTPException(status_code=400, detail="تم التراجع عن هذه العملية مسبقاً.")
+
+            if actor["role"] != "owner" and (row[1] is None or int(row[1]) != int(actor["user_id"])):
+                raise HTTPException(status_code=403, detail="غير مسموح بالتراجع عن عملية قام بها مستخدم آخر.")
+
+            snap = row[4]
+            if isinstance(snap, str):
+                snap = json.loads(snap)
+            if not isinstance(snap, dict) or not snap.get("entity"):
+                raise HTTPException(status_code=400, detail="هذه العملية لا تدعم التراجع.")
+
+            entity = snap.get("entity")
+            restored_msg = ""
+
+            if entity == "bank":
+                bank_name = snap.get("bank_name")
+                c.execute("SELECT id FROM banks WHERE name = %s", (bank_name,))
+                existing = c.fetchone()
+                if existing:
+                    target_bank_id = existing[0]
+                    restored_name = f"{bank_name} (مستعاد)"
+                    c.execute(
+                        "INSERT INTO banks (name, owner_id, owner_name) VALUES (%s, %s, %s) RETURNING id",
+                        (restored_name, snap.get("owner_id") or actor["user_id"], snap.get("owner_name") or actor["name"]),
+                    )
+                    target_bank_id = c.fetchone()[0]
+                else:
+                    restored_name = bank_name
+                    c.execute(
+                        "INSERT INTO banks (name, owner_id, owner_name) VALUES (%s, %s, %s) RETURNING id",
+                        (restored_name, snap.get("owner_id") or actor["user_id"], snap.get("owner_name") or actor["name"]),
+                    )
+                    target_bank_id = c.fetchone()[0]
+
+                q_list = snap.get("questions") or []
+                for q in q_list:
+                    c.execute(
+                        """INSERT INTO questions (bank_id, question, opt1, opt2, opt3, opt4, correct_idx, explanation)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                        (
+                            target_bank_id,
+                            q["question"],
+                            q["opt1"],
+                            q["opt2"],
+                            q["opt3"],
+                            q["opt4"],
+                            q["correct_idx"],
+                            q.get("explanation", ""),
+                        ),
+                    )
+                restored_msg = f"تراجع عن حذف البنك «{restored_name}» واستعاد {len(q_list)} سؤالاً."
+
+            elif entity == "question":
+                target_bank_id = snap.get("bank_id")
+                c.execute("SELECT id, name FROM banks WHERE id = %s", (target_bank_id,))
+                b_row = c.fetchone()
+                if not b_row:
+                    raise HTTPException(status_code=400, detail="البنك الأصلي للسؤال لم يعد موجوداً.")
+                c.execute(
+                    """INSERT INTO questions (bank_id, question, opt1, opt2, opt3, opt4, correct_idx, explanation)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (
+                        target_bank_id,
+                        snap["question"],
+                        snap["opt1"],
+                        snap["opt2"],
+                        snap["opt3"],
+                        snap["opt4"],
+                        snap["correct_idx"],
+                        snap.get("explanation", ""),
+                    ),
+                )
+                restored_msg = f"تراجع عن حذف سؤال من بنك «{b_row[1]}»."
+
+            elif entity == "community":
+                c.execute(
+                    "INSERT INTO communities (title, chat_id, topic_id) VALUES (%s, %s, %s)",
+                    (snap["title"], snap["chat_id"], snap.get("topic_id")),
+                )
+                restored_msg = f"تراجع عن حذف الوجهة «{snap['title']}»."
+
+            else:
+                raise HTTPException(status_code=400, detail="نوع العملية غير مدعوم للتراجع.")
+
+            c.execute("UPDATE audit_logs SET undone = TRUE WHERE id = %s", (log_id,))
+            c.execute(
+                """INSERT INTO audit_logs (actor_id, actor_name, actor_role, actor_tag, action_type, description, snapshot_data, undone)
+                   VALUES (%s, %s, %s, %s, 'undo_action', %s, NULL, FALSE)""",
+                (actor["user_id"], actor["name"], actor["role"], actor["tag"], restored_msg),
+            )
+        conn.commit()
+
+    return {"status": "ok", "message": restored_msg}
 
 
 @app.delete("/api/logs")
