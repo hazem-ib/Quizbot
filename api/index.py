@@ -123,10 +123,13 @@ def init_db():
                     bank_id INTEGER REFERENCES banks(id) ON DELETE CASCADE,
                     question TEXT,
                     opt1 TEXT, opt2 TEXT, opt3 TEXT, opt4 TEXT,
+                    options_json JSONB DEFAULT NULL,
                     correct_idx INTEGER,
                     explanation TEXT DEFAULT ''
                 )
             """)
+            c.execute("ALTER TABLE questions ADD COLUMN IF NOT EXISTS options_json JSONB DEFAULT NULL")
+
             c.execute("""
                 CREATE TABLE IF NOT EXISTS communities (
                     id SERIAL PRIMARY KEY,
@@ -198,6 +201,42 @@ def cleanup_old_logs():
             c.execute("DELETE FROM audit_logs WHERE created_at < %s", (cutoff,))
             c.execute("DELETE FROM publish_jobs WHERE created_at < %s", (cutoff,))
         conn.commit()
+
+
+def normalize_options_list(
+    options: Optional[List[str]] = None,
+    opt1: str = "",
+    opt2: str = "",
+    opt3: str = "",
+    opt4: str = "",
+) -> List[str]:
+    if options and isinstance(options, list):
+        cleaned = [str(x).strip() for x in options if x is not None and str(x).strip() != ""]
+    else:
+        raw = [opt1, opt2, opt3, opt4]
+        cleaned = [str(x).strip() for x in raw if x is not None and str(x).strip() != "" and str(x).strip() != "-"]
+    return cleaned[:10]
+
+
+def unpack_row_options(row_tuple) -> List[str]:
+    # row_tuple: (opt1, opt2, opt3, opt4, options_json)
+    o1, o2, o3, o4, opts_json = row_tuple
+    if opts_json:
+        parsed = opts_json if isinstance(opts_json, list) else json.loads(opts_json)
+        cleaned = [str(x).strip() for x in parsed if str(x).strip()]
+        if len(cleaned) >= 2:
+            return cleaned[:10]
+    fallback = [str(x).strip() for x in (o1, o2, o3, o4) if x is not None and str(x).strip() not in ("", "-")]
+    if len(fallback) >= 2:
+        return fallback
+    return [str(o1 or "-"), str(o2 or "-")]
+
+
+def legacy_four_cols(opts: List[str]):
+    padded = list(opts[:4])
+    while len(padded) < 4:
+        padded.append("-")
+    return padded[0], padded[1], padded[2], padded[3]
 
 
 def get_owner_id() -> Optional[int]:
@@ -402,11 +441,27 @@ def _insert_questions_into_bank(
                     b_row = c.fetchone()
                     target_bank_id, target_bank_name = b_row[0], b_row[1]
 
-                for q_text, o1, o2, o3, o4, c_idx, expl in rows_to_insert:
+                for item in rows_to_insert:
+                    if len(item) == 4:
+                        q_text, opts_list, c_idx, expl = item
+                    else:
+                        q_text, o1, o2, o3, o4, c_idx, expl = item
+                        opts_list = normalize_options_list(opt1=o1, opt2=o2, opt3=o3, opt4=o4)
+                    o1, o2, o3, o4 = legacy_four_cols(opts_list)
                     c.execute(
-                        """INSERT INTO questions (bank_id, question, opt1, opt2, opt3, opt4, correct_idx, explanation)
-                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                        (target_bank_id, q_text, o1, o2, o3, o4, c_idx, expl),
+                        """INSERT INTO questions (bank_id, question, opt1, opt2, opt3, opt4, options_json, correct_idx, explanation)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s)""",
+                        (
+                            target_bank_id,
+                            q_text,
+                            o1,
+                            o2,
+                            o3,
+                            o4,
+                            json.dumps(opts_list, ensure_ascii=False),
+                            c_idx,
+                            expl,
+                        ),
                     )
             conn.commit()
             return {"bank_id": target_bank_id, "bank_name": target_bank_name, "added": len(rows_to_insert)}
@@ -437,10 +492,11 @@ async def serve_home():
 
 class QuestionUpdate(BaseModel):
     question: str
-    opt1: str
-    opt2: str
-    opt3: str
-    opt4: str
+    options: Optional[List[str]] = None
+    opt1: Optional[str] = ""
+    opt2: Optional[str] = ""
+    opt3: Optional[str] = ""
+    opt4: Optional[str] = ""
     correct_idx: int
     explanation: Optional[str] = ""
 
@@ -554,15 +610,15 @@ def build_bot_app(webapp_url: str = ""):
             write_audit_log(
                 actor,
                 "import_pdf_bot",
-                f"استورد {parsed['total_extracted']} سؤال MCQ من PDF عبر البوت إلى «{saved['bank_name']}» (مراجعة: {parsed['needs_review_count']}، مقالي مفصول: {parsed['essay_count']}).",
+                f"استورد {parsed['total_extracted']} سؤال MCQ من PDF عبر البوت إلى «{saved['bank_name']}» (مراجعة: {parsed['needs_review_count']}، مقالي معزول: {parsed['essay_count']}).",
             )
             await update.message.reply_text(
                 f"تم حفظ {parsed['total_extracted']} سؤال MCQ في البنك «{saved['bank_name']}».\n"
                 f"المؤكدة تلقائياً: {parsed['verified_count']} | تحتاج مراجعة: {parsed['needs_review_count']}\n"
-                f"الأسئلة المقالية المفصولة خارج الاختيارات: {parsed['essay_count']}"
+                f"الأسئلة المقالية المعزولة: {parsed['essay_count']}"
             )
         except Exception as e:
-            await update.message.reply_text(f"تعذر استخراج الأسئلة بأمان: {e}")
+            await update.message.reply_text(f"تعذر استخراج الأسئلة: {e}")
 
     application.add_handler(CommandHandler("start", start_cmd))
     application.add_handler(MessageHandler(filters.Document.PDF, handle_pdf_doc))
@@ -707,22 +763,23 @@ async def delete_bank(bank_id: int, x_telegram_init_data: str = Header(default="
     with PooledConn() as conn:
         with conn.cursor() as c:
             c.execute(
-                "SELECT question, opt1, opt2, opt3, opt4, correct_idx, explanation FROM questions WHERE bank_id = %s ORDER BY id ASC",
+                "SELECT question, opt1, opt2, opt3, opt4, options_json, correct_idx, explanation FROM questions WHERE bank_id = %s ORDER BY id ASC",
                 (bank_id,),
             )
             q_rows = c.fetchall()
-            snapshot_questions = [
-                {
+            snapshot_questions = []
+            for r in q_rows:
+                opts_list = unpack_row_options((r[1], r[2], r[3], r[4], r[5]))
+                snapshot_questions.append({
                     "question": r[0],
+                    "options": opts_list,
                     "opt1": r[1],
                     "opt2": r[2],
                     "opt3": r[3],
                     "opt4": r[4],
-                    "correct_idx": r[5],
-                    "explanation": r[6] or "",
-                }
-                for r in q_rows
-            ]
+                    "correct_idx": r[6],
+                    "explanation": r[7] or "",
+                })
             c.execute("DELETE FROM banks WHERE id = %s", (bank_id,))
         conn.commit()
 
@@ -757,7 +814,7 @@ async def export_questions_csv(
         with conn.cursor() as c:
             if req.question_ids:
                 c.execute(
-                    """SELECT id, question, opt1, opt2, opt3, opt4, correct_idx, explanation
+                    """SELECT id, question, opt1, opt2, opt3, opt4, options_json, correct_idx, explanation
                        FROM questions WHERE bank_id = %s AND id = ANY(%s)""",
                     (req.bank_id, req.question_ids),
                 )
@@ -765,7 +822,7 @@ async def export_questions_csv(
                 rows = [q_map[qid] for qid in req.question_ids if qid in q_map]
             else:
                 c.execute(
-                    """SELECT id, question, opt1, opt2, opt3, opt4, correct_idx, explanation
+                    """SELECT id, question, opt1, opt2, opt3, opt4, options_json, correct_idx, explanation
                        FROM questions WHERE bank_id = %s ORDER BY id ASC""",
                     (req.bank_id,),
                 )
@@ -774,12 +831,17 @@ async def export_questions_csv(
     if not rows:
         raise HTTPException(status_code=400, detail="لا توجد أسئلة محددة للتصدير.")
 
+    letters = "ABCDEFGHIJ"
     buf = io.StringIO()
     writer = csv.writer(buf)
     for r in rows:
-        _, q_text, o1, o2, o3, o4, c_idx, expl = r
-        ans_letter = ["A", "B", "C", "D"][c_idx] if isinstance(c_idx, int) and 0 <= c_idx <= 3 else "A"
-        writer.writerow([q_text, o1, o2, o3, o4, ans_letter, expl or ""])
+        _, q_text, o1, o2, o3, o4, opts_json, c_idx, expl = r
+        opts = unpack_row_options((o1, o2, o3, o4, opts_json))
+        padded_opts = list(opts)
+        while len(padded_opts) < 4:
+            padded_opts.append("-")
+        ans_letter = letters[c_idx] if isinstance(c_idx, int) and 0 <= c_idx < len(letters) else "A"
+        writer.writerow([q_text, *padded_opts, ans_letter, expl or ""])
 
     csv_bytes = buf.getvalue().encode("utf-8-sig")
     safe_slug = re.sub(r"[^\w\u0600-\u06FF-]+", "_", bank["name"]).strip("_") or "bank_questions"
@@ -850,16 +912,25 @@ async def undo_audit_log(log_id: int, x_telegram_init_data: str = Header(default
 
             q_list = payload.get("questions") or []
             for q in q_list:
+                opts = normalize_options_list(
+                    options=q.get("options"),
+                    opt1=q.get("opt1", ""),
+                    opt2=q.get("opt2", ""),
+                    opt3=q.get("opt3", ""),
+                    opt4=q.get("opt4", ""),
+                )
+                o1, o2, o3, o4 = legacy_four_cols(opts)
                 c.execute(
-                    """INSERT INTO questions (bank_id, question, opt1, opt2, opt3, opt4, correct_idx, explanation)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                    """INSERT INTO questions (bank_id, question, opt1, opt2, opt3, opt4, options_json, correct_idx, explanation)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s)""",
                     (
                         new_bank_id,
                         q["question"],
-                        q["opt1"],
-                        q["opt2"],
-                        q["opt3"],
-                        q["opt4"],
+                        o1,
+                        o2,
+                        o3,
+                        o4,
+                        json.dumps(opts, ensure_ascii=False),
                         q["correct_idx"],
                         q.get("explanation", ""),
                     ),
@@ -889,13 +960,17 @@ def parse_correct_index(ans_raw_val, opts: list) -> Optional[int]:
         if s_norm == opt_norm and opt_norm != "-":
             return i
 
-    num_map = {"1": 0, "2": 1, "3": 2, "4": 3, "1.0": 0, "2.0": 1, "3.0": 2, "4.0": 3}
-    if s in num_map:
-        return num_map[s]
+    if re.fullmatch(r"\d+(\.0+)?", s):
+        num = int(float(s))
+        if 1 <= num <= len(opts):
+            return num - 1
 
     s_clean = s.upper().rstrip(".").rstrip(")").strip()
-    letter_map = {"A": 0, "B": 1, "C": 2, "D": 3, "أ": 0, "ا": 0, "ب": 1, "ج": 2, "د": 3}
-    if s_clean in letter_map:
+    letter_map = {
+        "A": 0, "B": 1, "C": 2, "D": 3, "E": 4, "F": 5, "G": 6, "H": 7, "I": 8, "J": 9,
+        "أ": 0, "ا": 0, "ب": 1, "ج": 2, "د": 3, "هـ": 4, "ه": 4, "و": 5, "ز": 6, "ح": 7,
+    }
+    if s_clean in letter_map and letter_map[s_clean] < len(opts):
         return letter_map[s_clean]
 
     return None
@@ -920,7 +995,7 @@ async def upload_pdf(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"تعذر تحليل ملف PDF بأمان: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"تعذر تحليل ملف PDF: {str(e)}")
 
     saved = _insert_questions_into_bank(
         actor,
@@ -931,7 +1006,7 @@ async def upload_pdf(
     write_audit_log(
         actor,
         "import_pdf",
-        f"استورد {parsed['total_extracted']} سؤال MCQ من PDF إلى بنك «{saved['bank_name']}» (يحتاج مراجعة: {parsed['needs_review_count']}، مقالي مفصول: {parsed['essay_count']}).",
+        f"استورد {parsed['total_extracted']} سؤال MCQ من PDF إلى بنك «{saved['bank_name']}» (مراجعة: {parsed['needs_review_count']}، مقالي معزول: {parsed['essay_count']}).",
     )
     return {
         "status": "ok",
@@ -966,35 +1041,47 @@ async def upload_csv(
     if df is None or df.empty:
         raise HTTPException(status_code=400, detail="تعذر قراءة ملف CSV أو الملف فارغ.")
 
-    if df.shape[1] < 6:
-        raise HTTPException(status_code=400, detail=f"الملف يحتوي على {df.shape[1]} أعمدة فقط؛ المطلوب 6 أعمدة على الأقل.")
+    if df.shape[1] < 4:
+        raise HTTPException(status_code=400, detail=f"الملف يحتوي على {df.shape[1]} أعمدة فقط؛ المطلوب 4 أعمدة على الأقل.")
 
-    first_opts = [str(df.iloc[0, i]).strip() if not pd.isna(df.iloc[0, i]) else "" for i in range(1, 5)]
-    if parse_correct_index(df.iloc[0, 5], first_opts) is None:
+    def _extract_csv_row(row_vals):
+        non_empty = [
+            (col_i, str(val).strip())
+            for col_i, val in enumerate(row_vals)
+            if not pd.isna(val) and str(val).strip() != ""
+        ]
+        if len(non_empty) < 4:
+            return None
+        q_text = non_empty[0][1]
+        # البحث عن عمود الإجابة من النهاية أو ما قبل الشرح
+        for ans_pos in (len(non_empty) - 1, len(non_empty) - 2):
+            if ans_pos >= 3:
+                candidate_opts = [x[1] for x in non_empty[1:ans_pos] if x[1] != "-"]
+                if 2 <= len(candidate_opts) <= 10:
+                    c_idx = parse_correct_index(non_empty[ans_pos][1], candidate_opts)
+                    if c_idx is not None:
+                        expl = non_empty[ans_pos + 1][1] if ans_pos + 1 < len(non_empty) else ""
+                        return (q_text, candidate_opts, c_idx, expl)
+        return "INVALID_ANSWER"
+
+    first_check = _extract_csv_row(df.iloc[0].tolist())
+    if first_check in (None, "INVALID_ANSWER"):
         df = df.iloc[1:]
 
     rows_to_insert = []
     for idx, row in df.iterrows():
         if pd.isna(row[0]) or str(row[0]).strip() == "":
             continue
-        q_text = str(row[0]).strip()
-        opts = [
-            str(row[i]).strip() if not pd.isna(row[i]) and str(row[i]).strip() != "" else "-"
-            for i in range(1, 5)
-        ]
-        if all(o == "-" for o in opts):
+        parsed_row = _extract_csv_row(row.tolist())
+        if parsed_row is None:
             continue
-
-        c_idx = parse_correct_index(row[5], opts)
-        if c_idx is None:
-            val_found = "" if pd.isna(row[5]) else str(row[5]).strip()
+        if parsed_row == "INVALID_ANSWER":
+            q_preview = str(row[0]).strip()[:30]
             raise HTTPException(
                 status_code=400,
-                detail=f"خطأ في الصف {idx + 1} (السؤال: {q_text[:30]}...): قيمة الإجابة الصحيحة غير صالحة ('{val_found}').",
+                detail=f"خطأ في الصف {idx + 1} (السؤال: {q_preview}...): تعذر تحديد الإجابة الصحيحة أو عدد الخيارات خارج النطاق (2 إلى 10).",
             )
-
-        expl = str(row[6]).strip() if df.shape[1] > 6 and not pd.isna(row[6]) else ""
-        rows_to_insert.append((q_text, opts[0], opts[1], opts[2], opts[3], c_idx, expl))
+        rows_to_insert.append(parsed_row)
 
     saved = _insert_questions_into_bank(
         actor,
@@ -1017,23 +1104,28 @@ async def get_questions(bank_id: int, x_telegram_init_data: str = Header(default
     with PooledConn() as conn:
         with conn.cursor() as c:
             c.execute(
-                "SELECT id, question, opt1, opt2, opt3, opt4, correct_idx, explanation FROM questions WHERE bank_id = %s ORDER BY id ASC",
+                """SELECT id, question, opt1, opt2, opt3, opt4, options_json, correct_idx, explanation
+                   FROM questions WHERE bank_id = %s ORDER BY id ASC""",
                 (bank_id,),
             )
             rows = c.fetchall()
-    return [
-        {
+
+    result = []
+    for r in rows:
+        opts = unpack_row_options((r[2], r[3], r[4], r[5], r[6]))
+        c_idx = r[7] if isinstance(r[7], int) and 0 <= r[7] < len(opts) else 0
+        result.append({
             "id": r[0],
             "question": r[1],
-            "opt1": r[2],
-            "opt2": r[3],
-            "opt3": r[4],
-            "opt4": r[5],
-            "correct_idx": r[6],
-            "explanation": r[7],
-        }
-        for r in rows
-    ]
+            "options": opts,
+            "opt1": opts[0] if len(opts) > 0 else "-",
+            "opt2": opts[1] if len(opts) > 1 else "-",
+            "opt3": opts[2] if len(opts) > 2 else "-",
+            "opt4": opts[3] if len(opts) > 3 else "-",
+            "correct_idx": c_idx,
+            "explanation": r[8],
+        })
+    return result
 
 
 @app.post("/api/questions")
@@ -1045,12 +1137,29 @@ async def add_question(req: QuestionCreate, x_telegram_init_data: str = Header(d
         raise HTTPException(status_code=404, detail="البنك غير موجود.")
     require_bank_edit_access(actor, bank)
 
+    opts = normalize_options_list(req.options, req.opt1, req.opt2, req.opt3, req.opt4)
+    if len(opts) < 2:
+        raise HTTPException(status_code=400, detail="يجب إدخال خيارين على الأقل.")
+    if not (0 <= req.correct_idx < len(opts)):
+        raise HTTPException(status_code=400, detail="رقم الخيار الصحيح غير صالح.")
+
+    o1, o2, o3, o4 = legacy_four_cols(opts)
     with PooledConn() as conn:
         with conn.cursor() as c:
             c.execute(
-                """INSERT INTO questions (bank_id, question, opt1, opt2, opt3, opt4, correct_idx, explanation)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                (req.bank_id, req.question, req.opt1, req.opt2, req.opt3, req.opt4, req.correct_idx, req.explanation),
+                """INSERT INTO questions (bank_id, question, opt1, opt2, opt3, opt4, options_json, correct_idx, explanation)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s)""",
+                (
+                    req.bank_id,
+                    req.question,
+                    o1,
+                    o2,
+                    o3,
+                    o4,
+                    json.dumps(opts, ensure_ascii=False),
+                    req.correct_idx,
+                    req.explanation,
+                ),
             )
         conn.commit()
 
@@ -1072,13 +1181,30 @@ async def update_question(q_id: int, req: QuestionUpdate, x_telegram_init_data: 
     if bank:
         require_bank_edit_access(actor, bank)
 
+    opts = normalize_options_list(req.options, req.opt1, req.opt2, req.opt3, req.opt4)
+    if len(opts) < 2:
+        raise HTTPException(status_code=400, detail="يجب إدخال خيارين على الأقل.")
+    if not (0 <= req.correct_idx < len(opts)):
+        raise HTTPException(status_code=400, detail="رقم الخيار الصحيح غير صالح.")
+
+    o1, o2, o3, o4 = legacy_four_cols(opts)
     with PooledConn() as conn:
         with conn.cursor() as c:
             c.execute(
                 """UPDATE questions
-                   SET question=%s, opt1=%s, opt2=%s, opt3=%s, opt4=%s, correct_idx=%s, explanation=%s
+                   SET question=%s, opt1=%s, opt2=%s, opt3=%s, opt4=%s, options_json=%s::jsonb, correct_idx=%s, explanation=%s
                    WHERE id=%s""",
-                (req.question, req.opt1, req.opt2, req.opt3, req.opt4, req.correct_idx, req.explanation, q_id),
+                (
+                    req.question,
+                    o1,
+                    o2,
+                    o3,
+                    o4,
+                    json.dumps(opts, ensure_ascii=False),
+                    req.correct_idx,
+                    req.explanation,
+                    q_id,
+                ),
             )
         conn.commit()
 
@@ -1125,7 +1251,7 @@ async def copy_question(q_id: int, req: TransferQuestionReq, x_telegram_init_dat
     with PooledConn() as conn:
         with conn.cursor() as c:
             c.execute(
-                "SELECT bank_id, question, opt1, opt2, opt3, opt4, correct_idx, explanation FROM questions WHERE id = %s",
+                "SELECT bank_id, question, opt1, opt2, opt3, opt4, options_json, correct_idx, explanation FROM questions WHERE id = %s",
                 (q_id,),
             )
             row = c.fetchone()
@@ -1138,12 +1264,13 @@ async def copy_question(q_id: int, req: TransferQuestionReq, x_telegram_init_dat
         raise HTTPException(status_code=404, detail="البنك الهدف غير موجود.")
     require_bank_edit_access(actor, dst_bank)
 
+    opts_json_str = json.dumps(unpack_row_options((row[2], row[3], row[4], row[5], row[6])), ensure_ascii=False)
     with PooledConn() as conn:
         with conn.cursor() as c:
             c.execute(
-                """INSERT INTO questions (bank_id, question, opt1, opt2, opt3, opt4, correct_idx, explanation)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                (req.target_bank_id, row[1], row[2], row[3], row[4], row[5], row[6], row[7]),
+                """INSERT INTO questions (bank_id, question, opt1, opt2, opt3, opt4, options_json, correct_idx, explanation)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s)""",
+                (req.target_bank_id, row[1], row[2], row[3], row[4], row[5], opts_json_str, row[7], row[8]),
             )
         conn.commit()
 
@@ -1212,7 +1339,7 @@ async def add_community(req: CommunityCreateReq, x_telegram_init_data: str = Hea
 
 
 @app.delete("/api/communities/{comm_id}")
-@app.delete("/api/communities/{comm_id}")
+@app.delete("/communities/{comm_id}")
 async def delete_community(comm_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_delete", "لا تملك صلاحية حذف الوجهات.")
@@ -1265,7 +1392,8 @@ async def execute_publish_job(
         with conn.cursor() as c:
             c.execute("UPDATE publish_jobs SET status = 'running' WHERE id = %s", (job_id,))
             c.execute(
-                "SELECT id, question, opt1, opt2, opt3, opt4, correct_idx, explanation FROM questions WHERE id = ANY(%s)",
+                """SELECT id, question, opt1, opt2, opt3, opt4, options_json, correct_idx, explanation
+                   FROM questions WHERE id = ANY(%s)""",
                 (q_ids,),
             )
             q_map = {r[0]: r for r in c.fetchall()}
@@ -1296,15 +1424,16 @@ async def execute_publish_job(
                 pass
 
         for idx, row in enumerate(ordered_rows):
-            qid, q_text, o1, o2, o3, o4, c_idx, expl = row
-            opts = [o1[:98], o2[:98], o3[:98], o4[:98]]
-            current_correct = c_idx
+            qid, q_text, o1, o2, o3, o4, opts_json, c_idx, expl = row
+            raw_opts = unpack_row_options((o1, o2, o3, o4, opts_json))
+            opts = [x[:98] for x in raw_opts[:10]]
+            current_correct = c_idx if isinstance(c_idx, int) and 0 <= c_idx < len(opts) else 0
 
             if shuffle_options:
                 indexed = list(enumerate(opts))
                 random.shuffle(indexed)
                 opts = [x[1] for x in indexed]
-                current_correct = [i for i, x in enumerate(indexed) if x[0] == c_idx][0]
+                current_correct = [i for i, x in enumerate(indexed) if x[0] == current_correct][0]
 
             kwargs = {
                 "chat_id": target_chat,
