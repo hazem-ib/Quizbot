@@ -123,7 +123,6 @@
     .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 11px; font-size: 0.85rem; }
     .switch-row input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--btn); flex-shrink: 0; }
     .hint-box { background: rgba(59,130,246,0.1); border-right: 3px solid var(--btn); padding: 10px 12px; border-radius: 10px; font-size: 0.8rem; margin-bottom: 13px; color: var(--text); line-height: 1.55; }
-    .err-box { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.35); color: #fca5a5; padding: 9px 11px; border-radius: 10px; font-size: 0.78rem; margin-top: 8px; word-break: break-word; }
 
     .select-list { max-height: 230px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 8px; background: var(--bg); margin-bottom: 12px; }
     .select-q-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.83rem; }
@@ -131,9 +130,18 @@
     .select-q-item input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0; }
     .select-q-item.excluded { opacity: 0.4; text-decoration: line-through; }
 
-    .progress-box { background: var(--bg); border-radius: 14px; padding: 13px; margin-top: 13px; border: 1px solid rgba(59,130,246,0.35); display: none; }
-    .progress-bar-bg { width: 100%; height: 10px; background: rgba(255,255,255,0.08); border-radius: 99px; overflow: hidden; margin: 9px 0 4px; }
-    .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); width: 0%; transition: width 0.25s; }
+    .progress-box { background: var(--bg); border-radius: 12px; padding: 13px; margin-top: 13px; border: 1px solid rgba(59,130,246,0.35); display: none; }
+    .progress-bar-bg { width: 100%; height: 9px; background: rgba(255,255,255,0.08); border-radius: 99px; overflow: hidden; margin: 9px 0 3px; }
+    .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); width: 0%; transition: width 0.3s; }
+
+    .job-card { background: var(--bg); border: 1px solid var(--card-border); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+    .job-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .job-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; }
+    .stat-box { background: var(--sec-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 8px; text-align: center; }
+    .stat-val { font-size: 0.98rem; font-weight: 700; display: block; }
+    .stat-lbl { font-size: 0.7rem; color: var(--hint); }
+    .val-ok { color: #34d399; }
+    .val-err { color: #f87171; }
 
     .perm-pills { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
     .perm-pill { font-size: 0.7rem; padding: 3px 8px; border-radius: 8px; background: rgba(255,255,255,0.06); color: var(--hint); }
@@ -299,7 +307,7 @@
       <div id="communitiesList"></div>
     </div>
 
-    <!-- تبويب الإرسال (البروجريس فقط) -->
+    <!-- تبويب الإرسال والتقارير -->
     <div id="tab-publish" class="tab">
       <div class="card">
         <h3><svg class="ico"><use href="#i-send"/></svg> إرسال الاختبار</h3>
@@ -342,7 +350,7 @@
           <input type="checkbox" id="enableLimit" onchange="toggleLimitInput()" />
         </div>
         <div id="limitBox" style="display:none;">
-          <label>عدد الأسئلة المطلوب إرسالها (اتركه فارغاً لإرسال كل المحدد):</label>
+          <label>عدد الأسئلة المطلوب إرسالها:</label>
           <input type="number" id="pubLimit" min="1" placeholder="مثال: 15" />
         </div>
 
@@ -379,23 +387,24 @@
         </button>
 
         <div id="progressBox" class="progress-box">
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:0.85rem;">
+          <div style="display:flex; justify-content:space-between; font-size:0.84rem;">
             <span id="progressStatus">جاري جدولة الإرسال...</span>
-            <strong id="progressCounter">0 / 0</strong>
+            <strong id="progressCounter">0 سؤال</strong>
           </div>
           <div class="progress-bar-bg">
             <div id="progressBarFill" class="progress-bar-fill"></div>
           </div>
-          <div id="progressErrBox" class="err-box" style="display:none;"></div>
-          <div id="progressControls" class="row-actions" style="display:none; margin-top:10px;">
-            <button type="button" class="btn btn-sm btn-outline" id="btnPauseResumeJob" onclick="togglePauseResumeActiveJob()">
-              إيقاف مؤقت
-            </button>
-            <button type="button" class="btn btn-sm btn-danger" id="btnCancelActiveJob" onclick="cancelActiveJob()">
-              إيقاف وإلغاء الإرسال
-            </button>
-          </div>
         </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <h3 style="margin:0;">تقارير الإرسال ومتابعة المتعذر</h3>
+          <button class="btn btn-outline btn-sm" onclick="loadPublishJobs()">
+            <svg class="ico ico-sm"><use href="#i-refresh"/></svg> تحديث
+          </button>
+        </div>
+        <div id="publishJobsList"></div>
       </div>
     </div>
 
@@ -448,7 +457,7 @@
             <button class="btn btn-outline btn-sm" onclick="loadLogs()">
               <svg class="ico ico-sm"><use href="#i-refresh"/></svg> تحديث
             </button>
-            <button class="btn btn-danger btn-sm" id="btnClearLogs" onclick="clearLogs()">
+            <button class="btn btn-danger btn-sm" id="btnClearLogs" style="display:none;" onclick="clearLogs()">
               <svg class="ico ico-sm"><use href="#i-trash"/></svg> مسح السجل
             </button>
           </div>
@@ -557,8 +566,6 @@
     let pubBankQuestions = [];
     let activePubBankId = null;
     let banksLoadedOnce = false;
-    let activeJobId = null;
-    let activeJobPollTimer = null;
 
     function renderUserIdentityCard() {
       const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ").trim();
@@ -619,7 +626,7 @@
       const canMgrAdmins = currentActor.role === "owner" || currentActor.can_manage_admins;
       document.getElementById("nav-admins").style.display = canMgrAdmins ? "flex" : "none";
       document.getElementById("permManageRow").style.display = currentActor.role === "owner" ? "flex" : "none";
-      document.getElementById("btnClearLogs").style.display = canMgrAdmins ? "inline-flex" : "none";
+      document.getElementById("btnClearLogs").style.display = currentActor.role === "owner" ? "inline-flex" : "none";
     }
 
     async function initApp() {
@@ -634,7 +641,7 @@
         document.getElementById("appContainer").style.display = "block";
         applyActorUI();
 
-        const tasks = [loadBanks(), loadCommunities(), syncActiveProgress(), loadLogs()];
+        const tasks = [loadBanks(), loadCommunities(), loadPublishJobs(), loadLogs()];
         if (currentActor.role === "owner" || currentActor.can_manage_admins) {
           tasks.push(loadAdmins());
         }
@@ -657,7 +664,7 @@
         } else {
           syncPublishBanksSelect();
         }
-        await Promise.all([onPublishBankChange(), syncActiveProgress()]);
+        await Promise.all([onPublishBankChange(), loadPublishJobs()]);
       } else if (tabName === "banks") {
         await loadBanks();
       } else if (tabName === "communities") {
@@ -1096,135 +1103,6 @@
       document.getElementById("timerBox").style.display = checked ? "block" : "none";
     }
 
-    function stopJobPolling() {
-      if (activeJobPollTimer) {
-        clearInterval(activeJobPollTimer);
-        activeJobPollTimer = null;
-      }
-    }
-
-    function jobStatusText(st) {
-      if (st === "completed") return "مكتمل";
-      if (st === "partial_failed") return "مكتمل مع متعذرات";
-      if (st === "failed") return "متعذر";
-      if (st === "paused") return "متوقف مؤقتاً";
-      if (st === "cancelled") return "ملغى";
-      if (st === "running") return "جاري الإرسال";
-      return "في الانتظار";
-    }
-
-    function renderProgressOnly(job) {
-      const pBox = document.getElementById("progressBox");
-      const pStatus = document.getElementById("progressStatus");
-      const pCounter = document.getElementById("progressCounter");
-      const pFill = document.getElementById("progressBarFill");
-      const errBox = document.getElementById("progressErrBox");
-      const controls = document.getElementById("progressControls");
-      const pauseBtn = document.getElementById("btnPauseResumeJob");
-      const cancelBtn = document.getElementById("btnCancelActiveJob");
-
-      if (!job) {
-        pBox.style.display = "none";
-        return;
-      }
-
-      pBox.style.display = "block";
-      const total = job.total_count || 0;
-      const sent = job.sent_count || 0;
-      const failed = job.failed_count || 0;
-      const processed = Math.min(total, sent + failed);
-      const pct = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
-
-      pFill.style.width = `${pct}%`;
-      pStatus.innerText = `${jobStatusText(job.status)} • ${job.target_label} (${pct}%)`;
-      pCounter.innerText = `${sent} / ${total}`;
-
-      if (errBox) {
-        if (job.last_error) {
-          errBox.style.display = "block";
-          errBox.innerText = `سبب التعذر: ${job.last_error}`;
-        } else {
-          errBox.style.display = "none";
-          errBox.innerText = "";
-        }
-      }
-
-      const isLive = ["queued", "running", "paused"].includes(job.status);
-      if (controls) {
-        controls.style.display = isLive ? "flex" : "none";
-      }
-      if (isLive && pauseBtn && cancelBtn) {
-        if (job.status === "paused") {
-          pauseBtn.innerText = "استئناف الإرسال";
-        } else {
-          pauseBtn.innerText = "إيقاف مؤقت";
-        }
-        pauseBtn.disabled = false;
-        cancelBtn.disabled = false;
-      }
-    }
-
-    async function controlPublishJob(jobId, action) {
-      await api("/api/publish_jobs/control", {
-        method: "POST",
-        body: JSON.stringify({ job_id: jobId, action })
-      });
-      await pollActiveJob(jobId);
-    }
-
-    async function togglePauseResumeActiveJob() {
-      if (!activeJobId) return;
-      const job = await api(`/api/publish_jobs/${activeJobId}`, {}, true);
-      if (job.status === "paused") {
-        await controlPublishJob(activeJobId, "resume");
-      } else if (job.status === "queued" || job.status === "running") {
-        await controlPublishJob(activeJobId, "pause");
-      }
-    }
-
-    async function cancelActiveJob() {
-      if (!activeJobId) return;
-      if (!confirm("هل تريد إيقاف العملية الحالية وإلغاء باقي الأسئلة؟")) return;
-      await controlPublishJob(activeJobId, "cancel");
-    }
-
-    async function pollActiveJob(jobId) {
-      try {
-        const job = await api(`/api/publish_jobs/${jobId}`, {}, true);
-        renderProgressOnly(job);
-        if (!["queued", "running", "paused"].includes(job.status)) {
-          stopJobPolling();
-        }
-      } catch (_) {}
-    }
-
-    function startJobPolling(jobId) {
-      activeJobId = jobId;
-      stopJobPolling();
-      pollActiveJob(jobId);
-      activeJobPollTimer = setInterval(() => pollActiveJob(jobId), 1200);
-    }
-
-    async function syncActiveProgress() {
-      try {
-        const jobs = await api("/api/publish_jobs", {}, true);
-        if (!jobs || jobs.length === 0) {
-          stopJobPolling();
-          activeJobId = null;
-          renderProgressOnly(null);
-          return;
-        }
-        const latest = jobs[0];
-        activeJobId = latest.id;
-        renderProgressOnly(latest);
-        if (["queued", "running", "paused"].includes(latest.status)) {
-          startJobPolling(latest.id);
-        } else {
-          stopJobPolling();
-        }
-      } catch (_) {}
-    }
-
     async function publishQuiz() {
       if (currentActor?.role !== "owner" && !currentActor?.can_publish) {
         return alert("لا تملك صلاحية إرسال الاختبارات.");
@@ -1240,17 +1118,14 @@
 
       let questionsToSend = [...pubBankQuestions];
       if (document.getElementById("enableSelectiveMode").checked) {
-        const checkboxes = document.querySelectorAll(".pub-q-chk");
-        if (checkboxes.length > 0) {
-          const selectedIds = new Set(
-            Array.from(checkboxes).filter(c => c.checked).map(c => parseInt(c.value))
-          );
-          questionsToSend = questionsToSend.filter(q => selectedIds.has(q.id));
-        }
+        const selectedIds = new Set(
+          Array.from(document.querySelectorAll(".pub-q-chk:checked")).map(c => parseInt(c.value))
+        );
+        questionsToSend = questionsToSend.filter(q => selectedIds.has(q.id));
       }
 
       if (questionsToSend.length === 0) {
-        return alert("لا توجد أسئلة متاحة أو محددة في هذا البنك.");
+        return alert("لم يتم تحديد أي سؤال للإرسال.");
       }
 
       if (document.getElementById("pubShuffleQ").checked) {
@@ -1259,15 +1134,12 @@
 
       let limitCount = null;
       if (document.getElementById("enableLimit").checked) {
-        const rawLimit = (document.getElementById("pubLimit").value || "").trim();
-        if (rawLimit !== "") {
-          const parsedLimit = parseInt(rawLimit, 10);
-          if (Number.isNaN(parsedLimit) || parsedLimit < 1) {
-            return alert("يرجى إدخال عدد أسئلة صحيح (1 فأكثر) أو ترك الخانة فارغة.");
-          }
-          limitCount = parsedLimit;
-          questionsToSend = questionsToSend.slice(0, limitCount);
+        const parsedLimit = parseInt(document.getElementById("pubLimit").value);
+        if (!parsedLimit || parsedLimit < 1) {
+          return alert("يرجى إدخال عدد أسئلة صحيح (1 فأكثر).");
         }
+        limitCount = parsedLimit;
+        questionsToSend = questionsToSend.slice(0, limitCount);
       }
 
       const finalCount = questionsToSend.length;
@@ -1296,9 +1168,9 @@
 
       startBtn.disabled = true;
       pBox.style.display = "block";
-      pFill.style.width = "10%";
-      pStatus.innerText = `جاري بدء الإرسال إلى (${targetLabel})...`;
-      pCounter.innerText = `0 / ${finalCount}`;
+      pFill.style.width = "35%";
+      pStatus.innerText = `جاري جدولة الإرسال إلى (${targetLabel})...`;
+      pCounter.innerText = `${finalCount} سؤال`;
 
       try {
         const res = await api("/api/publish_batch", {
@@ -1316,13 +1188,71 @@
           })
         });
         const actualCount = typeof res.queued_count === "number" ? res.queued_count : finalCount;
-        pCounter.innerText = `0 / ${actualCount}`;
-        if (res.job_id) {
-          startJobPolling(res.job_id);
-        }
+        pFill.style.width = "100%";
+        pStatus.innerText = `تم بدء إرسال ${actualCount} سؤال إلى (${res.target_label || targetLabel}) في الخلفية.`;
+        pCounter.innerText = `${actualCount} سؤال`;
+        await loadPublishJobs();
       } finally {
         startBtn.disabled = false;
       }
+    }
+
+    function jobStatusText(st) {
+      if (st === "completed") return "مكتمل";
+      if (st === "partial_failed") return "مكتمل مع متعذرات";
+      if (st === "failed") return "متعذر";
+      if (st === "running") return "قيد الإرسال";
+      return "في الانتظار";
+    }
+
+    async function loadPublishJobs() {
+      const jobs = await api("/api/publish_jobs");
+      const box = document.getElementById("publishJobsList");
+      if (!jobs || jobs.length === 0) {
+        box.innerHTML = `<div style="text-align:center; color:var(--hint); padding:12px;">لا توجد عمليات إرسال مسجلة بعد.</div>`;
+        return;
+      }
+
+      box.innerHTML = jobs.map(j => `
+        <div class="job-card">
+          <div class="job-top">
+            <div>
+              <strong>${j.target_label}</strong>
+              ${j.quiz_title ? `<div style="font-size:0.78rem; color:var(--hint);">${j.quiz_title}</div>` : ""}
+            </div>
+            <span class="badge">${jobStatusText(j.status)} (#${j.id})</span>
+          </div>
+          <div style="font-size:0.75rem; color:var(--hint);">المنفّذ: ${j.actor_name} (${j.actor_tag}) • الإنجاز: ${j.success_rate}%</div>
+          <div class="job-stats">
+            <div class="stat-box">
+              <span class="stat-val">${j.total_count}</span>
+              <span class="stat-lbl">المستهدف</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-val val-ok">${j.sent_count}</span>
+              <span class="stat-lbl">المرسل فعلياً</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-val val-err">${j.failed_count}</span>
+              <span class="stat-lbl">المتعذر</span>
+            </div>
+          </div>
+          ${j.failed_count > 0 ? `
+            <button class="btn btn-sm btn-outline" onclick="retryFailedBatch(${j.id})">
+              <svg class="ico ico-sm"><use href="#i-refresh"/></svg> إعادة إرسال المتعذرة (${j.failed_count})
+            </button>
+          ` : ""}
+        </div>
+      `).join("");
+    }
+
+    async function retryFailedBatch(jobId) {
+      const res = await api("/api/publish_jobs/retry_failed", {
+        method: "POST",
+        body: JSON.stringify({ job_id: jobId })
+      });
+      alert(`تمت جدولة إعادة إرسال ${res.retried_count} سؤال متعذر إلى (${res.target_label}).`);
+      await loadPublishJobs();
     }
 
     async function loadAdmins() {
@@ -1453,7 +1383,6 @@
       if (!confirm("مسح جميع السجلات الحالية نهائياً؟")) return;
       await api("/api/logs", { method: "DELETE" });
       await loadLogs();
-      alert("تم مسح السجل بنجاح.");
     }
 
     initApp();
