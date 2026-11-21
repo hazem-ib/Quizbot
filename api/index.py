@@ -431,6 +431,11 @@ class RetryFailedReq(BaseModel):
     job_id: int
 
 
+class JobControlReq(BaseModel):
+    job_id: int
+    action: str
+
+
 class AdminUpsertReq(BaseModel):
     user_id: int
     name: Optional[str] = "مشرف"
@@ -1089,7 +1094,12 @@ async def execute_publish_job(
 ):
     with PooledConn() as conn:
         with conn.cursor() as c:
-            c.execute("UPDATE publish_jobs SET status = 'running' WHERE id = %s", (job_id,))
+            c.execute("SELECT status FROM publish_jobs WHERE id = %s", (job_id,))
+            pre_row = c.fetchone()
+            if pre_row and pre_row[0] == "cancelled":
+                return
+            next_st = "paused" if (pre_row and pre_row[0] == "paused") else "running"
+            c.execute("UPDATE publish_jobs SET status = %s WHERE id = %s", (next_st, job_id))
             c.execute(
                 "SELECT id, question, opt1, opt2, opt3, opt4, correct_idx, explanation FROM questions WHERE id = ANY(%s)",
                 (q_ids,),
@@ -1121,7 +1131,30 @@ async def execute_publish_job(
             except Exception:
                 pass
 
+        cancelled_early = False
         for idx, row in enumerate(ordered_rows):
+            while True:
+                with PooledConn() as conn:
+                    with conn.cursor() as c:
+                        c.execute("SELECT status FROM publish_jobs WHERE id = %s", (job_id,))
+                        st_row = c.fetchone()
+                job_state = st_row[0] if st_row else "running"
+                if job_state == "cancelled":
+                    cancelled_early = True
+                    break
+                if job_state == "paused":
+                    await asyncio.sleep(1.0)
+                    continue
+                break
+
+            if cancelled_early:
+                remaining_ids = [r[0] for r in ordered_rows[idx:]]
+                for rem_qid in remaining_ids:
+                    if rem_qid not in failed_ids:
+                        failed_ids.append(rem_qid)
+                        failed_count += 1
+                break
+
             qid, q_text, o1, o2, o3, o4, c_idx, expl = row
             opts = [o1[:98], o2[:98], o3[:98], o4[:98]]
             current_correct = c_idx
@@ -1188,7 +1221,11 @@ async def execute_publish_job(
                 else:
                     await asyncio.sleep(0.01)
 
-        final_status = "completed" if failed_count == 0 else ("partial_failed" if sent_count > 0 else "failed")
+        if cancelled_early:
+            final_status = "cancelled"
+        else:
+            final_status = "completed" if failed_count == 0 else ("partial_failed" if sent_count > 0 else "failed")
+
         with PooledConn() as conn:
             with conn.cursor() as c:
                 c.execute(
@@ -1201,11 +1238,19 @@ async def execute_publish_job(
             conn.commit()
 
         success_rate = round((sent_count / total_requested) * 100, 1) if total_requested > 0 else 0.0
+        status_label = {
+            "completed": "مكتمل",
+            "partial_failed": "مكتمل جزئياً",
+            "failed": "متعذر",
+            "cancelled": "ملغى / متوقف",
+        }.get(final_status, final_status)
+
         report_lines = [
             "━━━━━━━━━━━━━━━━━━━━",
             "📄 **التقرير التفصيلي لعملية الإرسال**",
             "━━━━━━━━━━━━━━━━━━━━",
             f"• **رقم العملية:** `#{job_id}`",
+            f"• **حالة العملية:** {status_label}",
             f"• **المنفّذ:** {actor['name']} ({actor['tag']})",
             f"• **الوجهة:** {target_label}",
         ]
@@ -1214,11 +1259,11 @@ async def execute_publish_job(
         report_lines.extend([
             f"• **إجمالي الأسئلة المستهدفة:** **{total_requested}**",
             f"• **الأسئلة المرسلة بنجاح:** **{sent_count}**",
-            f"• **الأسئلة المتعذر إرسالها:** **{failed_count}**",
+            f"• **الأسئلة المتعذرة / غير المرسلة:** **{failed_count}**",
             f"• **نسبة الإنجاز الفعلي:** **{success_rate}%**",
         ])
         if failed_count > 0:
-            report_lines.append("• **ملاحظة:** يمكنك إعادة إرسال الأسئلة المتعذرة مباشرة من تبويب الإرسال.")
+            report_lines.append("• **ملاحظة:** يمكنك إعادة إرسال الأسئلة المتبقية أو المتعذرة من لوحة التحكم.")
 
         try:
             await bot_app.bot.send_message(
@@ -1233,7 +1278,7 @@ async def execute_publish_job(
     write_audit_log(
         actor,
         "publish_quiz",
-        f"أرسل {sent_count} من {total_requested} سؤالاً إلى «{target_label}» (المتعذر: {failed_count}) بواسطة {actor_desc}.",
+        f"أرسل {sent_count} من {total_requested} سؤالاً إلى «{target_label}» (المتعذر/المتوقف: {failed_count}، الحالة: {status_label}) بواسطة {actor_desc}.",
     )
 
 
@@ -1372,6 +1417,92 @@ async def get_publish_jobs(x_telegram_init_data: str = Header(default="")):
             "completed_at": r[11].isoformat() if r[11] else None,
         })
     return jobs
+
+
+@app.get("/api/publish_jobs/{job_id}")
+@app.get("/publish_jobs/{job_id}")
+async def get_single_publish_job(job_id: int, x_telegram_init_data: str = Header(default="")):
+    actor = verify_actor(x_telegram_init_data)
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute(
+                """SELECT id, actor_id, actor_name, actor_tag, target_label, quiz_title,
+                          total_count, sent_count, failed_count, failed_question_ids,
+                          status, created_at, completed_at
+                   FROM publish_jobs WHERE id = %s""",
+                (job_id,),
+            )
+            r = c.fetchone()
+            if not r:
+                raise HTTPException(status_code=404, detail="العملية غير موجودة.")
+            if actor["role"] != "owner" and not actor["can_manage_admins"] and int(r[1]) != int(actor["user_id"]):
+                raise HTTPException(status_code=403, detail="غير مصرح بعرض هذه العملية.")
+
+    f_ids = r[9] if isinstance(r[9], list) else (json.loads(r[9]) if r[9] else [])
+    total_c = r[6] or 0
+    sent_c = r[7] or 0
+    failed_c = r[8] or 0
+    rate = round((sent_c / total_c) * 100, 1) if total_c > 0 else 0.0
+    return {
+        "id": r[0],
+        "actor_name": r[2],
+        "actor_tag": r[3],
+        "target_label": r[4],
+        "quiz_title": r[5] or "",
+        "total_count": total_c,
+        "sent_count": sent_c,
+        "failed_count": failed_c,
+        "failed_question_ids": f_ids,
+        "success_rate": rate,
+        "status": r[10],
+        "created_at": r[11].isoformat() if r[11] else None,
+        "completed_at": r[12].isoformat() if r[12] else None,
+    }
+
+
+@app.post("/api/publish_jobs/control")
+@app.post("/publish_jobs/control")
+async def control_publish_job(req: JobControlReq, x_telegram_init_data: str = Header(default="")):
+    actor = verify_actor(x_telegram_init_data)
+    action = (req.action or "").strip().lower()
+    if action not in ("pause", "resume", "cancel"):
+        raise HTTPException(status_code=400, detail="إجراء التحكم غير صالح.")
+
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute("SELECT actor_id, status, target_label FROM publish_jobs WHERE id = %s", (req.job_id,))
+            row = c.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="العملية غير موجودة.")
+            if actor["role"] != "owner" and not actor["can_manage_admins"] and int(row[0]) != int(actor["user_id"]):
+                raise HTTPException(status_code=403, detail="لا تملك صلاحية التحكم في هذه العملية.")
+
+            current_status = row[1]
+            target_label = row[2]
+
+            if action == "pause":
+                if current_status not in ("queued", "running"):
+                    raise HTTPException(status_code=400, detail="لا يمكن إيقاف العملية مؤقتاً في حالتها الحالية.")
+                new_status = "paused"
+                c.execute("UPDATE publish_jobs SET status = %s WHERE id = %s", (new_status, req.job_id))
+            elif action == "resume":
+                if current_status != "paused":
+                    raise HTTPException(status_code=400, detail="العملية ليست في وضع الإيقاف المؤقت.")
+                new_status = "running"
+                c.execute("UPDATE publish_jobs SET status = %s WHERE id = %s", (new_status, req.job_id))
+            else:
+                if current_status in ("completed", "partial_failed", "failed", "cancelled"):
+                    raise HTTPException(status_code=400, detail="العملية منتهية بالفعل.")
+                new_status = "cancelled"
+                c.execute(
+                    "UPDATE publish_jobs SET status = %s, completed_at = NOW() WHERE id = %s",
+                    (new_status, req.job_id),
+                )
+        conn.commit()
+
+    action_ar = {"pause": "أوقف مؤقتاً", "resume": "استأنف", "cancel": "ألغى"}[action]
+    write_audit_log(actor, "control_publish_job", f"{action_ar} عملية الإرسال #{req.job_id} إلى «{target_label}».")
+    return {"status": "ok", "job_id": req.job_id, "job_status": new_status}
 
 
 @app.post("/api/publish_jobs/retry_failed")
