@@ -15,7 +15,7 @@ from psycopg2 import pool
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Poll, MenuButtonWebApp
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Poll, MenuButtonWebApp, Bot
 from telegram.error import RetryAfter
 from telegram.ext import Application, CommandHandler, ContextTypes
 
@@ -195,6 +195,24 @@ def cleanup_old_logs():
         with conn.cursor() as c:
             c.execute("DELETE FROM audit_logs WHERE created_at < %s", (cutoff,))
             c.execute("DELETE FROM publish_jobs WHERE created_at < %s", (cutoff,))
+        conn.commit()
+
+
+def keep_only_latest_job_for_actor(actor_id: int, keep_job_id: Optional[int] = None):
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            if keep_job_id is not None:
+                c.execute(
+                    "DELETE FROM publish_jobs WHERE actor_id = %s AND id != %s",
+                    (actor_id, keep_job_id),
+                )
+            else:
+                c.execute(
+                    """DELETE FROM publish_jobs
+                       WHERE actor_id = %s
+                         AND id NOT IN (SELECT id FROM publish_jobs WHERE actor_id = %s ORDER BY id DESC LIMIT 1)""",
+                    (actor_id, actor_id),
+                )
         conn.commit()
 
 
@@ -1064,13 +1082,13 @@ async def delete_community(comm_id: int, x_telegram_init_data: str = Header(defa
 @app.post("/test_community")
 async def test_community(req: CommunityCreateReq, x_telegram_init_data: str = Header(default="")):
     verify_actor(x_telegram_init_data)
-    bot_app = build_bot_app()
-    async with bot_app:
+    bot = Bot(token=BOT_TOKEN)
+    async with bot:
         try:
             kwargs = {"chat_id": req.chat_id.strip(), "text": "تم التحقق من صلاحيات البوت والاتصال بالوجهة بنجاح."}
             if req.topic_id:
                 kwargs["message_thread_id"] = req.topic_id
-            await bot_app.bot.send_message(**kwargs)
+            await bot.send_message(**kwargs)
             return {"status": "ok"}
         except Exception as e:
             raise HTTPException(
@@ -1096,9 +1114,9 @@ async def execute_publish_job(
         with conn.cursor() as c:
             c.execute("SELECT status FROM publish_jobs WHERE id = %s", (job_id,))
             pre_row = c.fetchone()
-            if pre_row and pre_row[0] == "cancelled":
+            if not pre_row or pre_row[0] == "cancelled":
                 return
-            next_st = "paused" if (pre_row and pre_row[0] == "paused") else "running"
+            next_st = "paused" if pre_row[0] == "paused" else "running"
             c.execute("UPDATE publish_jobs SET status = %s WHERE id = %s", (next_st, job_id))
             c.execute(
                 "SELECT id, question, opt1, opt2, opt3, opt4, correct_idx, explanation FROM questions WHERE id = ANY(%s)",
@@ -1114,31 +1132,36 @@ async def execute_publish_job(
     failed_ids: List[int] = []
     admin_id = actor["user_id"]
 
-    is_group_or_channel = str(target_chat).startswith("-") or str(target_chat).startswith("@")
-    bot_app = build_bot_app()
-    async with bot_app:
+    parsed_chat: Any = str(target_chat).strip()
+    if parsed_chat.lstrip("-").isdigit():
+        parsed_chat = int(parsed_chat)
+
+    is_group_or_channel = isinstance(parsed_chat, int) or str(parsed_chat).startswith("@")
+    cancelled_early = False
+
+    async with Bot(token=BOT_TOKEN) as bot:
         if quiz_title and quiz_title.strip() and total_requested > 0:
             try:
                 prefix = "إعادة إرسال الأسئلة المتعذرة" if is_retry else "اختبار جديد"
-                intro_kwargs = {
-                    "chat_id": target_chat,
-                    "text": f"**{quiz_title.strip()}**\n{prefix} • عدد الأسئلة: **{total_requested}**",
-                    "parse_mode": "Markdown",
+                intro_kwargs: Dict[str, Any] = {
+                    "chat_id": parsed_chat,
+                    "text": f"{quiz_title.strip()}\n{prefix} • عدد الأسئلة: {total_requested}",
                 }
                 if topic_id:
-                    intro_kwargs["message_thread_id"] = topic_id
-                await bot_app.bot.send_message(**intro_kwargs)
+                    intro_kwargs["message_thread_id"] = int(topic_id)
+                await bot.send_message(**intro_kwargs)
             except Exception:
                 pass
 
-        cancelled_early = False
         for idx, row in enumerate(ordered_rows):
             while True:
                 with PooledConn() as conn:
                     with conn.cursor() as c:
                         c.execute("SELECT status FROM publish_jobs WHERE id = %s", (job_id,))
                         st_row = c.fetchone()
-                job_state = st_row[0] if st_row else "running"
+                if not st_row:
+                    return
+                job_state = st_row[0]
                 if job_state == "cancelled":
                     cancelled_early = True
                     break
@@ -1156,36 +1179,36 @@ async def execute_publish_job(
                 break
 
             qid, q_text, o1, o2, o3, o4, c_idx, expl = row
-            opts = [o1[:98], o2[:98], o3[:98], o4[:98]]
-            current_correct = c_idx
+            opts = [str(o1 or "-")[:98], str(o2 or "-")[:98], str(o3 or "-")[:98], str(o4 or "-")[:98]]
+            current_correct = int(c_idx or 0)
 
             if shuffle_options:
                 indexed = list(enumerate(opts))
                 random.shuffle(indexed)
                 opts = [x[1] for x in indexed]
-                current_correct = [i for i, x in enumerate(indexed) if x[0] == c_idx][0]
+                current_correct = [i for i, x in enumerate(indexed) if x[0] == current_correct][0]
 
-            kwargs = {
-                "chat_id": target_chat,
-                "question": q_text[:295],
+            kwargs: Dict[str, Any] = {
+                "chat_id": parsed_chat,
+                "question": str(q_text or "")[:295],
                 "options": opts,
                 "type": Poll.QUIZ,
                 "correct_option_id": current_correct,
                 "is_anonymous": True,
             }
-            if expl:
-                kwargs["explanation"] = expl[:195]
+            if expl and str(expl).strip():
+                kwargs["explanation"] = str(expl).strip()[:195]
             if topic_id:
-                kwargs["message_thread_id"] = topic_id
-            if open_period and 5 <= open_period <= 600:
-                kwargs["open_period"] = open_period
+                kwargs["message_thread_id"] = int(topic_id)
+            if open_period and 5 <= int(open_period) <= 600:
+                kwargs["open_period"] = int(open_period)
 
             delivered = False
             attempts = 0
             while attempts < 4:
                 attempts += 1
                 try:
-                    await bot_app.bot.send_poll(**kwargs)
+                    await bot.send_poll(**kwargs)
                     sent_count += 1
                     delivered = True
                     break
@@ -1247,30 +1270,26 @@ async def execute_publish_job(
 
         report_lines = [
             "━━━━━━━━━━━━━━━━━━━━",
-            "📄 **التقرير التفصيلي لعملية الإرسال**",
+            "التقرير التفصيلي لعملية الإرسال",
             "━━━━━━━━━━━━━━━━━━━━",
-            f"• **رقم العملية:** `#{job_id}`",
-            f"• **حالة العملية:** {status_label}",
-            f"• **المنفّذ:** {actor['name']} ({actor['tag']})",
-            f"• **الوجهة:** {target_label}",
+            f"• رقم العملية: #{job_id}",
+            f"• حالة العملية: {status_label}",
+            f"• المنفّذ: {actor['name']} ({actor['tag']})",
+            f"• الوجهة: {target_label}",
         ]
         if quiz_title and quiz_title.strip():
-            report_lines.append(f"• **عنوان الاختبار:** {quiz_title.strip()}")
+            report_lines.append(f"• عنوان الاختبار: {quiz_title.strip()}")
         report_lines.extend([
-            f"• **إجمالي الأسئلة المستهدفة:** **{total_requested}**",
-            f"• **الأسئلة المرسلة بنجاح:** **{sent_count}**",
-            f"• **الأسئلة المتعذرة / غير المرسلة:** **{failed_count}**",
-            f"• **نسبة الإنجاز الفعلي:** **{success_rate}%**",
+            f"• إجمالي الأسئلة المستهدفة: {total_requested}",
+            f"• الأسئلة المرسلة بنجاح: {sent_count}",
+            f"• الأسئلة المتعذرة / غير المرسلة: {failed_count}",
+            f"• نسبة الإنجاز الفعلي: {success_rate}%",
         ])
         if failed_count > 0:
-            report_lines.append("• **ملاحظة:** يمكنك إعادة إرسال الأسئلة المتبقية أو المتعذرة من لوحة التحكم.")
+            report_lines.append("• ملاحظة: يمكنك إعادة إرسال الأسئلة المتبقية أو المتعذرة من لوحة التحكم.")
 
         try:
-            await bot_app.bot.send_message(
-                chat_id=admin_id,
-                text="\n".join(report_lines),
-                parse_mode="Markdown",
-            )
+            await bot.send_message(chat_id=admin_id, text="\n".join(report_lines))
         except Exception:
             pass
 
@@ -1314,7 +1333,7 @@ async def publish_batch(
                 target_label = comm_row[0]
                 topic_id = comm_row[2]
             elif req.target_type == "private":
-                target_chat = actor["user_id"]
+                target_chat = str(actor["user_id"])
                 target_label = "المحادثة الخاصة"
                 topic_id = None
             else:
@@ -1349,6 +1368,8 @@ async def publish_batch(
             job_id = c.fetchone()[0]
         conn.commit()
 
+    keep_only_latest_job_for_actor(int(actor["user_id"]), keep_job_id=int(job_id))
+
     background_tasks.add_task(
         execute_publish_job,
         job_id,
@@ -1378,20 +1399,12 @@ async def get_publish_jobs(x_telegram_init_data: str = Header(default="")):
     cleanup_old_logs()
     with PooledConn() as conn:
         with conn.cursor() as c:
-            if actor["role"] == "owner" or actor["can_manage_admins"]:
-                c.execute("""
-                    SELECT id, actor_name, actor_tag, target_label, quiz_title,
-                           total_count, sent_count, failed_count, failed_question_ids,
-                           status, created_at, completed_at
-                    FROM publish_jobs ORDER BY id DESC LIMIT 15
-                """)
-            else:
-                c.execute("""
-                    SELECT id, actor_name, actor_tag, target_label, quiz_title,
-                           total_count, sent_count, failed_count, failed_question_ids,
-                           status, created_at, completed_at
-                    FROM publish_jobs WHERE actor_id = %s ORDER BY id DESC LIMIT 15
-                """, (actor["user_id"],))
+            c.execute("""
+                SELECT id, actor_name, actor_tag, target_label, quiz_title,
+                       total_count, sent_count, failed_count, failed_question_ids,
+                       status, created_at, completed_at
+                FROM publish_jobs WHERE actor_id = %s ORDER BY id DESC LIMIT 1
+            """, (actor["user_id"],))
             rows = c.fetchall()
 
     jobs = []
@@ -1435,7 +1448,7 @@ async def get_single_publish_job(job_id: int, x_telegram_init_data: str = Header
             r = c.fetchone()
             if not r:
                 raise HTTPException(status_code=404, detail="العملية غير موجودة.")
-            if actor["role"] != "owner" and not actor["can_manage_admins"] and int(r[1]) != int(actor["user_id"]):
+            if int(r[1]) != int(actor["user_id"]) and actor["role"] != "owner":
                 raise HTTPException(status_code=403, detail="غير مصرح بعرض هذه العملية.")
 
     f_ids = r[9] if isinstance(r[9], list) else (json.loads(r[9]) if r[9] else [])
@@ -1460,6 +1473,23 @@ async def get_single_publish_job(job_id: int, x_telegram_init_data: str = Header
     }
 
 
+@app.delete("/api/publish_jobs/{job_id}")
+@app.delete("/publish_jobs/{job_id}")
+async def delete_publish_job(job_id: int, x_telegram_init_data: str = Header(default="")):
+    actor = verify_actor(x_telegram_init_data)
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute("SELECT actor_id FROM publish_jobs WHERE id = %s", (job_id,))
+            row = c.fetchone()
+            if not row:
+                return {"status": "ok"}
+            if int(row[0]) != int(actor["user_id"]) and actor["role"] != "owner":
+                raise HTTPException(status_code=403, detail="لا تملك صلاحية حذف هذا التقرير.")
+            c.execute("DELETE FROM publish_jobs WHERE id = %s", (job_id,))
+        conn.commit()
+    return {"status": "ok"}
+
+
 @app.post("/api/publish_jobs/control")
 @app.post("/publish_jobs/control")
 async def control_publish_job(req: JobControlReq, x_telegram_init_data: str = Header(default="")):
@@ -1474,7 +1504,7 @@ async def control_publish_job(req: JobControlReq, x_telegram_init_data: str = He
             row = c.fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="العملية غير موجودة.")
-            if actor["role"] != "owner" and not actor["can_manage_admins"] and int(row[0]) != int(actor["user_id"]):
+            if int(row[0]) != int(actor["user_id"]) and actor["role"] != "owner":
                 raise HTTPException(status_code=403, detail="لا تملك صلاحية التحكم في هذه العملية.")
 
             current_status = row[1]
@@ -1526,7 +1556,7 @@ async def retry_failed_questions(
             row = c.fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="سجل عملية الإرسال غير موجود.")
-            if actor["role"] != "owner" and int(row[1]) != int(actor["user_id"]):
+            if int(row[1]) != int(actor["user_id"]) and actor["role"] != "owner":
                 raise HTTPException(status_code=403, detail="لا تملك صلاحية إعادة إرسال هذه العملية.")
 
             failed_ids = row[7] if isinstance(row[7], list) else (json.loads(row[7]) if row[7] else [])
@@ -1546,7 +1576,7 @@ async def retry_failed_questions(
                 target_chat = comm_row[1].strip()
                 topic_id = comm_row[2]
             else:
-                target_chat = actor["user_id"]
+                target_chat = str(actor["user_id"])
                 target_label = "المحادثة الخاصة"
 
             c.execute("SELECT id FROM questions WHERE id = ANY(%s)", (failed_ids,))
@@ -1579,6 +1609,8 @@ async def retry_failed_questions(
             )
             new_job_id = c.fetchone()[0]
         conn.commit()
+
+    keep_only_latest_job_for_actor(int(actor["user_id"]), keep_job_id=int(new_job_id))
 
     background_tasks.add_task(
         execute_publish_job,
