@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Quiz Manager Mini App v3</title>
+  <title>Quiz Manager Mini App</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     :root {
@@ -19,6 +19,17 @@
     }
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { margin: 0; padding: 14px 14px 85px; background: var(--bg); color: var(--text); }
+    
+    /* شاشة التحميل والحظر الكاملة */
+    #authScreen {
+      position: fixed; inset: 0; background: #090d16; z-index: 9999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 24px;
+    }
+    #authScreen h1 { font-size: 2.5rem; margin: 0 0 10px; }
+    #authScreen p { color: #94a3b8; font-size: 0.95rem; max-width: 320px; line-height: 1.6; }
+    #appContainer { display: none; }
+
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
     .header h2 { margin: 0; font-size: 1.2rem; }
     .badge { background: var(--btn); color: var(--btn-text); padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; }
@@ -50,202 +61,220 @@
 </head>
 <body>
 
-  <div class="header">
-    <h2>🎯 مدير الاختبارات (v3)</h2>
-    <span id="roleBadge" class="badge">جاري التحميل...</span>
+  <!-- شاشة الحظر والتحقق (تغطي الموقع بالكامل افتراضياً) -->
+  <div id="authScreen">
+    <h1 id="authIcon">🔒</h1>
+    <h2 id="authTitle" style="margin:0 0 8px;">جاري التحقق من الصلاحيات...</h2>
+    <p id="authMsg">يرجى الانتظار لحظة للتحقق من هويتك عبر تيليجرام.</p>
   </div>
 
-  <!-- تبويب 1: المجموعات -->
-  <div id="tab-banks" class="tab active">
-    <div style="display:flex; gap:8px; margin-bottom:12px;">
-      <button class="btn" onclick="openNewBankModal()">➕ مجموعة جديدة</button>
-      <button class="btn btn-success" onclick="switchTab('upload')">📤 رفع CSV</button>
+  <!-- محتوى التطبيق (مخفي تماماً حتى نجاح التحقق) -->
+  <div id="appContainer">
+    <div class="header">
+      <h2>🎯 مدير الاختبارات</h2>
+      <span id="roleBadge" class="badge">...</span>
     </div>
-    <div id="banksList"></div>
-  </div>
 
-  <!-- تبويب 2: الأسئلة -->
-  <div id="tab-questions" class="tab">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <button class="btn btn-outline btn-sm" onclick="switchTab('banks')">🔙 المجموعات</button>
-      <strong id="currentBankTitle">المجموعة</strong>
-      <button class="btn btn-success btn-sm" onclick="openQuestionModal()">➕ إضافة سؤال يدوياً</button>
-    </div>
-    <input type="text" id="searchQ" placeholder="🔍 ابحث داخل أسئلة المجموعة..." oninput="renderQuestions()" />
-    <div id="questionsList"></div>
-  </div>
-
-  <!-- تبويب 3: رفع CSV -->
-  <div id="tab-upload" class="tab">
-    <div class="card">
-      <h3>📤 استيراد أسئلة من ملف CSV</h3>
-      <p style="font-size:0.82rem; color:var(--hint);">
-        الترتيب المطلوب:<br>
-        <code>السؤال | إجابة 1 | إجابة 2 | إجابة 3 | إجابة 4 | رقم الصحيحة (1-4) | شرح (اختياري)</code>
-      </p>
-      <label>اسم المجموعة:</label>
-      <input type="text" id="csvBankName" placeholder="مثال: اختبار الأحياء" />
-      <label>اختر ملف CSV:</label>
-      <input type="file" id="csvFile" accept=".csv" />
-      <button class="btn btn-success" onclick="uploadCSV()">🚀 استيراد الأسئلة</button>
-    </div>
-  </div>
-
-  <!-- تبويب 4: المجتمعات والقنوات المتصلة -->
-  <div id="tab-communities" class="tab">
-    <div class="card">
-      <h3>🌐 ربط مجتمع أو قناة في المجتمع</h3>
-      <div class="hint-box">
-        💡 <b>كيف تجلب بيانات القناة أو المجتمع؟</b><br>
-        1. أضف البوت كـ <b>مشرف (Admin)</b> في المجتمع أو القناة.<br>
-        2. أرسل أمر <code>/id</code> داخل القناة الفرعية (Topic) في المجتمع، أو وجّه (Forward) أي رسالة من القناة إلى البوت في الخاص وسيعطيك الـ <b>Chat ID</b> و <b>Topic ID</b> فوراً!
+    <!-- تبويب 1: المجموعات -->
+    <div id="tab-banks" class="tab active">
+      <div style="display:flex; gap:8px; margin-bottom:12px;">
+        <button class="btn" onclick="openNewBankModal()">➕ مجموعة جديدة</button>
+        <button class="btn btn-success" onclick="switchTab('upload')">📤 رفع CSV</button>
       </div>
-      <label>اسم تعريفي للمجتمع / القناة:</label>
-      <input type="text" id="commTitle" placeholder="مثال: مجتمع الطب - قناة الاختبارات" />
-      <label>معرّف المجتمع أو القناة (Chat ID أو @username):</label>
-      <input type="text" id="commChatId" placeholder="-1001234567890 أو @channel" />
-      <label>رقم القناة الفرعية داخل المجتمع (Topic ID - اختياري):</label>
-      <input type="number" id="commTopicId" placeholder="اتركه فارغاً إذا لم يكن مقسماً لمواضيع" />
-      <div style="display:flex; gap:8px;">
-        <button class="btn btn-outline" onclick="testCommunity()">🔌 فحص الاتصال</button>
-        <button class="btn btn-success" onclick="saveCommunity()">💾 حفظ الربط</button>
+      <div id="banksList"></div>
+    </div>
+
+    <!-- تبويب 2: الأسئلة -->
+    <div id="tab-questions" class="tab">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <button class="btn btn-outline btn-sm" onclick="switchTab('banks')">🔙 المجموعات</button>
+        <strong id="currentBankTitle">المجموعة</strong>
+        <button class="btn btn-success btn-sm" onclick="openQuestionModal()">➕ إضافة سؤال يدوياً</button>
+      </div>
+      <input type="text" id="searchQ" placeholder="🔍 ابحث داخل أسئلة المجموعة..." oninput="renderQuestions()" />
+      <div id="questionsList"></div>
+    </div>
+
+    <!-- تبويب 3: رفع CSV -->
+    <div id="tab-upload" class="tab">
+      <div class="card">
+        <h3>📤 استيراد أسئلة من ملف CSV</h3>
+        <p style="font-size:0.82rem; color:var(--hint);">
+          الترتيب المطلوب:<br>
+          <code>السؤال | إجابة 1 | إجابة 2 | إجابة 3 | إجابة 4 | الصحيحة (1-4 أو A-D أو نصها) | شرح (اختياري)</code>
+        </p>
+        <label>اسم المجموعة:</label>
+        <input type="text" id="csvBankName" placeholder="مثال: اختبار الأحياء" />
+        <label>اختر ملف CSV:</label>
+        <input type="file" id="csvFile" accept=".csv" />
+        <button class="btn btn-success" onclick="uploadCSV()">🚀 استيراد الأسئلة</button>
       </div>
     </div>
-    <div id="communitiesList"></div>
-  </div>
 
-  <!-- تبويب 5: النشر والتحكم في التوقيت -->
-  <div id="tab-publish" class="tab">
-    <div class="card">
-      <h3>🚀 إرسال الاختبار</h3>
-      <label>اختر مجموعة الأسئلة:</label>
-      <select id="pubBankSelect"></select>
-
-      <label>وجهة الإرسال:</label>
-      <select id="pubTargetType" onchange="togglePublishTarget()">
-        <option value="private">💬 المحادثة الخاصة بيني وبين البوت</option>
-        <option value="saved_comm">🌐 مجتمع / قناة من القائمة المحفوظة</option>
-        <option value="manual_group">✍️ إدخال Chat ID / يوزر قناة يدوياً</option>
-      </select>
-
-      <div id="savedCommBox" style="display:none;">
-        <label>اختر المجتمع / القناة المتصلة:</label>
-        <select id="pubSavedCommSelect"></select>
+    <!-- تبويب 4: المجتمعات والقنوات المتصلة -->
+    <div id="tab-communities" class="tab">
+      <div class="card">
+        <h3>🌐 ربط مجتمع أو قناة في المجتمع</h3>
+        <div class="hint-box">
+          💡 <b>كيف تجلب بيانات القناة أو المجتمع؟</b><br>
+          1. أضف البوت كـ <b>مشرف (Admin)</b> في المجتمع أو القناة.<br>
+          2. أرسل أمر <code>/id</code> داخل القناة الفرعية (Topic) في المجتمع، أو وجّه (Forward) أي رسالة من القناة إلى البوت في الخاص وسيعطيك الـ <b>Chat ID</b> و <b>Topic ID</b> فوراً!
+        </div>
+        <label>اسم تعريفي للمجتمع / القناة:</label>
+        <input type="text" id="commTitle" placeholder="مثال: مجتمع الطب - قناة الاختبارات" />
+        <label>معرّف المجتمع أو القناة (Chat ID أو @username):</label>
+        <input type="text" id="commChatId" placeholder="-1001234567890 أو @channel" />
+        <label>رقم القناة الفرعية داخل المجتمع (Topic ID - اختياري):</label>
+        <input type="number" id="commTopicId" placeholder="اتركه فارغاً إذا لم يكن مقسماً لمواضيع" />
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-outline" onclick="testCommunity()">🔌 فحص الاتصال</button>
+          <button class="btn btn-success" onclick="saveCommunity()">💾 حفظ الربط</button>
+        </div>
       </div>
-
-      <div id="manualGroupBox" style="display:none;">
-        <label>Chat ID أو @username:</label>
-        <input type="text" id="pubChatId" placeholder="-1001234567890 أو @channel" />
-        <label>Topic ID (اختياري):</label>
-        <input type="number" id="pubTopicId" placeholder="رقم الموضوع داخل المجتمع" />
-      </div>
-
-      <label>⏱️ الفاصل الزمني بين إرسال كل سؤال والآخر:</label>
-      <select id="pubDelay">
-        <option value="0">⚡ إرسال الكل معاً دفعة واحدة (بدون انتظار)</option>
-        <option value="2">2 ثانية بين كل سؤال</option>
-        <option value="5">5 ثوانٍ بين كل سؤال</option>
-        <option value="10">10 ثوانٍ بين كل سؤال</option>
-        <option value="30">30 ثانية بين كل سؤال</option>
-        <option value="60">دقيقة واحدة (60 ثانية)</option>
-      </select>
-
-      <div class="switch-row">
-        <span>⏳ تفعيل تايمر (مؤقت حل) لكل سؤال؟</span>
-        <input type="checkbox" id="enableTimer" onchange="toggleTimerInput()" />
-      </div>
-      <div id="timerBox" style="display:none;">
-        <label>مدة التايمر لكل سؤال (بالثواني - من 5 إلى 600):</label>
-        <input type="number" id="pubTimer" value="30" min="5" max="600" />
-      </div>
-
-      <div class="switch-row">
-        <span>🔀 ترتيب الأسئلة عشوائياً</span>
-        <input type="checkbox" id="pubShuffleQ" />
-      </div>
-      <div class="switch-row">
-        <span>🎲 خلط ترتيب الإجابات</span>
-        <input type="checkbox" id="pubShuffleOpt" />
-      </div>
-
-      <button class="btn" onclick="publishQuiz()">📤 بدء الإرسال الآن</button>
+      <div id="communitiesList"></div>
     </div>
-  </div>
 
-  <!-- تبويب 6: الأدمنز -->
-  <div id="tab-admins" class="tab">
-    <div class="card">
-      <h3>👑 إدارة المشرفين (Admins)</h3>
-      <label>Telegram ID للأدمن الجديد:</label>
-      <input type="number" id="newAdminId" placeholder="مثال: 123456789" />
-      <label>الاسم:</label>
-      <input type="text" id="newAdminName" placeholder="مثال: أحمد" />
-      <button class="btn" onclick="addAdmin()">➕ إضافة أدمن</button>
-    </div>
-    <div id="adminsList"></div>
-  </div>
+    <!-- تبويب 5: النشر والتحكم في التوقيت -->
+    <div id="tab-publish" class="tab">
+      <div class="card">
+        <h3>🚀 إرسال الاختبار</h3>
+        <label>اختر مجموعة الأسئلة:</label>
+        <select id="pubBankSelect"></select>
 
-  <!-- شريط التنقل السفلي -->
-  <div class="nav-bar">
-    <div class="nav-item active" id="nav-banks" onclick="switchTab('banks')"><span>📂</span>المجموعات</div>
-    <div class="nav-item" id="nav-upload" onclick="switchTab('upload')"><span>📤</span>رفع CSV</div>
-    <div class="nav-item" id="nav-communities" onclick="switchTab('communities')"><span>🌐</span>المجتمعات</div>
-    <div class="nav-item" id="nav-publish" onclick="switchTab('publish')"><span>🚀</span>نشر</div>
-    <div class="nav-item" id="nav-admins" style="display:none;" onclick="switchTab('admins')"><span>👑</span>الأدمنز</div>
-  </div>
+        <label>وجهة الإرسال:</label>
+        <select id="pubTargetType" onchange="togglePublishTarget()">
+          <option value="private">💬 المحادثة الخاصة بيني وبين البوت</option>
+          <option value="saved_comm">🌐 مجتمع / قناة من القائمة المحفوظة</option>
+          <option value="manual_group">✍️ إدخال Chat ID / يوزر قناة يدوياً</option>
+        </select>
 
-  <!-- نافذة إضافة / تعديل سؤال يدوياً -->
-  <div id="qModal" class="modal">
-    <div class="modal-content">
-      <h3 id="qModalTitle">إضافة / تعديل سؤال</h3>
-      <input type="hidden" id="editQId" />
-      <label>نص السؤال:</label>
-      <textarea id="qText" rows="2" placeholder="اكتب نص السؤال هنا..."></textarea>
-      <label>الإجابة 1:</label><input type="text" id="qOpt1" />
-      <label>الإجابة 2:</label><input type="text" id="qOpt2" />
-      <label>الإجابة 3:</label><input type="text" id="qOpt3" />
-      <label>الإجابة 4:</label><input type="text" id="qOpt4" />
-      <label>الإجابة الصحيحة:</label>
-      <select id="qCorrect">
-        <option value="0">الإجابة 1</option>
-        <option value="1">الإجابة 2</option>
-        <option value="2">الإجابة 3</option>
-        <option value="3">الإجابة 4</option>
-      </select>
-      <label>شرح الإجابة (يظهر بعد الحل - اختياري):</label>
-      <input type="text" id="qExpl" placeholder="اكتب توضيحاً للإجابة الصحيحة..." />
-      <div style="display:flex; gap:8px;">
-        <button class="btn btn-success" onclick="saveQuestion()">💾 حفظ السؤال</button>
-        <button class="btn btn-outline" onclick="closeModal('qModal')">إلغاء</button>
+        <div id="savedCommBox" style="display:none;">
+          <label>اختر المجتمع / القناة المتصلة:</label>
+          <select id="pubSavedCommSelect"></select>
+        </div>
+
+        <div id="manualGroupBox" style="display:none;">
+          <label>Chat ID أو @username:</label>
+          <input type="text" id="pubChatId" placeholder="-1001234567890 أو @channel" />
+          <label>Topic ID (اختياري):</label>
+          <input type="number" id="pubTopicId" placeholder="رقم الموضوع داخل المجتمع" />
+        </div>
+
+        <label>⏱️ الفاصل الزمني بين إرسال كل سؤال والآخر:</label>
+        <select id="pubDelay">
+          <option value="0">⚡ إرسال الكل معاً دفعة واحدة (بدون انتظار)</option>
+          <option value="2">2 ثانية بين كل سؤال</option>
+          <option value="5">5 ثوانٍ بين كل سؤال</option>
+          <option value="10">10 ثوانٍ بين كل سؤال</option>
+          <option value="30">30 ثانية بين كل سؤال</option>
+          <option value="60">دقيقة واحدة (60 ثانية)</option>
+        </select>
+
+        <div class="switch-row">
+          <span>⏳ تفعيل تايمر (مؤقت حل) لكل سؤال؟</span>
+          <input type="checkbox" id="enableTimer" onchange="toggleTimerInput()" />
+        </div>
+        <div id="timerBox" style="display:none;">
+          <label>مدة التايمر لكل سؤال (بالثواني - من 5 إلى 600):</label>
+          <input type="number" id="pubTimer" value="30" min="5" max="600" />
+        </div>
+
+        <div class="switch-row">
+          <span>🔀 ترتيب الأسئلة عشوائياً</span>
+          <input type="checkbox" id="pubShuffleQ" />
+        </div>
+        <div class="switch-row">
+          <span>🎲 خلط ترتيب الإجابات</span>
+          <input type="checkbox" id="pubShuffleOpt" />
+        </div>
+
+        <button class="btn" onclick="publishQuiz()">📤 بدء الإرسال الآن</button>
       </div>
     </div>
-  </div>
 
-  <!-- نافذة نقل سؤال -->
-  <div id="moveModal" class="modal">
-    <div class="modal-content">
-      <h3>📦 نقل السؤال لمجموعة أخرى</h3>
-      <input type="hidden" id="moveQId" />
-      <label>اختر المجموعة الوجهة:</label>
-      <select id="moveTargetBank"></select>
-      <div style="display:flex; gap:8px;">
-        <button class="btn" onclick="confirmMoveQuestion()">✅ نقل الآن</button>
-        <button class="btn btn-outline" onclick="closeModal('moveModal')">إلغاء</button>
+    <!-- تبويب 6: الأدمنز -->
+    <div id="tab-admins" class="tab">
+      <div class="card">
+        <h3>👑 إدارة المشرفين (Admins)</h3>
+        <label>Telegram ID للأدمن الجديد:</label>
+        <input type="number" id="newAdminId" placeholder="مثال: 123456789" />
+        <label>الاسم:</label>
+        <input type="text" id="newAdminName" placeholder="مثال: أحمد" />
+        <button class="btn" onclick="addAdmin()">➕ إضافة أدمن</button>
+      </div>
+      <div id="adminsList"></div>
+    </div>
+
+    <!-- شريط التنقل السفلي -->
+    <div class="nav-bar">
+      <div class="nav-item active" id="nav-banks" onclick="switchTab('banks')"><span>📂</span>المجموعات</div>
+      <div class="nav-item" id="nav-upload" onclick="switchTab('upload')"><span>📤</span>رفع CSV</div>
+      <div class="nav-item" id="nav-communities" onclick="switchTab('communities')"><span>🌐</span>المجتمعات</div>
+      <div class="nav-item" id="nav-publish" onclick="switchTab('publish')"><span>🚀</span>نشر</div>
+      <div class="nav-item" id="nav-admins" style="display:none;" onclick="switchTab('admins')"><span>👑</span>الأدمنز</div>
+    </div>
+
+    <!-- نافذة إضافة / تعديل سؤال يدوياً -->
+    <div id="qModal" class="modal">
+      <div class="modal-content">
+        <h3 id="qModalTitle">إضافة / تعديل سؤال</h3>
+        <input type="hidden" id="editQId" />
+        <label>نص السؤال:</label>
+        <textarea id="qText" rows="2" placeholder="اكتب نص السؤال هنا..."></textarea>
+        <label>الإجابة 1:</label><input type="text" id="qOpt1" />
+        <label>الإجابة 2:</label><input type="text" id="qOpt2" />
+        <label>الإجابة 3:</label><input type="text" id="qOpt3" />
+        <label>الإجابة 4:</label><input type="text" id="qOpt4" />
+        <label>الإجابة الصحيحة:</label>
+        <select id="qCorrect">
+          <option value="0">الإجابة 1</option>
+          <option value="1">الإجابة 2</option>
+          <option value="2">الإجابة 3</option>
+          <option value="3">الإجابة 4</option>
+        </select>
+        <label>شرح الإجابة (يظهر بعد الحل - اختياري):</label>
+        <input type="text" id="qExpl" placeholder="اكتب توضيحاً للإجابة الصحيحة..." />
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-success" onclick="saveQuestion()">💾 حفظ السؤال</button>
+          <button class="btn btn-outline" onclick="closeModal('qModal')">إلغاء</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- نافذة نقل سؤال -->
+    <div id="moveModal" class="modal">
+      <div class="modal-content">
+        <h3>📦 نقل السؤال لمجموعة أخرى</h3>
+        <input type="hidden" id="moveQId" />
+        <label>اختر المجموعة الوجهة:</label>
+        <select id="moveTargetBank"></select>
+        <div style="display:flex; gap:8px;">
+          <button class="btn" onclick="confirmMoveQuestion()">✅ نقل الآن</button>
+          <button class="btn btn-outline" onclick="closeModal('moveModal')">إلغاء</button>
+        </div>
       </div>
     </div>
   </div>
 
   <script>
-    const tg = window.Telegram.WebApp;
-    tg.expand();
-    const initData = tg.initData || "";
+    const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+    if (tg) tg.expand();
+    const initData = tg ? (tg.initData || "") : "";
 
     let banksCache = [];
     let commsCache = [];
     let currentBankId = null;
     let questionsCache = [];
 
-    async function api(url, options = {}) {
+    function blockAccess(reason) {
+      document.getElementById("appContainer").remove();
+      document.getElementById("authIcon").innerText = "⛔";
+      document.getElementById("authTitle").innerText = "الوصول مرفوض";
+      document.getElementById("authTitle").style.color = "#ef4444";
+      document.getElementById("authMsg").innerText = reason || "هذا الموقع محمي ولا يمكن فتحه إلا من داخل تيليجرام لحسابات المشرفين المصرح لهم فقط.";
+    }
+
+    async function api(url, options = {}, silent = false) {
       options.headers = { ...options.headers, "X-Telegram-Init-Data": initData };
       if (!(options.body instanceof FormData)) {
         options.headers["Content-Type"] = "application/json";
@@ -253,15 +282,25 @@
       const res = await fetch(url, options);
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: "حدث خطأ" }));
-        alert("⚠️ " + (err.detail || "خطأ في الاتصال"));
-        throw new Error(err.detail);
+        if (!silent) alert("⚠️ " + (err.detail || "خطأ في الاتصال"));
+        throw new Error(err.detail || "Unauthorized");
       }
       return res.json();
     }
 
     async function initApp() {
+      // منع الفتح الفوري من المتصفح إذا لم توجد بيانات تيليجرام
+      if (!initData || initData.trim() === "") {
+        blockAccess("غير مصرح بالدخول من المتصفح. يرجى فتح التطبيق من داخل بوت تيليجرام.");
+        return;
+      }
+
       try {
-        const me = await api("/api/me");
+        const me = await api("/api/me", {}, true);
+        // التحقق نجح: إزالة شاشة الحظر وإظهار التطبيق
+        document.getElementById("authScreen").style.display = "none";
+        document.getElementById("appContainer").style.display = "block";
+
         document.getElementById("roleBadge").innerText = me.is_owner ? "👑 المالك" : "🛡️ أدمن";
         if (me.is_owner) {
           document.getElementById("nav-admins").style.display = "block";
@@ -269,7 +308,7 @@
         }
         await Promise.all([loadBanks(), loadCommunities()]);
       } catch (e) {
-        document.getElementById("roleBadge").innerText = "⛔ غير مصرح";
+        blockAccess(e.message);
       }
     }
 
