@@ -263,6 +263,9 @@
           <button class="btn btn-sm btn-success" id="btnAppendCsv" style="flex:1; min-width:110px;" onclick="openAppendCsvModal()">
             <svg class="ico ico-sm"><use href="#i-upload"/></svg> دمج CSV
           </button>
+          <button class="btn btn-sm btn-outline" style="flex:1; min-width:130px;" onclick="openPdfStudioModal(currentBankId, currentBankName, questionsCache)">
+            <svg class="ico ico-sm"><use href="#i-download"/></svg> تصدير PDF
+          </button>
           <button class="btn btn-sm btn-outline" style="flex:1; min-width:130px;" onclick="openExportCsvModal(currentBankId, currentBankName, questionsCache)">
             <svg class="ico ico-sm"><use href="#i-download"/></svg> تحميل CSV للخاص
           </button>
@@ -502,6 +505,145 @@
       </div>
     </div>
 
+    <div id="pdfStudioModal" class="modal">
+      <div class="modal-content" style="max-width:620px;">
+        <h3><svg class="ico"><use href="#i-download"/></svg> استوديو تصدير PDF (نسختان: محلولة + غير محلولة)</h3>
+        <p id="pdfStudioSubtitle" style="font-size:0.82rem; color:var(--hint); margin-top:0;"></p>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <label style="margin:0;">تحديد الأسئلة وترتيبها (<span id="pdfSelCount">0</span>):</label>
+          <div style="display:flex; gap:6px;">
+            <button type="button" class="btn btn-sm btn-outline" onclick="setAllPdfQuestions(true)">تحديد الكل</button>
+            <button type="button" class="btn btn-sm btn-outline" onclick="setAllPdfQuestions(false)">إلغاء التحديد</button>
+          </div>
+        </div>
+        <div id="pdfQuestionsOrderList" class="select-list" style="max-height:200px;"></div>
+
+        <div class="card" style="padding:12px; margin-bottom:10px;">
+          <strong style="display:block; margin-bottom:8px; font-size:0.9rem;">محرر العناوين في أي موضع (Custom Headings Editor)</strong>
+          <label>نص العنوان الرئيسي:</label>
+          <input type="text" id="pdfHeadingText" placeholder="مثال: Mid-Term Exam — Pharmacology" />
+          <label>عنوان فرعي / ملاحظة (اختياري):</label>
+          <input type="text" id="pdfHeadingSub" placeholder="مثال: Answer Key Highlighted in Red Underline" />
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div>
+              <label>موضع العنوان:</label>
+              <select id="pdfHeadingPlacement">
+                <option value="top_first">أعلى الصفحة الأولى</option>
+                <option value="running_header">ترويسة متكررة أعلى الصفحات</option>
+                <option value="running_footer">تذييل متكرر أسفل الصفحات</option>
+                <option value="before_q_1">قبل السؤال رقم 1</option>
+                <option value="before_q_5">قبل السؤال رقم 5</option>
+                <option value="before_q_10">قبل السؤال رقم 10</option>
+              </select>
+            </div>
+            <div>
+              <label>المحاذاة وحجم الخط:</label>
+              <div style="display:flex; gap:6px;">
+                <select id="pdfHeadingAlign" style="margin-bottom:0;">
+                  <option value="center">وسط</option>
+                  <option value="right">يمين</option>
+                  <option value="left">يسار</option>
+                </select>
+                <input type="number" id="pdfHeadingSize" value="17" min="11" max="32" style="margin-bottom:0; width:76px;" />
+              </div>
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center; margin-top:8px; flex-wrap:wrap;">
+            <label style="margin:0; display:flex; align-items:center; gap:5px;">
+              لون الخط <input type="color" id="pdfHeadingColor" value="#0f172a" style="width:36px; height:28px; padding:0; margin:0;" />
+            </label>
+            <label style="margin:0; display:flex; align-items:center; gap:5px;">
+              <input type="checkbox" id="pdfHeadingBorder" style="width:auto; margin:0;" /> إطار حول العنوان
+            </label>
+            <button type="button" class="btn btn-sm btn-outline" onclick="addCustomPdfHeading()">+ إضافة العنوان</button>
+          </div>
+          <div id="pdfHeadingsList" style="margin-top:8px;"></div>
+        </div>
+
+        <div class="card" style="padding:12px; margin-bottom:12px;">
+          <strong style="display:block; margin-bottom:8px; font-size:0.9rem;">إعدادات التخطيط والمسافات</strong>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div>
+              <label>نمط التصميم:</label>
+              <select id="pdfTheme">
+                <option value="academic">أكاديمي نظيف (Academic)</option>
+                <option value="modern">بطاقات عصرية (Modern Cards)</option>
+                <option value="exam">ورقة امتحان رسمية (Exam Sheet)</option>
+              </select>
+            </div>
+            <div>
+              <label>عدد الأعمدة:</label>
+              <select id="pdfColumns">
+                <option value="1">عمود واحد (1 Column)</option>
+                <option value="2">عمودان (2 Columns)</option>
+              </select>
+            </div>
+            <div>
+              <label>توزيع الخيارات:</label>
+              <select id="pdfOptLayout">
+                <option value="vertical">قائمة رأسية</option>
+                <option value="grid">شبكة (2x2)</option>
+              </select>
+            </div>
+            <div>
+              <label>ترقيم الخيارات:</label>
+              <select id="pdfOptStyle">
+                <option value="A">A, B, C, D</option>
+                <option value="1">1, 2, 3, 4</option>
+                <option value="a">a, b, c, d</option>
+                <option value="ar">أ، ب، ج، د</option>
+              </select>
+            </div>
+            <div>
+              <label>حجم خط الأسئلة (px):</label>
+              <input type="number" id="pdfBodyFont" value="12.5" step="0.5" min="9.5" max="20" />
+            </div>
+            <div>
+              <label>هوامش الصفحة (mm):</label>
+              <input type="number" id="pdfMarginMm" value="14" min="8" max="28" />
+            </div>
+            <div>
+              <label>المسافة بين السؤال والخيارات (px):</label>
+              <input type="number" id="pdfGapQOpts" value="8" min="2" max="32" />
+            </div>
+            <div>
+              <label>المسافة بين الخيارات (px):</label>
+              <input type="number" id="pdfGapOpts" value="5" min="1" max="24" />
+            </div>
+            <div>
+              <label>المسافة بين الأسئلة (px):</label>
+              <input type="number" id="pdfGapQuestions" value="16" min="6" max="42" />
+            </div>
+            <div>
+              <label>بداية الترقيم من رقم:</label>
+              <input type="number" id="pdfStartNum" value="1" min="1" />
+            </div>
+          </div>
+
+          <div class="switch-row">
+            <span>ترتيب الأسئلة عشوائياً قبل التصدير</span>
+            <input type="checkbox" id="pdfShuffleQ" />
+          </div>
+          <div class="switch-row">
+            <span>إظهار الشرح في النسخة المحلولة (إن وجد)</span>
+            <input type="checkbox" id="pdfShowExpl" checked />
+          </div>
+          <div class="switch-row">
+            <span>إظهار أرقام الصفحات</span>
+            <input type="checkbox" id="pdfShowPageNums" checked />
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-success" id="confirmPdfPairBtn" onclick="confirmExportPdfPair()">
+            <svg class="ico ico-sm"><use href="#i-send"/></svg> إرسال النسختين (محلولة + غير محلولة)
+          </button>
+          <button class="btn btn-outline" onclick="closeModal('pdfStudioModal')">إغلاق</button>
+        </div>
+      </div>
+    </div>
+
     <div id="exportCsvModal" class="modal">
       <div class="modal-content">
         <h3><svg class="ico"><use href="#i-download"/></svg> تحميل الأسئلة كـ CSV على الخاص</h3>
@@ -617,6 +759,10 @@
 
     let exportTargetBankId = null;
     let exportCandidateQuestions = [];
+
+    let pdfStudioBankId = null;
+    let pdfStudioItems = [];
+    let pdfCustomHeadings = [];
 
     function getQuestionOptions(q) {
       if (Array.isArray(q.options) && q.options.length >= 2) {
@@ -781,6 +927,9 @@
               <button class="btn btn-sm" onclick="openBank(${b.id}, '${safeName}', ${Boolean(b.can_edit)})">
                 <svg class="ico ico-sm"><use href="#i-edit"/></svg> الأسئلة
               </button>
+              <button class="btn btn-sm btn-outline" onclick="openPdfStudioModal(${b.id}, '${safeName}')">
+                <svg class="ico ico-sm"><use href="#i-download"/></svg> تصدير PDF
+              </button>
               <button class="btn btn-sm btn-outline" onclick="openExportCsvModal(${b.id}, '${safeName}')">
                 <svg class="ico ico-sm"><use href="#i-download"/></svg> CSV للخاص
               </button>
@@ -795,6 +944,149 @@
       });
 
       syncPublishBanksSelect();
+    }
+
+    async function openPdfStudioModal(bankId, bankName, preloadedQuestions = null) {
+      pdfStudioBankId = bankId;
+      pdfCustomHeadings = [];
+      document.getElementById("pdfStudioSubtitle").innerText = `البنك: ${bankName} — سيتم إرسال النسخة المحلولة (إجابة حمراء + underline) والنسخة غير المحلولة إلى الخاص.`;
+
+      const rawList = (Array.isArray(preloadedQuestions) && bankId === currentBankId)
+        ? preloadedQuestions
+        : await api(`/api/banks/${bankId}/questions`);
+
+      pdfStudioItems = rawList.map(q => ({ ...q, _checked: true }));
+      renderPdfOrderList();
+      renderPdfHeadingsList();
+      document.getElementById("pdfStudioModal").classList.add("open");
+    }
+
+    function renderPdfOrderList() {
+      const box = document.getElementById("pdfQuestionsOrderList");
+      if (!pdfStudioItems.length) {
+        box.innerHTML = `<div style="padding:10px; color:var(--hint);">لا توجد أسئلة في هذا البنك.</div>`;
+        updatePdfSelBadge();
+        return;
+      }
+      box.innerHTML = pdfStudioItems.map((q, idx) => `
+        <div class="select-q-item ${q._checked ? "" : "excluded"}" style="justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:flex-start; gap:8px; flex:1; min-width:0;">
+            <input type="checkbox" ${q._checked ? "checked" : ""} onchange="togglePdfItem(${idx}, this.checked)" />
+            <span style="line-height:1.4;"><b>${idx + 1}.</b> ${q.question}</span>
+          </div>
+          <div style="display:flex; gap:4px; flex-shrink:0;">
+            <button type="button" class="btn btn-sm btn-outline" style="padding:3px 7px;" onclick="movePdfItem(${idx}, -1)">▲</button>
+            <button type="button" class="btn btn-sm btn-outline" style="padding:3px 7px;" onclick="movePdfItem(${idx}, 1)">▼</button>
+          </div>
+        </div>
+      `).join("");
+      updatePdfSelBadge();
+    }
+
+    function togglePdfItem(idx, checked) {
+      if (!pdfStudioItems[idx]) return;
+      pdfStudioItems[idx]._checked = checked;
+      renderPdfOrderList();
+    }
+
+    function movePdfItem(idx, delta) {
+      const target = idx + delta;
+      if (target < 0 || target >= pdfStudioItems.length) return;
+      const tmp = pdfStudioItems[idx];
+      pdfStudioItems[idx] = pdfStudioItems[target];
+      pdfStudioItems[target] = tmp;
+      renderPdfOrderList();
+    }
+
+    function setAllPdfQuestions(state) {
+      pdfStudioItems.forEach(item => { item._checked = state; });
+      renderPdfOrderList();
+    }
+
+    function updatePdfSelBadge() {
+      const cnt = pdfStudioItems.filter(x => x._checked).length;
+      document.getElementById("pdfSelCount").innerText = `${cnt} من ${pdfStudioItems.length}`;
+    }
+
+    function addCustomPdfHeading() {
+      const text = document.getElementById("pdfHeadingText").value.trim();
+      if (!text) return alert("يرجى كتابة نص العنوان أولاً.");
+      pdfCustomHeadings.push({
+        text,
+        subtitle: document.getElementById("pdfHeadingSub").value.trim(),
+        placement: document.getElementById("pdfHeadingPlacement").value,
+        align: document.getElementById("pdfHeadingAlign").value,
+        font_size: parseInt(document.getElementById("pdfHeadingSize").value) || 17,
+        color: document.getElementById("pdfHeadingColor").value || "#0f172a",
+        bordered: document.getElementById("pdfHeadingBorder").checked
+      });
+      document.getElementById("pdfHeadingText").value = "";
+      document.getElementById("pdfHeadingSub").value = "";
+      renderPdfHeadingsList();
+    }
+
+    function removeCustomPdfHeading(idx) {
+      pdfCustomHeadings.splice(idx, 1);
+      renderPdfHeadingsList();
+    }
+
+    function renderPdfHeadingsList() {
+      const box = document.getElementById("pdfHeadingsList");
+      if (!pdfCustomHeadings.length) {
+        box.innerHTML = "";
+        return;
+      }
+      box.innerHTML = pdfCustomHeadings.map((h, i) => `
+        <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg); padding:6px 10px; border-radius:8px; margin-top:6px; font-size:0.8rem;">
+          <span><b>${h.text}</b> <small style="color:var(--hint);">(${h.placement})</small></span>
+          <button type="button" class="btn btn-sm btn-danger" style="padding:3px 8px;" onclick="removeCustomPdfHeading(${i})">حذف</button>
+        </div>
+      `).join("");
+    }
+
+    async function confirmExportPdfPair() {
+      if (!pdfStudioBankId) return;
+      const selectedIds = pdfStudioItems.filter(x => x._checked).map(x => x.id);
+      if (!selectedIds.length) {
+        return alert("يرجى تحديد سؤال واحد على الأقل لتوليد ملفات PDF.");
+      }
+      const orderedIds = pdfStudioItems.map(x => x.id);
+
+      const settings = {
+        theme: document.getElementById("pdfTheme").value,
+        columns: parseInt(document.getElementById("pdfColumns").value) || 1,
+        option_layout: document.getElementById("pdfOptLayout").value,
+        option_style: document.getElementById("pdfOptStyle").value,
+        body_font_size: parseFloat(document.getElementById("pdfBodyFont").value) || 12.5,
+        margin_mm: parseFloat(document.getElementById("pdfMarginMm").value) || 14,
+        gap_q_opts: parseFloat(document.getElementById("pdfGapQOpts").value) || 8,
+        gap_opts: parseFloat(document.getElementById("pdfGapOpts").value) || 5,
+        gap_questions: parseFloat(document.getElementById("pdfGapQuestions").value) || 16,
+        start_number: parseInt(document.getElementById("pdfStartNum").value) || 1,
+        show_explanations: document.getElementById("pdfShowExpl").checked,
+        show_page_numbers: document.getElementById("pdfShowPageNums").checked,
+        custom_headings: pdfCustomHeadings
+      };
+
+      const btn = document.getElementById("confirmPdfPairBtn");
+      btn.disabled = true;
+      try {
+        const res = await api("/api/export_pdf_pair", {
+          method: "POST",
+          body: JSON.stringify({
+            bank_id: pdfStudioBankId,
+            question_ids: selectedIds,
+            ordered_question_ids: orderedIds,
+            shuffle_questions: document.getElementById("pdfShuffleQ").checked,
+            settings
+          })
+        });
+        closeModal("pdfStudioModal");
+        alert(`تم إرسال النسختين (${res.solved_file} و ${res.unsolved_file}) لـ ${res.exported_count} سؤال إلى محادثتك الخاصة.`);
+        await loadLogs();
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     async function openExportCsvModal(bankId, bankName, preloadedQuestions = null) {
