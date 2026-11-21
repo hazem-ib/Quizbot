@@ -54,7 +54,6 @@
     <span id="roleBadge" class="badge">جاري التحميل...</span>
   </div>
 
-  <!-- تبويب 1: المجموعات وبنوك الأسئلة -->
   <div id="tab-banks" class="tab active">
     <div style="display:flex; gap:8px; margin-bottom:12px;">
       <button class="btn" onclick="openNewBankModal()">➕ مجموعة جديدة</button>
@@ -63,7 +62,6 @@
     <div id="banksList"></div>
   </div>
 
-  <!-- تبويب 2: عرض وتعديل أسئلة مجموعة محددة -->
   <div id="tab-questions" class="tab">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
       <button class="btn btn-outline btn-sm" onclick="switchTab('banks')">🔙 المجموعات</button>
@@ -74,7 +72,6 @@
     <div id="questionsList"></div>
   </div>
 
-  <!-- تبويب 3: رفع ملف CSV -->
   <div id="tab-upload" class="tab">
     <div class="card">
       <h3>📤 استيراد أسئلة من ملف CSV</h3>
@@ -90,7 +87,6 @@
     </div>
   </div>
 
-  <!-- تبويب 4: النشر والإرسال -->
   <div id="tab-publish" class="tab">
     <div class="card">
       <h3>🚀 نشر الاختبار كـ Quiz تفاعلي</h3>
@@ -126,7 +122,6 @@
     </div>
   </div>
 
-  <!-- تبويب 5: الأدمنز (للمالك فقط) -->
   <div id="tab-admins" class="tab">
     <div class="card">
       <h3>👑 إدارة المشرفين (Admins)</h3>
@@ -139,7 +134,6 @@
     <div id="adminsList"></div>
   </div>
 
-  <!-- شريط التنقل السفلي -->
   <div class="nav-bar">
     <div class="nav-item active" id="nav-banks" onclick="switchTab('banks')"><span>📂</span>المجموعات</div>
     <div class="nav-item" id="nav-upload" onclick="switchTab('upload')"><span>📤</span>رفع CSV</div>
@@ -147,7 +141,6 @@
     <div class="nav-item" id="nav-admins" style="display:none;" onclick="switchTab('admins')"><span>👑</span>الأدمنز</div>
   </div>
 
-  <!-- نافذة تعديل / إضافة سؤال -->
   <div id="qModal" class="modal">
     <div class="modal-content">
       <h3 id="qModalTitle">تعديل السؤال</h3>
@@ -174,7 +167,6 @@
     </div>
   </div>
 
-  <!-- نافذة نقل سؤال لمجموعة أخرى -->
   <div id="moveModal" class="modal">
     <div class="modal-content">
       <h3>📦 نقل السؤال إلى مجموعة أخرى</h3>
@@ -422,8 +414,9 @@
         shuffle_questions: document.getElementById("pubShuffleQ").checked,
         shuffle_options: document.getElementById("pubShuffleOpt").checked
       };
+      alert("⏳ جاري إرسال الأسئلة الآن، يرجى الانتظار حتى انتهاء الإرسال...");
       const res = await api("/api/publish", { method: "POST", body: JSON.stringify(payload) });
-      alert(`🚀 بدأ إرسال ${res.count} سؤال الآن!`);
+      alert(`✅ تم إرسال جميع الأسئلة (${res.count} سؤال) بنجاح!`);
     }
 
     async function loadAdmins() {
