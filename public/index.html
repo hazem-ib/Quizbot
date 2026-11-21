@@ -7,8 +7,8 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     :root {
-      --bg: var(--tg-theme-bg-color, #0b1120);
-      --sec-bg: var(--tg-theme-secondary-bg-color, #162032);
+      --bg: var(--tg-theme-bg-color, #090e1a);
+      --sec-bg: var(--tg-theme-secondary-bg-color, #111a2e);
       --card-border: rgba(255, 255, 255, 0.08);
       --text: var(--tg-theme-text-color, #f8fafc);
       --hint: var(--tg-theme-hint-color, #94a3b8);
@@ -16,17 +16,18 @@
       --btn-text: var(--tg-theme-button-text-color, #ffffff);
       --danger: #ef4444;
       --success: #10b981;
+      --warn: #f59e0b;
       --radius: 16px;
     }
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { margin: 0; padding: 14px 14px 96px; background: var(--bg); color: var(--text); }
+    body { margin: 0; padding: 14px 14px 98px; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
 
     .ico { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.85; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
     .ico-sm { width: 15px; height: 15px; }
     .ico-lg { width: 34px; height: 34px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
     #authScreen {
-      position: fixed; inset: 0; background: #070b14; z-index: 9999;
+      position: fixed; inset: 0; background: #060a13; z-index: 9999;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       text-align: center; padding: 24px;
     }
@@ -36,13 +37,13 @@
       display: flex; align-items: center; justify-content: center; margin-bottom: 14px; color: #60a5fa;
     }
     #authScreen p { color: #94a3b8; font-size: 0.92rem; max-width: 320px; line-height: 1.65; }
-    #appContainer { display: none; max-width: 580px; margin: 0 auto; }
+    #appContainer { display: none; max-width: 600px; margin: 0 auto; }
 
     .profile-header {
       display: flex; justify-content: space-between; align-items: center; gap: 10px;
-      background: var(--sec-bg); border: 1px solid var(--card-border);
-      border-radius: 18px; padding: 12px 14px; margin-bottom: 14px;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+      background: linear-gradient(145deg, var(--sec-bg), rgba(59, 130, 246, 0.06));
+      border: 1px solid var(--card-border); border-radius: 18px; padding: 13px 15px; margin-bottom: 14px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
     }
     .user-identity { display: flex; align-items: center; gap: 11px; min-width: 0; }
     .avatar-box {
@@ -74,8 +75,8 @@
 
     .card {
       background: var(--sec-bg); border: 1px solid var(--card-border);
-      border-radius: var(--radius); padding: 15px; margin-bottom: 12px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
+      border-radius: var(--radius); padding: 16px; margin-bottom: 12px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
     }
     .card h3 { margin: 0 0 12px; font-size: 1rem; display: flex; align-items: center; gap: 7px; }
     .btn {
@@ -101,7 +102,7 @@
 
     .nav-bar {
       position: fixed; bottom: 0; left: 0; right: 0;
-      background: rgba(22, 32, 50, 0.97); backdrop-filter: blur(14px);
+      background: rgba(17, 26, 46, 0.96); backdrop-filter: blur(16px);
       display: flex; border-top: 1px solid var(--card-border); padding: 7px 2px 9px; z-index: 100;
     }
     .nav-item {
@@ -122,7 +123,8 @@
 
     .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 11px; font-size: 0.85rem; }
     .switch-row input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--btn); flex-shrink: 0; }
-    .hint-box { background: rgba(59,130,246,0.1); border-right: 3px solid var(--btn); padding: 10px 12px; border-radius: 10px; font-size: 0.8rem; margin-bottom: 13px; color: var(--text); line-height: 1.55; }
+    .hint-box { background: rgba(59,130,246,0.09); border-right: 3px solid var(--btn); padding: 10px 12px; border-radius: 10px; font-size: 0.8rem; margin-bottom: 13px; color: var(--text); line-height: 1.55; }
+    .warn-box { background: rgba(245,158,11,0.11); border-right: 3px solid var(--warn); padding: 11px 13px; border-radius: 12px; font-size: 0.8rem; margin-top: 12px; color: #fde68a; line-height: 1.6; }
 
     .select-list { max-height: 230px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 8px; background: var(--bg); margin-bottom: 12px; }
     .select-q-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.83rem; }
@@ -220,20 +222,18 @@
       </div>
     </div>
 
-    <!-- تبويب بنوك الأسئلة -->
     <div id="tab-banks" class="tab active">
       <div style="display:flex; gap:8px; margin-bottom:13px;">
         <button class="btn" id="btnNewBank" onclick="openNewBankModal()">
           <svg class="ico"><use href="#i-plus"/></svg> بنك جديد
         </button>
         <button class="btn btn-success" id="btnGoUpload" onclick="switchTab('upload')">
-          <svg class="ico"><use href="#i-upload"/></svg> استيراد CSV
+          <svg class="ico"><use href="#i-upload"/></svg> استيراد ملفات
         </button>
       </div>
       <div id="banksList"></div>
     </div>
 
-    <!-- تبويب أسئلة البنك -->
     <div id="tab-questions" class="tab">
       <div class="card" style="padding:12px;">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:10px;">
@@ -255,12 +255,27 @@
         </div>
       </div>
 
-      <input type="text" id="searchQ" placeholder="ابحث في أسئلة البنك..." oninput="renderQuestions()" />
+      <input type="text" id="searchQ" placeholder="ابحث في أسئلة البنك أو الملاحظات..." oninput="renderQuestions()" />
       <div id="questionsList"></div>
     </div>
 
-    <!-- تبويب استيراد CSV -->
     <div id="tab-upload" class="tab">
+      <div class="card">
+        <h3><svg class="ico"><use href="#i-upload"/></svg> استيراد أسئلة من PDF (باللون الأحمر / الهايلايت)</h3>
+        <div class="hint-box">
+          يستخرج النص، يفصص السؤال وخياراته (A / B / C / D)، ويحدد الخيار الملوّن بالأحمر أو المظلل ثم يدخله مباشرة في البنك.<br>
+          <strong>تنبيه درجات الطلاب:</strong> أي سؤال لا يظهر فيه لون أحمر/هايلايت واضح أو يظهر فيه أكثر من خيار ملوّن يُعلَّم تلقائياً للمراجعة قبل الإرسال.
+        </div>
+        <label>اسم البنك الجديد:</label>
+        <input type="text" id="pdfBankName" placeholder="مثال: علم الأدوية - بنك PDF" />
+        <label>ملف PDF:</label>
+        <input type="file" id="pdfFile" accept=".pdf,application/pdf" />
+        <button class="btn" id="uploadPdfBtn" onclick="uploadPDF()">
+          <svg class="ico"><use href="#i-upload"/></svg> استخراج وحفظ أسئلة PDF
+        </button>
+        <div id="pdfReviewReport" style="display:none;"></div>
+      </div>
+
       <div class="card">
         <h3><svg class="ico"><use href="#i-upload"/></svg> استيراد بنك أسئلة من CSV</h3>
         <div class="hint-box">
@@ -277,7 +292,6 @@
       </div>
     </div>
 
-    <!-- تبويب الوجهات المحفوظة -->
     <div id="tab-communities" class="tab">
       <div class="card">
         <h3><svg class="ico"><use href="#i-globe"/></svg> إدارة الوجهات المحفوظة</h3>
@@ -298,7 +312,6 @@
       <div id="communitiesList"></div>
     </div>
 
-    <!-- تبويب الإرسال -->
     <div id="tab-publish" class="tab">
       <div class="card">
         <h3><svg class="ico"><use href="#i-send"/></svg> إرسال الاختبار</h3>
@@ -390,7 +403,6 @@
       </div>
     </div>
 
-    <!-- تبويب المشرفين والصلاحيات -->
     <div id="tab-admins" class="tab">
       <div class="card">
         <h3 id="adminFormTitle"><svg class="ico"><use href="#i-shield"/></svg> إضافة أو تعديل مشرف وصلاحياته</h3>
@@ -402,7 +414,7 @@
         <input type="text" id="newAdminTag" placeholder="مثال: سكشن 1" />
 
         <div class="switch-row">
-          <span>إنشاء بنوك أسئلة واستيراد CSV</span>
+          <span>إنشاء بنوك أسئلة واستيراد الملفات</span>
           <input type="checkbox" id="permCreateBank" checked />
         </div>
         <div class="switch-row">
@@ -430,7 +442,6 @@
       <div id="adminsList"></div>
     </div>
 
-    <!-- تبويب سجل العمليات -->
     <div id="tab-logs" class="tab">
       <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
@@ -451,7 +462,6 @@
       </div>
     </div>
 
-    <!-- شريط التنقل السفلي -->
     <div class="nav-bar">
       <div class="nav-item active" id="nav-banks" onclick="switchTab('banks')">
         <svg class="ico"><use href="#i-folder"/></svg><span>البنوك</span>
@@ -473,7 +483,6 @@
       </div>
     </div>
 
-    <!-- نافذة إضافة / تعديل سؤال -->
     <div id="qModal" class="modal">
       <div class="modal-content">
         <h3 id="qModalTitle">إضافة سؤال</h3>
@@ -500,7 +509,6 @@
       </div>
     </div>
 
-    <!-- نافذة دمج CSV -->
     <div id="appendCsvModal" class="modal">
       <div class="modal-content">
         <h3>دمج أسئلة من CSV في البنك</h3>
@@ -516,7 +524,6 @@
       </div>
     </div>
 
-    <!-- نافذة نقل أو نسخ سؤال -->
     <div id="transferModal" class="modal">
       <div class="modal-content">
         <h3 id="transferModalTitle">نقل أو نسخ السؤال</h3>
@@ -604,6 +611,7 @@
       document.getElementById("btnNewBank").disabled = !canCreate;
       document.getElementById("btnGoUpload").disabled = !canCreate;
       document.getElementById("uploadCsvBtn").disabled = !canCreate;
+      document.getElementById("uploadPdfBtn").disabled = !canCreate;
 
       const canMgrAdmins = currentActor.role === "owner" || currentActor.can_manage_admins;
       document.getElementById("nav-admins").style.display = canMgrAdmins ? "flex" : "none";
@@ -771,7 +779,10 @@
       const qFilter = (document.getElementById("searchQ").value || "").toLowerCase();
       const list = document.getElementById("questionsList");
       list.innerHTML = "";
-      const filtered = questionsCache.filter(q => q.question.toLowerCase().includes(qFilter));
+      const filtered = questionsCache.filter(q =>
+        q.question.toLowerCase().includes(qFilter) ||
+        (q.explanation || "").toLowerCase().includes(qFilter)
+      );
 
       const bankObj = banksCache.find(b => b.id === currentBankId);
       const canEdit = bankObj ? Boolean(bankObj.can_edit) : true;
@@ -785,12 +796,13 @@
 
       filtered.forEach((q, idx) => {
         const opts = [q.opt1, q.opt2, q.opt3, q.opt4];
+        const hasFlag = (q.explanation || "").includes("مراجعة مطلوبة");
         const optsHtml = opts.map((o, i) => `<div class="opt-item ${i === q.correct_idx ? 'correct' : ''}">${i + 1}. ${o}</div>`).join("");
         list.innerHTML += `
-          <div class="card" id="q-card-${q.id}">
+          <div class="card" id="q-card-${q.id}" style="${hasFlag ? 'border-color: rgba(245, 158, 11, 0.4);' : ''}">
             <div style="margin-bottom:8px; font-weight:600; line-height:1.45;">${idx + 1}. ${q.question}</div>
             ${optsHtml}
-            ${q.explanation ? `<div style="font-size:0.8rem; color:var(--hint); margin-top:6px;">شرح: ${q.explanation}</div>` : ""}
+            ${q.explanation ? `<div style="font-size:0.8rem; color:${hasFlag ? '#fbbf24' : 'var(--hint)'}; margin-top:6px;">شرح / تنبيه: ${q.explanation}</div>` : ""}
             <div class="row-actions">
               <button class="btn btn-sm" ${!canEdit ? "disabled" : ""} onclick="openQuestionModal(${q.id})">
                 <svg class="ico ico-sm"><use href="#i-edit"/></svg> تعديل
@@ -926,6 +938,43 @@
     }
 
     function closeModal(id) { document.getElementById(id).classList.remove("open"); }
+
+    async function uploadPDF() {
+      const bankName = document.getElementById("pdfBankName").value.trim();
+      const fileInput = document.getElementById("pdfFile");
+      if (!bankName || !fileInput.files.length) return alert("يرجى إدخال اسم البنك واختيار ملف PDF.");
+
+      const btn = document.getElementById("uploadPdfBtn");
+      const repBox = document.getElementById("pdfReviewReport");
+      btn.disabled = true;
+      try {
+        const fd = new FormData();
+        fd.append("bank_name", bankName);
+        fd.append("file", fileInput.files[0]);
+
+        const res = await api("/api/upload_pdf", { method: "POST", body: fd });
+        document.getElementById("pdfBankName").value = "";
+        fileInput.value = "";
+        activePubBankId = res.bank_id;
+
+        const reviewCount = res.needs_review_count || 0;
+        const verifiedCount = res.verified_count || 0;
+        const itemsHtml = (res.review_items || []).slice(0, 8).map(it =>
+          `<li>سؤال #${it.question_number} (صفحة ${it.page}): ${it.reasons.join("، ")}</li>`
+        ).join("");
+
+        repBox.style.display = "block";
+        repBox.innerHTML = `
+          <div class="${reviewCount > 0 ? 'warn-box' : 'hint-box'}">
+            تم استخراج <b>${res.added}</b> سؤالاً (مؤكد بالأحمر/الهايلايت: <b>${verifiedCount}</b> • يحتاج مراجعة: <b>${reviewCount}</b>).
+            ${itemsHtml ? `<ul style="margin:6px 0 0; padding-right:18px;">${itemsHtml}</ul>` : ""}
+          </div>
+        `;
+        await loadBanks();
+      } finally {
+        btn.disabled = false;
+      }
+    }
 
     async function uploadCSV() {
       const bankName = document.getElementById("csvBankName").value.trim();
@@ -1108,6 +1157,12 @@
 
       if (questionsToSend.length === 0) {
         return alert("لم يتم تحديد أي سؤال للإرسال.");
+      }
+
+      const flaggedCount = questionsToSend.filter(q => (q.explanation || "").includes("مراجعة مطلوبة")).length;
+      if (flaggedCount > 0) {
+        const ok = confirm(`تنبيه: يوجد ${flaggedCount} سؤال ضمن المحدد عليها علامة مراجعة إجابة. هل تريد المتابعة إلى الإرسال؟`);
+        if (!ok) return;
       }
 
       if (document.getElementById("pubShuffleQ").checked) {
