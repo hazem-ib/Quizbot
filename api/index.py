@@ -1,5 +1,6 @@
 import os
 import io
+import re
 import json
 import hmac
 import hashlib
@@ -9,7 +10,7 @@ import random
 from typing import Optional, List
 import pandas as pd
 import psycopg2
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Request
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Poll, MenuButtonWebApp
@@ -19,11 +20,11 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "9268644584:AAE8woNBoXzueYqpsT4x69efYcDgP1mPP9Y")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
-app = FastAPI(title="Telegram Quiz Mini App v5")
+app = FastAPI(title="Telegram Quiz Mini App - HuggingFace Edition")
 
 def get_conn():
     if not DATABASE_URL:
-        raise HTTPException(status_code=500, detail="متغير DATABASE_URL غير مضاف في إعدادات Vercel")
+        raise HTTPException(status_code=500, detail="متغير DATABASE_URL غير مضاف في إعدادات Secrets")
     clean_url = DATABASE_URL.replace("&channel_binding=require", "").replace("?channel_binding=require", "")
     return psycopg2.connect(clean_url, sslmode="require")
 
@@ -167,7 +168,8 @@ def build_bot_app(webapp_url: str = ""):
             await update.message.reply_text("⛔ عذراً، هذا البوت مخصص للمشرفين فقط.")
             return
 
-        url = webapp_url or f"https://{os.environ.get('VERCEL_URL', '')}"
+        space_host = os.environ.get("SPACE_HOST", "")
+        url = webapp_url or (f"https://{space_host}" if space_host else "")
         keyboard = [[InlineKeyboardButton("🚀 فتح تطبيق إدارة الاختبارات", web_app=WebAppInfo(url=url))]]
         await update.message.reply_text(
             f"👋 أهلاً بك يا **{user.first_name}**!\n\n"
@@ -207,7 +209,8 @@ def build_bot_app(webapp_url: str = ""):
 @app.get("/setup_webhook")
 async def setup_webhook(request: Request):
     init_db()
-    host = request.headers.get("host")
+    space_host = os.environ.get("SPACE_HOST")
+    host = space_host or request.headers.get("x-forwarded-host") or request.headers.get("host")
     base_url = f"https://{host}"
     webhook_url = f"{base_url}/api/webhook"
 
@@ -218,7 +221,7 @@ async def setup_webhook(request: Request):
             menu_button=MenuButtonWebApp(text="📱 فتح التطبيق", web_app=WebAppInfo(url=base_url))
         )
     return {
-        "status": "Webhook & Menu Button configured successfully! (v5)",
+        "status": "Webhook & Menu Button configured successfully on Hugging Face!",
         "app_url": base_url,
         "webhook_url": webhook_url
     }
@@ -226,7 +229,8 @@ async def setup_webhook(request: Request):
 @app.post("/api/webhook")
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
-    host = request.headers.get("host")
+    space_host = os.environ.get("SPACE_HOST")
+    host = space_host or request.headers.get("x-forwarded-host") or request.headers.get("host")
     base_url = f"https://{host}"
     data = await request.json()
     bot_app = build_bot_app(base_url)
@@ -513,23 +517,21 @@ async def test_community(req: CommunityCreateReq, x_telegram_init_data: str = He
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"فشل الاتصال: تأكد أن البوت مشرف (Admin) ولديه صلاحية إرسال الرسائل. ({e})")
 
-# إرسال دفعة سريعة ضمن مهلة Vercel وإرجاع أي استراحة يطلبها تيليجرام فوراً
-@app.post("/api/publish_batch")
-@app.post("/publish_batch")
-async def publish_batch(req: BatchPublishReq, x_telegram_init_data: str = Header(default="")):
-    user = verify_telegram_init_data(x_telegram_init_data)
-    target_chat = user.get("id") if req.target_type == "private" else req.chat_id
-    if not target_chat:
-        raise HTTPException(status_code=400, detail="يرجى تحديد الوجهة أو اختيار مجتمع/قناة")
-
-    if not req.question_ids:
-        return {"sent": 0, "retry_after": 0}
-
+# إرسال جميع الأسئلة في الخلفية بالكامل على خادم Hugging Face المستمر
+async def bg_send_all_questions(
+    q_ids: List[int],
+    target_chat,
+    topic_id: Optional[int],
+    delay_sec: float,
+    shuffle_options: bool,
+    open_period: Optional[int],
+    admin_id: int
+):
     conn = get_conn()
     c = conn.cursor()
     c.execute(
         "SELECT id, question, opt1, opt2, opt3, opt4, correct_idx, explanation FROM questions WHERE id = ANY(%s)",
-        (req.question_ids,)
+        (q_ids,)
     )
     q_map = {r[0]: r for r in c.fetchall()}
     c.close()
@@ -538,15 +540,14 @@ async def publish_batch(req: BatchPublishReq, x_telegram_init_data: str = Header
     sent = 0
     bot_app = build_bot_app()
     async with bot_app:
-        for idx, qid in enumerate(req.question_ids):
+        for idx, qid in enumerate(q_ids):
             row = q_map.get(qid)
             if not row:
-                sent += 1
                 continue
 
             _, q_text, o1, o2, o3, o4, c_idx, expl = row
             opts = [o1[:98], o2[:98], o3[:98], o4[:98]]
-            if req.shuffle_options:
+            if shuffle_options:
                 indexed = list(enumerate(opts))
                 random.shuffle(indexed)
                 opts = [x[1] for x in indexed]
@@ -562,23 +563,65 @@ async def publish_batch(req: BatchPublishReq, x_telegram_init_data: str = Header
             }
             if expl:
                 kwargs["explanation"] = expl[:195]
-            if req.topic_id:
-                kwargs["message_thread_id"] = req.topic_id
-            if req.open_period and 5 <= req.open_period <= 600:
-                kwargs["open_period"] = req.open_period
+            if topic_id:
+                kwargs["message_thread_id"] = topic_id
+            if open_period and 5 <= open_period <= 600:
+                kwargs["open_period"] = open_period
 
-            try:
-                await bot_app.bot.send_poll(**kwargs)
-                sent += 1
-            except RetryAfter as e:
-                return {"sent": sent, "retry_after": int(e.retry_after) + 1}
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=f"خطأ من تيليجرام: {str(e)}")
+            while True:
+                try:
+                    await bot_app.bot.send_poll(**kwargs)
+                    sent += 1
+                    break
+                except RetryAfter as e:
+                    await asyncio.sleep(int(e.retry_after) + 2)
+                except Exception as e:
+                    err_msg = str(e)
+                    if "retry after" in err_msg.lower() or "too many requests" in err_msg.lower():
+                        m = re.search(r'(\d+)', err_msg)
+                        await asyncio.sleep(int(m.group(1)) + 2 if m else 35)
+                    else:
+                        break
 
-            if idx < len(req.question_ids) - 1:
-                await asyncio.sleep(req.delay_sec if req.delay_sec > 0 else 0.12)
+            if idx < len(q_ids) - 1:
+                await asyncio.sleep(delay_sec if delay_sec > 0 else 0.15)
 
-    return {"sent": sent, "retry_after": 0}
+        try:
+            await bot_app.bot.send_message(
+                chat_id=admin_id,
+                text=f"✅ اكتمل إرسال الاختبار في الخلفية! تم إرسال **{sent}** من **{len(q_ids)}** سؤال.",
+                parse_mode="Markdown"
+            )
+        except Exception:
+            pass
+
+@app.post("/api/publish_batch")
+@app.post("/publish_batch")
+async def publish_batch(
+    req: BatchPublishReq,
+    background_tasks: BackgroundTasks,
+    x_telegram_init_data: str = Header(default="")
+):
+    user = verify_telegram_init_data(x_telegram_init_data)
+    admin_id = user.get("id")
+    target_chat = admin_id if req.target_type == "private" else req.chat_id
+    if not target_chat:
+        raise HTTPException(status_code=400, detail="يرجى تحديد الوجهة أو اختيار مجتمع/قناة")
+
+    if not req.question_ids:
+        return {"sent": 0, "retry_after": 0, "error": None}
+
+    background_tasks.add_task(
+        bg_send_all_questions,
+        req.question_ids,
+        target_chat,
+        req.topic_id,
+        req.delay_sec,
+        req.shuffle_options,
+        req.open_period,
+        admin_id
+    )
+    return {"sent": len(req.question_ids), "retry_after": 0, "error": None}
 
 @app.get("/api/admins")
 @app.get("/admins")
