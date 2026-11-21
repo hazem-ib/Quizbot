@@ -58,17 +58,11 @@
     .switch-row input { width: auto; margin: 0; }
     .hint-box { background: rgba(59,130,246,0.12); border-right: 3px solid var(--btn); padding: 10px; border-radius: 8px; font-size: 0.8rem; margin-bottom: 12px; color: var(--text); }
     
-    /* قائمة التحديد المتقدم */
     .select-list { max-height: 280px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 8px; background: var(--bg); margin-bottom: 10px; }
     .select-q-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.84rem; }
     .select-q-item:last-child { border-bottom: none; }
     .select-q-item input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0; }
     .select-q-item.excluded { opacity: 0.45; text-decoration: line-through; }
-
-    /* شريط التقدم */
-    .progress-box { background: var(--bg); border-radius: 10px; padding: 12px; margin-top: 12px; border: 1px solid var(--btn); display: none; }
-    .progress-bar-bg { width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 99px; overflow: hidden; margin: 8px 0; }
-    .progress-bar-fill { height: 100%; background: var(--success); width: 0%; transition: width 0.25s; }
   </style>
 </head>
 <body>
@@ -144,14 +138,13 @@
       <div id="communitiesList"></div>
     </div>
 
-    <!-- تبويب 5: النشر والتحكم في التوقيت والتحديد المتقدم -->
+    <!-- تبويب 5: النشر -->
     <div id="tab-publish" class="tab">
       <div class="card">
         <h3>🚀 إرسال الاختبار</h3>
         <label>اختر مجموعة الأسئلة:</label>
         <select id="pubBankSelect" onchange="onPublishBankChange()"></select>
 
-        <!-- قسم متقدم: استبعاد أسئلة معينة -->
         <div class="switch-row" style="margin-top:6px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.08);">
           <span>🎛️ متقدم: تحديد الأسئلة المرسلة / المستبعدة</span>
           <input type="checkbox" id="enableSelectiveMode" onchange="toggleSelectiveMode()" />
@@ -187,9 +180,9 @@
           <input type="number" id="pubTopicId" placeholder="رقم الموضوع داخل المجتمع" />
         </div>
 
-        <label>⏱️ الفاصل الزمني بين إرسال كل سؤال والآخر:</label>
+        <label>⏱️ طريقة وسرعة الإرسال:</label>
         <select id="pubDelay">
-          <option value="0">⚡ سريع تلقائي (آمن ضد الحظر)</option>
+          <option value="0">⚡ إرسال الكل معاً فوراً (يعمل في الخلفية حتى لو أغلقت البوت)</option>
           <option value="2">2 ثانية بين كل سؤال</option>
           <option value="5">5 ثوانٍ بين كل سؤال</option>
           <option value="10">10 ثوانٍ بين كل سؤال</option>
@@ -215,19 +208,7 @@
           <input type="checkbox" id="pubShuffleOpt" />
         </div>
 
-        <button id="pubStartBtn" class="btn" onclick="publishQuiz()">📤 بدء الإرسال الآن</button>
-        <button id="pubStopBtn" class="btn btn-danger" style="display:none; margin-top:8px;" onclick="stopPublishing()">🛑 إيقاف الإرسال</button>
-
-        <!-- شريط التقدم المباشر -->
-        <div id="progressBox" class="progress-box">
-          <div style="display:flex; justify-content:space-between; font-size:0.85rem;">
-            <span id="progressStatus">جاري التجهيز...</span>
-            <strong id="progressCounter">0 / 0</strong>
-          </div>
-          <div class="progress-bar-bg">
-            <div id="progressBarFill" class="progress-bar-fill"></div>
-          </div>
-        </div>
+        <button id="pubStartBtn" class="btn" onclick="publishQuiz()">📤 إرسال الكل الآن</button>
       </div>
     </div>
 
@@ -305,7 +286,6 @@
     let currentBankId = null;
     let questionsCache = [];
     let pubBankQuestions = [];
-    let cancelPublishingFlag = false;
 
     function blockAccess(reason) {
       document.getElementById("appContainer").remove();
@@ -595,7 +575,6 @@
       await loadCommunities();
     }
 
-    // إدارة التحديد المتقدم للأسئلة في تبويب النشر
     async function onPublishBankChange() {
       const bankId = document.getElementById("pubBankSelect").value;
       if (!bankId) return;
@@ -654,32 +633,14 @@
       document.getElementById("timerBox").style.display = checked ? "block" : "none";
     }
 
-    function stopPublishing() {
-      cancelPublishingFlag = true;
-      document.getElementById("progressStatus").innerText = "🛑 جاري الإيقاف...";
-    }
-
-    const sleep = (ms) => new Promise(res => setTimeout(res, ms));
-
     async function publishQuiz() {
-      const bankId = parseInt(document.getElementById("pubBankSelect").value);
-      if (!bankId) return alert("يرجى اختيار مجموعة أسئلة");
+      const bank_id = parseInt(document.getElementById("pubBankSelect").value);
+      if (!bank_id) return alert("يرجى اختيار مجموعة أسئلة");
 
-      if (pubBankQuestions.length === 0) {
-        pubBankQuestions = await api(`/api/banks/${bankId}/questions`);
-      }
-
-      // تحديد قائمة الأسئلة المطلوب إرسالها
-      let questionsToSend = [...pubBankQuestions];
+      let question_ids = null;
       if (document.getElementById("enableSelectiveMode").checked) {
-        const selectedIds = new Set(
-          Array.from(document.querySelectorAll(".pub-q-chk:checked")).map(c => parseInt(c.value))
-        );
-        questionsToSend = questionsToSend.filter(q => selectedIds.has(q.id));
-      }
-
-      if (questionsToSend.length === 0) {
-        return alert("⚠️ لم يتم تحديد أي سؤال للإرسال!");
+        question_ids = Array.from(document.querySelectorAll(".pub-q-chk:checked")).map(c => parseInt(c.value));
+        if (question_ids.length === 0) return alert("⚠️ لم يتم تحديد أي سؤال للإرسال!");
       }
 
       const targetMode = document.getElementById("pubTargetType").value;
@@ -700,82 +661,29 @@
         topic_id = parseInt(document.getElementById("pubTopicId").value) || null;
       }
 
-      if (document.getElementById("pubShuffleQ").checked) {
-        questionsToSend.sort(() => Math.random() - 0.5);
-      }
-
       const useTimer = document.getElementById("enableTimer").checked;
-      const open_period = useTimer ? (parseInt(document.getElementById("pubTimer").value) || 30) : null;
-      const shuffle_options = document.getElementById("pubShuffleOpt").checked;
-      const userDelaySec = parseFloat(document.getElementById("pubDelay").value);
+      const payload = {
+        bank_id,
+        question_ids,
+        target_type,
+        chat_id,
+        topic_id,
+        delay_sec: parseFloat(document.getElementById("pubDelay").value),
+        open_period: useTimer ? (parseInt(document.getElementById("pubTimer").value) || 30) : null,
+        shuffle_questions: document.getElementById("pubShuffleQ").checked,
+        shuffle_options: document.getElementById("pubShuffleOpt").checked
+      };
 
-      // تهيئة واجهة التقدم
-      cancelPublishingFlag = false;
-      const startBtn = document.getElementById("pubStartBtn");
-      const stopBtn = document.getElementById("pubStopBtn");
-      const pBox = document.getElementById("progressBox");
-      const pStatus = document.getElementById("progressStatus");
-      const pCounter = document.getElementById("progressCounter");
-      const pFill = document.getElementById("progressBarFill");
+      const btn = document.getElementById("pubStartBtn");
+      btn.disabled = true;
+      btn.innerText = "⏳ جاري بدء الإرسال...";
 
-      startBtn.disabled = true;
-      stopBtn.style.display = "block";
-      pBox.style.display = "block";
-      pFill.style.width = "0%";
-
-      let sentCount = 0;
-      const total = questionsToSend.length;
-
-      for (let i = 0; i < total; i++) {
-        if (cancelPublishingFlag) {
-          pStatus.innerText = `🛑 تم إيقاف الإرسال عند ${sentCount} من ${total}`;
-          break;
-        }
-
-        const q = questionsToSend[i];
-        pCounter.innerText = `${i + 1} / ${total}`;
-        pStatus.innerText = `📤 جاري إرسال السؤال ${i + 1}...`;
-
-        let sent = false;
-        while (!sent && !cancelPublishingFlag) {
-          const res = await api("/api/publish_single", {
-            method: "POST",
-            body: JSON.stringify({
-              question_id: q.id,
-              target_type,
-              chat_id,
-              topic_id,
-              shuffle_options,
-              open_period
-            })
-          });
-
-          if (res.status === "retry_after") {
-            const waitSec = res.wait_seconds || 15;
-            for (let s = waitSec; s > 0; s--) {
-              if (cancelPublishingFlag) break;
-              pStatus.innerText = `⏳ حماية تيليجرام: استراحة ${s} ثانية ثم الاستكمال تلقائياً...`;
-              await sleep(1000);
-            }
-          } else {
-            sent = true;
-            sentCount++;
-            pFill.style.width = `${Math.round((sentCount / total) * 100)}%`;
-          }
-        }
-
-        if (i < total - 1 && !cancelPublishingFlag) {
-          // فاصل أمان تلقائي 1.2 ثانية في الوضع السريع لتجنب حظر تيليجرام عند إرسال أعداد كبيرة
-          const delayMs = userDelaySec > 0 ? userDelaySec * 1000 : 1200;
-          await sleep(delayMs);
-        }
-      }
-
-      startBtn.disabled = false;
-      stopBtn.style.display = "none";
-      if (!cancelPublishingFlag) {
-        pStatus.innerText = `✅ اكتمل الإرسال بنجاح (${sentCount} سؤال)!`;
-        alert(`✅ تم إرسال جميع الأسئلة المحددة (${sentCount} سؤال) بنجاح!`);
+      try {
+        const res = await api("/api/publish_all", { method: "POST", body: JSON.stringify(payload) });
+        alert(`🚀 بدأ إرسال جميع الأسئلة (${res.count} سؤال) في الخلفية!\n\nيمكنك إغلاق البوت الآن وسيصلك إشعار فور اكتمال الإرسال.`);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "📤 إرسال الكل الآن";
       }
     }
 
