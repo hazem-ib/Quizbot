@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>منظومة إدارة الاختبارات</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     :root {
       --bg: var(--tg-theme-bg-color, #090e1a);
@@ -146,15 +145,6 @@
 
     .color-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .color-chip { display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 7px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); font-size: 0.8rem; }
-
-    #localPdfRenderStage {
-      position: fixed;
-      left: -12000px;
-      top: 0;
-      width: 794px;
-      pointer-events: none;
-      z-index: -1;
-    }
 
     .progress-box { background: var(--bg); border-radius: 12px; padding: 13px; margin-top: 13px; border: 1px solid rgba(59,130,246,0.35); display: none; }
     .progress-bar-bg { width: 100%; height: 9px; background: rgba(255,255,255,0.08); border-radius: 99px; overflow: hidden; margin: 9px 0 3px; }
@@ -521,10 +511,10 @@
       </div>
     </div>
 
-    <!-- استوديو تصدير PDF عالي الجودة محلياً وإرساله إلى الخاص -->
+    <!-- استوديو تصدير PDF نصي أصلي سريع وخفيف -->
     <div id="pdfStudioModal" class="modal">
       <div class="modal-content" style="max-width:650px;">
-        <h3><svg class="ico"><use href="#i-download"/></svg> استوديو PDF (جودة عالية — نسختان في الخاص)</h3>
+        <h3><svg class="ico"><use href="#i-download"/></svg> استوديو PDF (ملف نصي أصلي — نسختان في الخاص)</h3>
         <p id="pdfStudioSubtitle" style="font-size:0.8rem; color:var(--hint); margin-top:0;"></p>
 
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
@@ -624,7 +614,7 @@
         </div>
 
         <div class="card" style="padding:12px; margin-bottom:12px;">
-          <strong style="display:block; margin-bottom:8px; font-size:0.88rem;">المسافات والجودة</strong>
+          <strong style="display:block; margin-bottom:8px; font-size:0.88rem;">المسافات والخطوط</strong>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
             <div>
               <label>ترقيم الخيارات:</label>
@@ -636,28 +626,20 @@
               </select>
             </div>
             <div>
-              <label>حجم خط السؤال والخيارات (px):</label>
+              <label>حجم خط السؤال والخيارات:</label>
               <input type="number" id="pdfBodyFont" value="14" step="0.5" min="10" max="20" onchange="savePdfPrefs()" />
             </div>
             <div>
-              <label>المسافة بين السؤال والخيارات (px):</label>
+              <label>المسافة بين السؤال والخيارات:</label>
               <input type="number" id="pdfGapQOpts" value="10" min="2" max="32" onchange="savePdfPrefs()" />
             </div>
             <div>
-              <label>المسافة بين الخيارات (px):</label>
+              <label>المسافة بين الخيارات:</label>
               <input type="number" id="pdfGapOpts" value="6" min="2" max="24" onchange="savePdfPrefs()" />
             </div>
-            <div>
-              <label>المسافة بين بطاقات الأسئلة (px):</label>
+            <div style="grid-column: span 2;">
+              <label>المسافة بين بطاقات الأسئلة:</label>
               <input type="number" id="pdfGapQuestions" value="14" min="4" max="40" onchange="savePdfPrefs()" />
-            </div>
-            <div>
-              <label>دقة الجودة (Scale):</label>
-              <select id="pdfQualityScale" onchange="savePdfPrefs()">
-                <option value="2.5">فائقة الوضوح (2.5x — موصى به)</option>
-                <option value="2">عالية جداً (2.0x)</option>
-                <option value="3">أقصى دقة (3.0x — أبطأ في العدد الكبير)</option>
-              </select>
             </div>
           </div>
 
@@ -775,8 +757,6 @@
     </div>
   </div>
 
-  <div id="localPdfRenderStage"></div>
-
   <script>
     const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
     if (tg) {
@@ -804,7 +784,7 @@
     let pdfStudioItems = [];
     let pdfCustomHeadings = [];
 
-    const PDF_PREFS_KEY = "quiz_local_pdf_prefs_v2";
+    const PDF_PREFS_KEY = "quiz_native_pdf_prefs_v3";
 
     function getQuestionOptions(q) {
       if (Array.isArray(q.options) && q.options.length >= 2) {
@@ -1018,7 +998,6 @@
           gapQOpts: document.getElementById("pdfGapQOpts").value,
           gapOpts: document.getElementById("pdfGapOpts").value,
           gapQuestions: document.getElementById("pdfGapQuestions").value,
-          qualityScale: document.getElementById("pdfQualityScale").value,
           showExpl: document.getElementById("pdfShowExpl").checked
         };
         localStorage.setItem(PDF_PREFS_KEY, JSON.stringify(prefs));
@@ -1044,7 +1023,6 @@
         if (p.gapQOpts) document.getElementById("pdfGapQOpts").value = p.gapQOpts;
         if (p.gapOpts) document.getElementById("pdfGapOpts").value = p.gapOpts;
         if (p.gapQuestions) document.getElementById("pdfGapQuestions").value = p.gapQuestions;
-        if (p.qualityScale) document.getElementById("pdfQualityScale").value = p.qualityScale;
         if (typeof p.showExpl === "boolean") document.getElementById("pdfShowExpl").checked = p.showExpl;
       } catch (_) {}
     }
@@ -1054,7 +1032,7 @@
       pdfStudioBankName = bankName;
       pdfCustomHeadings = [];
       document.getElementById("localPdfStatus").innerText = "";
-      document.getElementById("pdfStudioSubtitle").innerText = `البنك: ${bankName} — يتم توليد النسختين بأعلى جودة على جهازك وإرسالهما إلى الخاص مباشرة.`;
+      document.getElementById("pdfStudioSubtitle").innerText = `البنك: ${bankName} — يتم توليد نسختي PDF نصيتين خفيفتين وسريعتين وإرسالهما إلى الخاص.`;
 
       loadPdfPrefs();
 
@@ -1151,193 +1129,53 @@
       `).join("");
     }
 
-    function escapeHtml(s) {
-      return String(s || "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-    }
-
-    function optionBadgeLabel(idx, style) {
-      const up = "ABCDEFGHIJ";
-      const lo = "abcdefghij";
-      const ar = ["أ", "ب", "ج", "د", "هـ", "و", "ز", "ح", "ط", "ي"];
-      if (style === "1") return String(idx + 1);
-      if (style === "a") return lo[idx] || String(idx + 1);
-      if (style === "ar") return ar[idx] || String(idx + 1);
-      return up[idx] || String(idx + 1);
-    }
-
-    function renderHeadingHtml(h) {
-      const dir = /[\u0600-\u06FF]/.test(h.text) ? "rtl" : "ltr";
-      const borderCss = h.bordered ? `border: 1.5px solid ${h.color}; padding: 8px 14px; border-radius: 10px;` : "padding: 4px 2px;";
-      const subHtml = h.subtitle
-        ? `<div style="font-size:${Math.max(10, h.font_size - 4)}px; font-weight:500; opacity:0.8; margin-top:3px;">${escapeHtml(h.subtitle)}</div>`
-        : "";
-      return `
-        <div class="pdf-unit" dir="${dir}" style="text-align:${h.align}; color:${h.color}; font-size:${h.font_size}px; font-weight:700; margin-bottom:12px; line-height:1.45; ${borderCss} break-inside:avoid; page-break-inside:avoid;">
-          ${escapeHtml(h.text)}${subHtml}
-        </div>
-      `;
-    }
-
-    function buildCardSheetHtml(questionsList, solved, cfg) {
-      const topFirst = pdfCustomHeadings.filter(h => h.placement === "top_first").map(renderHeadingHtml).join("");
-      const runningHeader = pdfCustomHeadings.filter(h => h.placement === "running_header").map(renderHeadingHtml).join("");
-      const beforeMap = {};
-      pdfCustomHeadings.forEach(h => {
-        const m = /^before_q_(\d+)$/.exec(h.placement || "");
-        if (m) {
-          const n = parseInt(m[1]);
-          if (!beforeMap[n]) beforeMap[n] = [];
-          beforeMap[n].push(h);
-        }
-      });
-
-      const cardsHtml = questionsList.map((q, idx) => {
-        const qNum = idx + 1;
-        const beforeHtml = beforeMap[qNum] ? beforeMap[qNum].map(renderHeadingHtml).join("") : "";
-        const qText = String(q.question || "").trim();
-        const qDir = /[\u0600-\u06FF]/.test(qText) ? "rtl" : "ltr";
-        const opts = getQuestionOptions(q);
-        const cIdx = (typeof q.correct_idx === "number" && q.correct_idx >= 0 && q.correct_idx < opts.length) ? q.correct_idx : 0;
-
-        const optsHtml = opts.map((optVal, oIdx) => {
-          const optStr = String(optVal || "").trim();
-          const optDir = /[\u0600-\u06FF]/.test(optStr) ? "rtl" : "ltr";
-          const lbl = optionBadgeLabel(oIdx, cfg.optStyle);
-          const isCorrect = solved && (oIdx === cIdx);
-
-          const textStyle = isCorrect
-            ? `color:${cfg.colCorrect}; font-weight:700; ${cfg.correctUnderline ? "text-decoration:underline; text-underline-offset:3px;" : ""}`
-            : `color:${cfg.colText}; font-weight:400;`;
-
-          const badgeBg = isCorrect ? cfg.colCorrect : cfg.colBadge;
-          const badgeFg = isCorrect ? "#ffffff" : cfg.colBadgeText;
-
-          return `
-            <div dir="${optDir}" style="display:flex; align-items:center; gap:12px; margin-bottom:${oIdx < opts.length - 1 ? cfg.gapOpts : 0}px; font-size:${cfg.bodyFont}px; line-height:1.45;">
-              <span style="width:24px; height:24px; border-radius:999px; background:${badgeBg}; color:${badgeFg}; font-size:${Math.max(10, cfg.bodyFont - 2.5)}px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;">${escapeHtml(lbl)}</span>
-              <span style="${textStyle}">${escapeHtml(optStr)}</span>
-            </div>
-          `;
-        }).join("");
-
-        const explHtml = (solved && cfg.showExpl && q.explanation && String(q.explanation).trim())
-          ? `<div style="margin-top:${Math.max(6, cfg.gapQOpts - 2)}px; padding:7px 11px; border-radius:8px; background:rgba(217,119,6,0.08); border-right:3px solid #d97706; font-size:${Math.max(10, cfg.bodyFont - 1.5)}px; color:#78350f;"><b>Explanation:</b> ${escapeHtml(q.explanation)}</div>`
-          : "";
-
-        return `
-          ${beforeHtml}
-          <div class="pdf-unit" style="background:${cfg.colCardBg}; border:1px solid ${cfg.colCardBorder}; border-radius:14px; padding:16px 20px; margin-bottom:${cfg.gapQuestions}px; break-inside:avoid; page-break-inside:avoid;">
-            <div style="display:flex; align-items:flex-start; gap:14px; margin-bottom:${cfg.gapQOpts}px;">
-              <span style="color:${cfg.colQNum}; font-weight:800; font-size:${cfg.bodyFont}px; min-width:34px; flex-shrink:0;">Q${qNum}.</span>
-              <span dir="${qDir}" style="color:${cfg.colText}; font-weight:700; font-size:${cfg.bodyFont}px; line-height:1.5; flex:1;">${escapeHtml(qText)}</span>
-            </div>
-            <div style="padding-inline-start:48px;">
-              ${optsHtml}
-            </div>
-            ${explHtml}
-          </div>
-        `;
-      }).join("");
-
-      const modeTag = solved ? "SOLVED (Answer Key)" : "UNSOLVED";
-      return `
-        <div style="background:${cfg.colPageBg}; padding:16px 20px; color:${cfg.colText}; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-          ${runningHeader}
-          ${topFirst}
-          <div class="pdf-unit" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:8px; border-bottom:1px solid ${cfg.colCardBorder};">
-            <div style="font-size:13px; font-weight:700; color:${cfg.colQNum};">${escapeHtml(pdfStudioBankName)} (${questionsList.length} Questions)</div>
-            <div style="font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px; background:${cfg.colCardBg}; border:1px solid ${cfg.colCardBorder}; color:${solved ? cfg.colCorrect : cfg.colQNum};">${modeTag}</div>
-          </div>
-          ${cardsHtml}
-        </div>
-      `;
-    }
-
-    async function renderSingleLocalPdfBlob(questionsList, solved, cfg, fileName) {
-      const stage = document.getElementById("localPdfRenderStage");
-      stage.innerHTML = buildCardSheetHtml(questionsList, solved, cfg);
-      const targetEl = stage.firstElementChild;
-
-      const opt = {
-        margin: [10, 8, 10, 8],
-        filename: fileName,
-        image: { type: "jpeg", quality: 1.0 },
-        html2canvas: {
-          scale: cfg.qualityScale,
-          useCORS: true,
-          letterRendering: true,
-          backgroundColor: cfg.colPageBg
-        },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait", compress: true },
-        pagebreak: { mode: ["css", "legacy"], avoid: [".pdf-unit"] }
-      };
-
-      const worker = html2pdf().set(opt).from(targetEl);
-      const blob = await worker.outputPdf("blob");
-      stage.innerHTML = "";
-      return blob;
-    }
-
     async function generateAndSendBothPdfs() {
       if (!pdfStudioBankId) return;
-      let chosen = pdfStudioItems.filter(x => x._checked);
+      const chosen = pdfStudioItems.filter(x => x._checked);
       if (!chosen.length) {
         return alert("يرجى تحديد سؤال واحد على الأقل لتوليد ملفات PDF.");
       }
-      if (document.getElementById("pdfShuffleQ").checked) {
-        chosen = [...chosen].sort(() => Math.random() - 0.5);
-      }
 
       savePdfPrefs();
-      const cfg = {
-        colQNum: document.getElementById("pdfColQNum").value,
-        colBadge: document.getElementById("pdfColBadge").value,
-        colBadgeText: document.getElementById("pdfColBadgeText").value,
-        colCardBg: document.getElementById("pdfColCardBg").value,
-        colCardBorder: document.getElementById("pdfColCardBorder").value,
-        colPageBg: document.getElementById("pdfColPageBg").value,
-        colText: document.getElementById("pdfColText").value,
-        colCorrect: document.getElementById("pdfColCorrect").value,
-        correctUnderline: document.getElementById("pdfCorrectUnderline").checked,
-        optStyle: document.getElementById("pdfOptStyle").value,
-        bodyFont: parseFloat(document.getElementById("pdfBodyFont").value) || 14,
-        gapQOpts: parseFloat(document.getElementById("pdfGapQOpts").value) || 10,
-        gapOpts: parseFloat(document.getElementById("pdfGapOpts").value) || 6,
-        gapQuestions: parseFloat(document.getElementById("pdfGapQuestions").value) || 14,
-        qualityScale: parseFloat(document.getElementById("pdfQualityScale").value) || 2.5,
-        showExpl: document.getElementById("pdfShowExpl").checked
-      };
 
-      const safeSlug = pdfStudioBankName.replace(/[^\w\u0600-\u06FF-]+/g, "_").replace(/^_+|_+$/g, "") || "bank";
-      const solvedFile = `${safeSlug}_Solved.pdf`;
-      const unsolvedFile = `${safeSlug}_Unsolved.pdf`;
+      const payload = {
+        bank_id: pdfStudioBankId,
+        question_ids: chosen.map(q => q.id),
+        ordered_question_ids: chosen.map(q => q.id),
+        shuffle_questions: Boolean(document.getElementById("pdfShuffleQ").checked),
+        settings: {
+          col_q_num: document.getElementById("pdfColQNum").value,
+          col_badge: document.getElementById("pdfColBadge").value,
+          col_badge_text: document.getElementById("pdfColBadgeText").value,
+          col_card_bg: document.getElementById("pdfColCardBg").value,
+          col_card_border: document.getElementById("pdfColCardBorder").value,
+          col_page_bg: document.getElementById("pdfColPageBg").value,
+          col_text: document.getElementById("pdfColText").value,
+          col_correct: document.getElementById("pdfColCorrect").value,
+          correct_underline: Boolean(document.getElementById("pdfCorrectUnderline").checked),
+          opt_style: document.getElementById("pdfOptStyle").value,
+          body_font: parseFloat(document.getElementById("pdfBodyFont").value) || 14,
+          gap_q_opts: parseFloat(document.getElementById("pdfGapQOpts").value) || 10,
+          gap_opts: parseFloat(document.getElementById("pdfGapOpts").value) || 6,
+          gap_questions: parseFloat(document.getElementById("pdfGapQuestions").value) || 14,
+          show_expl: Boolean(document.getElementById("pdfShowExpl").checked),
+          custom_headings: pdfCustomHeadings
+        }
+      };
 
       const btn = document.getElementById("confirmPdfPairBtn");
       const statusEl = document.getElementById("localPdfStatus");
       btn.disabled = true;
       try {
-        statusEl.innerText = "جاري توليد النسخة المحلولة (Solved) بأعلى جودة على جهازك...";
-        const solvedBlob = await renderSingleLocalPdfBlob(chosen, true, cfg, solvedFile);
+        statusEl.innerText = "جاري توليد نسختي PDF النصيتين وإرسالهما إلى الخاص...";
+        const res = await api("/api/export_pdf_pair", {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
 
-        statusEl.innerText = "جاري توليد النسخة غير المحلولة (Unsolved) بأعلى جودة على جهازك...";
-        const unsolvedBlob = await renderSingleLocalPdfBlob(chosen, false, cfg, unsolvedFile);
-
-        statusEl.innerText = "جاري إرسال النسختين إلى محادثتك الخاصة مع البوت...";
-        const fd = new FormData();
-        fd.append("bank_id", String(pdfStudioBankId));
-        fd.append("question_count", String(chosen.length));
-        fd.append("solved_pdf", solvedBlob, solvedFile);
-        fd.append("unsolved_pdf", unsolvedBlob, unsolvedFile);
-
-        await api("/api/send_generated_pdf_pair", { method: "POST", body: fd });
-
-        statusEl.innerText = `تم إرسال النسختين (${solvedFile} و ${unsolvedFile}) إلى الخاص بنجاح.`;
+        statusEl.innerText = `تم إرسال النسختين (${res.solved_file} و ${res.unsolved_file}) إلى الخاص بنجاح.`;
         closeModal("pdfStudioModal");
-        alert(`تم إرسال النسخة المحلولة والنسخة غير المحلولة (${chosen.length} سؤال) إلى محادثتك الخاصة مع البوت.`);
+        alert(`تم إرسال النسخة المحلولة والنسخة غير المحلولة (${res.exported_count} سؤال) إلى محادثتك الخاصة مع البوت.`);
         await loadLogs();
       } catch (err) {
         statusEl.innerText = "";
