@@ -428,6 +428,10 @@
             </div>
           </div>`;
       });
+
+      if (document.getElementById("tab-publish")?.classList.contains("active")) {
+        await onPublishBankChange();
+      }
     }
 
     async function openNewBankModal() {
@@ -452,9 +456,10 @@
       await loadBanks();
     }
 
-    function quickPublish(bankId) {
+    async function quickPublish(bankId) {
       document.getElementById("pubBankSelect").value = bankId;
       switchTab("publish");
+      await onPublishBankChange();
     }
 
     async function openBank(bankId, bankName) {
@@ -658,22 +663,37 @@
     }
 
     async function onPublishBankChange() {
-      const bankId = document.getElementById("pubBankSelect").value;
-      if (!bankId) return;
+      const bankSelect = document.getElementById("pubBankSelect");
+      const bankId = bankSelect ? bankSelect.value : "";
+      if (!bankId) {
+        pubBankQuestions = [];
+        renderSelectiveList();
+        return;
+      }
+      const box = document.getElementById("selectiveQuestionsList");
+      if (box && document.getElementById("enableSelectiveMode")?.checked) {
+        box.innerHTML = `<div style="padding:10px; color:var(--hint);">⏳ جاري تحميل الأسئلة...</div>`;
+      }
       pubBankQuestions = await api(`/api/banks/${bankId}/questions`);
       renderSelectiveList();
     }
 
-    function toggleSelectiveMode() {
+    async function toggleSelectiveMode() {
       const enabled = document.getElementById("enableSelectiveMode").checked;
       document.getElementById("selectiveBox").style.display = enabled ? "block" : "none";
-      if (enabled && pubBankQuestions.length === 0) {
-        onPublishBankChange();
+      if (enabled) {
+        await onPublishBankChange();
       }
     }
 
     function renderSelectiveList() {
       const box = document.getElementById("selectiveQuestionsList");
+      if (!box) return;
+      if (!pubBankQuestions || pubBankQuestions.length === 0) {
+        box.innerHTML = `<div style="padding:10px; color:var(--hint);">لا توجد أسئلة في هذه المجموعة.</div>`;
+        updateSelectiveCount();
+        return;
+      }
       box.innerHTML = pubBankQuestions.map((q, idx) => `
         <div class="select-q-item" id="sel-row-${q.id}">
           <input type="checkbox" class="pub-q-chk" value="${q.id}" checked onchange="updateSelectiveCount(${q.id}, this.checked)" />
@@ -704,10 +724,17 @@
       updateSelectiveCount();
     }
 
-    function togglePublishTarget() {
+    async function togglePublishTarget() {
       const val = document.getElementById("pubTargetType").value;
       document.getElementById("savedCommBox").style.display = val === "saved_comm" ? "block" : "none";
       document.getElementById("manualGroupBox").style.display = val === "manual_group" ? "block" : "none";
+      if (document.getElementById("enableSelectiveMode")?.checked) {
+        if (!pubBankQuestions || pubBankQuestions.length === 0) {
+          await onPublishBankChange();
+        } else {
+          renderSelectiveList();
+        }
+      }
     }
 
     function toggleTimerInput() {
