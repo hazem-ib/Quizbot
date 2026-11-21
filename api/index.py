@@ -12,11 +12,11 @@ from typing import Optional, List, Dict, Any
 import pandas as pd
 import psycopg2
 from psycopg2 import pool
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Request, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Poll, MenuButtonWebApp, Bot
-from telegram.error import RetryAfter
+from telegram.error import RetryAfter, TelegramError
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "9268644584:AAE8woNBoXzueYqpsT4x69efYcDgP1mPP9Y").strip()
@@ -26,6 +26,7 @@ app = FastAPI(title="Quiz Management & Governance System")
 
 db_pool: Optional[pool.ThreadedConnectionPool] = None
 _db_initialized = False
+_running_tasks: set = set()
 
 
 def _clean_db_url(url: str) -> str:
@@ -165,6 +166,7 @@ def init_db():
                     sent_count INTEGER DEFAULT 0,
                     failed_count INTEGER DEFAULT 0,
                     failed_question_ids JSONB DEFAULT '[]'::jsonb,
+                    last_error TEXT DEFAULT '',
                     delay_sec REAL DEFAULT 0.0,
                     shuffle_options BOOLEAN DEFAULT FALSE,
                     open_period INTEGER DEFAULT NULL,
@@ -173,6 +175,7 @@ def init_db():
                     completed_at TIMESTAMP WITH TIME ZONE DEFAULT NULL
                 )
             """)
+            c.execute("ALTER TABLE publish_jobs ADD COLUMN IF NOT EXISTS last_error TEXT DEFAULT ''")
             c.execute("CREATE INDEX IF NOT EXISTS idx_questions_bank_id ON questions(bank_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_publish_jobs_id ON publish_jobs(id DESC)")
@@ -1084,9 +1087,14 @@ async def test_community(req: CommunityCreateReq, x_telegram_init_data: str = He
     bot = Bot(token=BOT_TOKEN)
     await bot.initialize()
     try:
-        kwargs: Dict[str, Any] = {"chat_id": req.chat_id.strip(), "text": "تم التحقق من صلاحيات البوت والاتصال بالوجهة بنجاح."}
+        raw_chat = req.chat_id.strip()
+        parsed_chat: Any = int(raw_chat) if raw_chat.lstrip("-").isdigit() else raw_chat
+        kwargs: Dict[str, Any] = {
+            "chat_id": parsed_chat,
+            "text": "تم التحقق من صلاحيات البوت والاتصال بالوجهة بنجاح.",
+        }
         if req.topic_id:
-            kwargs["message_thread_id"] = req.topic_id
+            kwargs["message_thread_id"] = int(req.topic_id)
         await bot.send_message(**kwargs)
         return {"status": "ok"}
     except Exception as e:
@@ -1096,6 +1104,22 @@ async def test_community(req: CommunityCreateReq, x_telegram_init_data: str = He
         )
     finally:
         await bot.shutdown()
+
+
+def _sanitize_poll_options(o1: Any, o2: Any, o3: Any, o4: Any) -> List[str]:
+    raw_opts = [o1, o2, o3, o4]
+    cleaned: List[str] = []
+    seen = set()
+    for idx, val in enumerate(raw_opts):
+        txt = str(val if val is not None else "").strip()
+        if not txt:
+            txt = f"خيار {idx + 1}"
+        txt = txt[:95]
+        if txt in seen:
+            txt = f"{txt[:90]} ({idx + 1})"
+        seen.add(txt)
+        cleaned.append(txt)
+    return cleaned[:4]
 
 
 async def execute_publish_job(
@@ -1140,6 +1164,7 @@ async def execute_publish_job(
     is_group_or_channel = isinstance(parsed_chat, int) or str(parsed_chat).startswith("@")
     cancelled_early = False
     last_err = ""
+    active_topic_id: Optional[int] = int(topic_id) if topic_id else None
 
     bot = Bot(token=BOT_TOKEN)
     await bot.initialize()
@@ -1151,11 +1176,24 @@ async def execute_publish_job(
                     "chat_id": parsed_chat,
                     "text": f"{quiz_title.strip()}\n{prefix} • عدد الأسئلة: {total_requested}",
                 }
-                if topic_id:
-                    intro_kwargs["message_thread_id"] = int(topic_id)
+                if active_topic_id:
+                    intro_kwargs["message_thread_id"] = active_topic_id
                 await bot.send_message(**intro_kwargs)
-            except Exception:
-                pass
+            except TelegramError as e:
+                err_txt = str(e).lower()
+                if "thread" in err_txt and active_topic_id:
+                    active_topic_id = None
+                    try:
+                        await bot.send_message(
+                            chat_id=parsed_chat,
+                            text=f"{quiz_title.strip()}\n{prefix} • عدد الأسئلة: {total_requested}",
+                        )
+                    except Exception:
+                        pass
+                else:
+                    last_err = str(e)
+            except Exception as e:
+                last_err = str(e)
 
         for idx, row in enumerate(ordered_rows):
             while True:
@@ -1183,14 +1221,9 @@ async def execute_publish_job(
                 break
 
             qid, q_text, o1, o2, o3, o4, c_idx, expl = row
-            opts = [
-                str(o1 if o1 and str(o1).strip() else "-")[:98],
-                str(o2 if o2 and str(o2).strip() else "-")[:98],
-                str(o3 if o3 and str(o3).strip() else "-")[:98],
-                str(o4 if o4 and str(o4).strip() else "-")[:98],
-            ]
+            opts = _sanitize_poll_options(o1, o2, o3, o4)
             current_correct = int(c_idx or 0)
-            if current_correct < 0 or current_correct > 3:
+            if current_correct < 0 or current_correct >= len(opts):
                 current_correct = 0
 
             if shuffle_options:
@@ -1199,7 +1232,7 @@ async def execute_publish_job(
                 opts = [x[1] for x in indexed]
                 current_correct = [i for i, x in enumerate(indexed) if x[0] == current_correct][0]
 
-            q_str = str(q_text or "").strip()[:295]
+            q_str = str(q_text or "").strip()[:290]
             if not q_str:
                 q_str = "سؤال"
 
@@ -1212,10 +1245,10 @@ async def execute_publish_job(
                 "is_anonymous": True,
             }
             if expl and str(expl).strip():
-                kwargs["explanation"] = str(expl).strip()[:195]
-            if topic_id:
-                kwargs["message_thread_id"] = int(topic_id)
-            if open_period and 5 <= int(open_period) <= 600:
+                kwargs["explanation"] = str(expl).strip()[:190]
+            if active_topic_id:
+                kwargs["message_thread_id"] = active_topic_id
+            if open_period is not None and 5 <= int(open_period) <= 600:
                 kwargs["open_period"] = int(open_period)
 
             delivered = False
@@ -1230,13 +1263,22 @@ async def execute_publish_job(
                 except RetryAfter as e:
                     last_err = f"RetryAfter: {e.retry_after}"
                     await asyncio.sleep(int(e.retry_after) + 1)
-                except Exception as e:
-                    last_err = str(e)
-                    if "retry after" in last_err.lower() or "too many requests" in last_err.lower():
-                        m = re.search(r"(\d+)", last_err)
+                except TelegramError as e:
+                    err_msg = str(e)
+                    last_err = err_msg
+                    low = err_msg.lower()
+                    if "thread" in low and "message_thread_id" in kwargs:
+                        kwargs.pop("message_thread_id", None)
+                        active_topic_id = None
+                        continue
+                    if "retry after" in low or "too many requests" in low:
+                        m = re.search(r"(\d+)", err_msg)
                         await asyncio.sleep(int(m.group(1)) + 1 if m else 10)
                     else:
                         break
+                except Exception as e:
+                    last_err = str(e)
+                    break
 
             if not delivered:
                 failed_count += 1
@@ -1246,9 +1288,9 @@ async def execute_publish_job(
                 with conn.cursor() as c:
                     c.execute(
                         """UPDATE publish_jobs
-                           SET sent_count = %s, failed_count = %s, failed_question_ids = %s::jsonb
+                           SET sent_count = %s, failed_count = %s, failed_question_ids = %s::jsonb, last_error = %s
                            WHERE id = %s""",
-                        (sent_count, failed_count, json.dumps(failed_ids), job_id),
+                        (sent_count, failed_count, json.dumps(failed_ids), last_err[:250], job_id),
                     )
                 conn.commit()
 
@@ -1270,9 +1312,9 @@ async def execute_publish_job(
                 c.execute(
                     """UPDATE publish_jobs
                        SET status = %s, sent_count = %s, failed_count = %s,
-                           failed_question_ids = %s::jsonb, completed_at = NOW()
+                           failed_question_ids = %s::jsonb, last_error = %s, completed_at = NOW()
                        WHERE id = %s""",
-                    (final_status, sent_count, failed_count, json.dumps(failed_ids), job_id),
+                    (final_status, sent_count, failed_count, json.dumps(failed_ids), last_err[:250], job_id),
                 )
             conn.commit()
 
@@ -1302,7 +1344,7 @@ async def execute_publish_job(
             f"• نسبة الإنجاز الفعلي: {success_rate}%",
         ])
         if failed_count > 0 and last_err:
-            report_lines.append(f"• سبب التعذر: {last_err[:120]}")
+            report_lines.append(f"• سبب التعذر: {last_err[:150]}")
 
         try:
             await bot.send_message(chat_id=admin_id, text="\n".join(report_lines))
@@ -1315,11 +1357,32 @@ async def execute_publish_job(
             pass
 
 
+async def _run_publish_job_safe(job_id: int, *args, **kwargs):
+    try:
+        await execute_publish_job(job_id, *args, **kwargs)
+    except Exception as e:
+        try:
+            with PooledConn() as conn:
+                with conn.cursor() as c:
+                    c.execute(
+                        "UPDATE publish_jobs SET status = 'failed', last_error = %s, completed_at = NOW() WHERE id = %s",
+                        (str(e)[:250], job_id),
+                    )
+                conn.commit()
+        except Exception:
+            pass
+
+
+def _schedule_publish_task(job_id: int, *args, **kwargs):
+    task = asyncio.create_task(_run_publish_job_safe(job_id, *args, **kwargs))
+    _running_tasks.add(task)
+    task.add_done_callback(_running_tasks.discard)
+
+
 @app.post("/api/publish_batch")
 @app.post("/publish_batch")
 async def publish_batch(
     req: BatchPublishReq,
-    background_tasks: BackgroundTasks,
     x_telegram_init_data: str = Header(default=""),
 ):
     actor = verify_actor(x_telegram_init_data)
@@ -1369,9 +1432,9 @@ async def publish_batch(
             c.execute(
                 """INSERT INTO publish_jobs
                    (actor_id, actor_name, actor_tag, bank_id, target_type, comm_id, target_label,
-                    quiz_title, total_count, sent_count, failed_count, failed_question_ids,
+                    quiz_title, total_count, sent_count, failed_count, failed_question_ids, last_error,
                     delay_sec, shuffle_options, open_period, status)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0, '[]'::jsonb, %s, %s, %s, 'queued')
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0, '[]'::jsonb, '', %s, %s, %s, 'queued')
                    RETURNING id""",
                 (
                     actor["user_id"],
@@ -1393,8 +1456,7 @@ async def publish_batch(
 
     replace_with_single_job(keep_job_id=int(job_id))
 
-    background_tasks.add_task(
-        execute_publish_job,
+    _schedule_publish_task(
         job_id,
         ordered_valid_ids,
         target_chat,
@@ -1424,7 +1486,7 @@ async def get_publish_jobs(x_telegram_init_data: str = Header(default="")):
             c.execute("""
                 SELECT id, actor_name, actor_tag, target_label, quiz_title,
                        total_count, sent_count, failed_count, failed_question_ids,
-                       status, created_at, completed_at
+                       last_error, status, created_at, completed_at
                 FROM publish_jobs ORDER BY id DESC LIMIT 1
             """)
             rows = c.fetchall()
@@ -1446,10 +1508,11 @@ async def get_publish_jobs(x_telegram_init_data: str = Header(default="")):
             "sent_count": sent_c,
             "failed_count": failed_c,
             "failed_question_ids": f_ids,
+            "last_error": r[9] or "",
             "success_rate": rate,
-            "status": r[9],
-            "created_at": r[10].isoformat() if r[10] else None,
-            "completed_at": r[11].isoformat() if r[11] else None,
+            "status": r[10],
+            "created_at": r[11].isoformat() if r[11] else None,
+            "completed_at": r[12].isoformat() if r[12] else None,
         })
     return jobs
 
@@ -1463,7 +1526,7 @@ async def get_single_publish_job(job_id: int, x_telegram_init_data: str = Header
             c.execute(
                 """SELECT id, actor_id, actor_name, actor_tag, target_label, quiz_title,
                           total_count, sent_count, failed_count, failed_question_ids,
-                          status, created_at, completed_at
+                          last_error, status, created_at, completed_at
                    FROM publish_jobs WHERE id = %s""",
                 (job_id,),
             )
@@ -1486,10 +1549,11 @@ async def get_single_publish_job(job_id: int, x_telegram_init_data: str = Header
         "sent_count": sent_c,
         "failed_count": failed_c,
         "failed_question_ids": f_ids,
+        "last_error": r[10] or "",
         "success_rate": rate,
-        "status": r[10],
-        "created_at": r[11].isoformat() if r[11] else None,
-        "completed_at": r[12].isoformat() if r[12] else None,
+        "status": r[11],
+        "created_at": r[12].isoformat() if r[12] else None,
+        "completed_at": r[13].isoformat() if r[13] else None,
     }
 
 
@@ -1548,7 +1612,6 @@ async def control_publish_job(req: JobControlReq, x_telegram_init_data: str = He
 @app.post("/publish_jobs/retry_failed")
 async def retry_failed_questions(
     req: RetryFailedReq,
-    background_tasks: BackgroundTasks,
     x_telegram_init_data: str = Header(default=""),
 ):
     actor = verify_actor(x_telegram_init_data)
@@ -1604,9 +1667,9 @@ async def retry_failed_questions(
             c.execute(
                 """INSERT INTO publish_jobs
                    (actor_id, actor_name, actor_tag, bank_id, target_type, comm_id, target_label,
-                    quiz_title, total_count, sent_count, failed_count, failed_question_ids,
+                    quiz_title, total_count, sent_count, failed_count, failed_question_ids, last_error,
                     delay_sec, shuffle_options, open_period, status)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0, '[]'::jsonb, %s, %s, %s, 'queued')
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0, '[]'::jsonb, '', %s, %s, %s, 'queued')
                    RETURNING id""",
                 (
                     actor["user_id"],
@@ -1628,8 +1691,7 @@ async def retry_failed_questions(
 
     replace_with_single_job(keep_job_id=int(new_job_id))
 
-    background_tasks.add_task(
-        execute_publish_job,
+    _schedule_publish_task(
         new_job_id,
         valid_failed_ids,
         target_chat,
