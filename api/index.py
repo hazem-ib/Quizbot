@@ -16,7 +16,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Requ
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Poll, MenuButtonWebApp, Bot
-from telegram.error import RetryAfter, TelegramError
+from telegram.error import RetryAfter, TelegramError, TimedOut
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "9268644584:AAE8woNBoXzueYqpsT4x69efYcDgP1mPP9Y").strip()
@@ -1087,10 +1087,13 @@ async def test_community(req: CommunityCreateReq, x_telegram_init_data: str = He
             kwargs: Dict[str, Any] = {
                 "chat_id": parsed_chat,
                 "text": "تم التحقق من صلاحيات البوت والاتصال بالوجهة بنجاح.",
+                "read_timeout": 20,
+                "write_timeout": 20,
+                "connect_timeout": 15,
             }
             if req.topic_id:
                 kwargs["message_thread_id"] = int(req.topic_id)
-            await bot.send_message(**kwargs)
+            await asyncio.wait_for(bot.send_message(**kwargs), timeout=25.0)
         return {"status": "ok"}
     except Exception as e:
         raise HTTPException(
@@ -1162,18 +1165,26 @@ async def execute_publish_job(
                 intro_kwargs: Dict[str, Any] = {
                     "chat_id": parsed_chat,
                     "text": f"{quiz_title.strip()}\nعدد الأسئلة: {total_requested}",
+                    "read_timeout": 25,
+                    "write_timeout": 25,
+                    "connect_timeout": 15,
                 }
                 if active_topic_id:
                     intro_kwargs["message_thread_id"] = active_topic_id
-                await bot.send_message(**intro_kwargs)
+                await asyncio.wait_for(bot.send_message(**intro_kwargs), timeout=25.0)
+            except (TimedOut, asyncio.TimeoutError):
+                last_err = "Time out أثناء إرسال مقدمة الاختبار."
             except TelegramError as e:
                 err_txt = str(e).lower()
                 if "thread" in err_txt and active_topic_id:
                     active_topic_id = None
                     try:
-                        await bot.send_message(
-                            chat_id=parsed_chat,
-                            text=f"{quiz_title.strip()}\nعدد الأسئلة: {total_requested}",
+                        await asyncio.wait_for(
+                            bot.send_message(
+                                chat_id=parsed_chat,
+                                text=f"{quiz_title.strip()}\nعدد الأسئلة: {total_requested}",
+                            ),
+                            timeout=20.0,
                         )
                     except Exception:
                         pass
@@ -1234,6 +1245,9 @@ async def execute_publish_job(
                 "type": Poll.QUIZ,
                 "correct_option_id": current_correct,
                 "is_anonymous": True,
+                "read_timeout": 25,
+                "write_timeout": 25,
+                "connect_timeout": 15,
             }
             if expl and str(expl).strip():
                 kwargs["explanation"] = str(expl).strip()[:190]
@@ -1244,18 +1258,19 @@ async def execute_publish_job(
 
             delivered = False
             attempts = 0
-            while attempts < 3:
+            while attempts < 2:
                 attempts += 1
                 try:
-                    await asyncio.wait_for(bot.send_poll(**kwargs), timeout=15.0)
+                    await asyncio.wait_for(bot.send_poll(**kwargs), timeout=25.0)
                     sent_count += 1
                     delivered = True
                     break
-                except asyncio.TimeoutError:
-                    last_err = "انتهت مهلة الاتصال بتيليجرام أثناء إرسال السؤال."
+                except (TimedOut, asyncio.TimeoutError):
+                    last_err = "Time out: تأخر استجابة تيليجرام أو انقطع الاتصال مؤقتاً."
+                    await asyncio.sleep(2.0)
                 except RetryAfter as e:
                     last_err = f"RetryAfter: {e.retry_after}"
-                    await asyncio.sleep(min(int(e.retry_after) + 1, 20))
+                    await asyncio.sleep(min(int(e.retry_after) + 1, 15))
                 except TelegramError as e:
                     err_msg = str(e)
                     last_err = err_msg
@@ -1264,13 +1279,13 @@ async def execute_publish_job(
                         kwargs.pop("message_thread_id", None)
                         active_topic_id = None
                         continue
-                    if "retry after" in low or "too many requests" in low:
+                    if "retry after" in low or "too many requests" in low or "timed out" in low:
                         m = re.search(r"(\d+)", err_msg)
-                        await asyncio.sleep(min(int(m.group(1)) + 1 if m else 5, 20))
+                        await asyncio.sleep(min(int(m.group(1)) + 1 if m else 4, 15))
                     else:
                         break
                 except Exception as e:
-                    last_err = str(e)
+                    last_err = f"خطأ اتصال: {str(e)}"
                     break
 
             if not delivered:
@@ -1287,13 +1302,13 @@ async def execute_publish_job(
                     )
                 conn.commit()
 
-            if delivered and idx < total_requested - 1:
+            if idx < total_requested - 1:
                 if delay_sec > 0:
                     await asyncio.sleep(delay_sec)
                 elif is_group_or_channel:
-                    await asyncio.sleep(0.05)
+                    await asyncio.sleep(0.35)
                 else:
-                    await asyncio.sleep(0.01)
+                    await asyncio.sleep(0.25)
 
         if cancelled_early:
             final_status = "cancelled"
