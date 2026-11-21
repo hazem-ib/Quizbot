@@ -19,7 +19,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "9268644584:AAE8woNBoXzueYqpsT4x69efYcDgP1mPP9Y")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
-app = FastAPI(title="Telegram Quiz Mini App v3.1 Secure")
+app = FastAPI(title="Telegram Quiz Mini App v3.2")
 
 def get_conn():
     if not DATABASE_URL:
@@ -83,7 +83,6 @@ def is_admin(user_id: int) -> bool:
 
 def verify_telegram_init_data(init_data: str) -> dict:
     init_db()
-    # إغلاق الثغرة تماماً: منع أي دخول من خارج تيليجرام بدون توقيع رقمي صحيح
     if not init_data or not init_data.strip():
         raise HTTPException(status_code=403, detail="⛔ غير مصرح: يجب فتح التطبيق من داخل تيليجرام حصراً.")
 
@@ -220,7 +219,7 @@ async def setup_webhook(request: Request):
             menu_button=MenuButtonWebApp(text="📱 فتح التطبيق", web_app=WebAppInfo(url=base_url))
         )
     return {
-        "status": "Webhook & Menu Button configured successfully! (v3.1 Secure)",
+        "status": "Webhook & Menu Button configured successfully! (v3.2)",
         "app_url": base_url,
         "webhook_url": webhook_url
     }
@@ -305,18 +304,25 @@ def parse_correct_index(ans_raw_val, opts: list) -> Optional[int]:
     s = str(ans_raw_val).strip()
     if not s or s.lower() == 'nan':
         return None
-    s_upper = s.upper()
-    letter_map = {'A': 0, 'B': 1, 'C': 2, 'D': 3, 'أ': 0, 'ب': 1, 'ج': 2, 'د': 3}
-    if s_upper in letter_map:
-        return letter_map[s_upper]
-    # استخراج الرقم لو مكتوب Option 1 أو 1.0 أو (2)
-    m = re.search(r'[1-4]', s_upper)
-    if m and len(s_upper) <= 12:
-        return int(m.group(0)) - 1
-    # مطابقة مع نص الإجابة نفسها
+
+    # 1. المطابقة المباشرة مع نص الإجابة بالضبط
+    s_norm = " ".join(s.split()).lower()
     for i, opt in enumerate(opts):
-        if s.lower() == opt.lower():
+        opt_norm = " ".join(str(opt).split()).lower()
+        if s_norm == opt_norm and opt_norm != "-":
             return i
+
+    # 2. المطابقة مع الأرقام (1, 2, 3, 4)
+    num_map = {'1': 0, '2': 1, '3': 2, '4': 3, '1.0': 0, '2.0': 1, '3.0': 2, '4.0': 3}
+    if s in num_map:
+        return num_map[s]
+
+    # 3. المطابقة مع الحروف (a, b, c, d / A, B, C, D / أ, ب, ج, د)
+    s_clean = s.upper().rstrip('.').rstrip(')').strip()
+    letter_map = {'A': 0, 'B': 1, 'C': 2, 'D': 3, 'أ': 0, 'ا': 0, 'ب': 1, 'ج': 2, 'د': 3}
+    if s_clean in letter_map:
+        return letter_map[s_clean]
+
     return None
 
 @app.post("/api/upload_csv")
@@ -341,7 +347,6 @@ async def upload_csv(
     if df.shape[1] < 6:
         raise HTTPException(status_code=400, detail=f"الملف يحتوي على {df.shape[1]} أعمدة فقط! يجب أن يحتوي على 6 أعمدة على الأقل.")
 
-    # تجاهل صف العناوين تلقائياً إذا لم يكن العمود السادس إجابة صالحة
     first_opts = [str(df.iloc[0, i]).strip() if not pd.isna(df.iloc[0, i]) else "" for i in range(1, 5)]
     if parse_correct_index(df.iloc[0, 5], first_opts) is None:
         df = df.iloc[1:]
@@ -359,7 +364,6 @@ async def upload_csv(
                 continue
             q_text = str(row[0]).strip()
             opts = [str(row[i]).strip() if not pd.isna(row[i]) and str(row[i]).strip() != "" else "-" for i in range(1, 5)]
-            # تخطي الصفوف الفارغة تماماً
             if all(o == "-" for o in opts):
                 continue
 
@@ -368,7 +372,7 @@ async def upload_csv(
                 val_found = "" if pd.isna(row[5]) else str(row[5]).strip()
                 raise HTTPException(
                     status_code=400,
-                    detail=f"خطأ في الصف {idx+1} (السؤال: {q_text[:30]}...): العمود السادس فارغ أو غير مفهوم ('{val_found}')."
+                    detail=f"خطأ في الصف {idx+1} (السؤال: {q_text[:30]}...): قيمة العمود السادس غير صالحة ('{val_found}')."
                 )
 
             expl = str(row[6]).strip() if df.shape[1] > 6 and not pd.isna(row[6]) else ""
