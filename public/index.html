@@ -100,6 +100,14 @@
     input:focus, select:focus, textarea:focus { border-color: var(--btn); }
     label { display: block; font-size: 0.8rem; color: var(--hint); margin-bottom: 5px; font-weight: 500; }
 
+    .dyn-opt-row { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
+    .dyn-opt-row input { margin-bottom: 0; flex: 1; }
+    .dyn-opt-badge {
+      width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
+      background: rgba(59, 130, 246, 0.16); color: #60a5fa;
+      font-size: 0.76rem; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    }
+
     .nav-bar {
       position: fixed; bottom: 0; left: 0; right: 0;
       background: rgba(17, 26, 46, 0.96); backdrop-filter: blur(16px);
@@ -269,7 +277,7 @@
       <div class="card">
         <h3><svg class="ico"><use href="#i-upload"/></svg> استيراد أسئلة PDF</h3>
         <div class="hint-box">
-          يستخرج المحتوى النصي من ملف PDF، ويعزل المقدمات والعناوين التمهيدية والأسئلة المقالية، ويحلل أسئلة الاختيار من متعدد (A / B / C / D) لتحديد الخيار الملوّن أو المظلل عبر طبقات فحص متعددة.<br>
+          يستخرج المحتوى النصي من ملف PDF، ويعزل المقدمات والعناوين التمهيدية والأسئلة المقالية، ويحلل أسئلة الاختيار من متعدد (A / B / C / D...) لتحديد الخيار الملوّن أو المظلل عبر طبقات فحص متعددة.<br>
           <strong>ملاحظة جودة وتصحيح:</strong> أي سؤال لا يحقق إشارة تمييز واضحة أو تتعدد فيه الخيارات الملوّنة يُعلَّم تلقائياً للمراجعة اليدوية قبل الاعتماد أو الإرسال.
         </div>
         <label>اسم البنك الجديد:</label>
@@ -285,11 +293,16 @@
       <div class="card">
         <h3><svg class="ico"><use href="#i-upload"/></svg> استيراد بنك أسئلة من CSV</h3>
         <div class="hint-box">
-          ترتيب الأعمدة المطلوب:<br>
-          <code>السؤال | خيار 1 | خيار 2 | خيار 3 | خيار 4 | الإجابة الصحيحة (1-4 أو A-D أو نصها) | شرح (اختياري)</code>
+          يدعم من 2 حتى 10 خيارات لكل سؤال، ويمكنك اختيار بنية الأعمدة (Structure) المطابقة لملفك من القائمة أدناه.
         </div>
         <label>اسم البنك الجديد:</label>
         <input type="text" id="csvBankName" placeholder="مثال: علم الأدوية - المحاضرة 3" />
+        <label>بنية الأعمدة في الملف (Structure):</label>
+        <select id="csvStructure">
+          <option value="auto">تلقائي / السؤال + الخيارات + الإجابة + الشرح (اختياري)</option>
+          <option value="q_opts_expl_ans">السؤال + الخيارات + الشرح + الإجابة</option>
+          <option value="num_q_opts_ans_expl">رقم + السؤال + الخيارات + الإجابة + الشرح (اختياري)</option>
+        </select>
         <label>ملف CSV:</label>
         <input type="file" id="csvFile" accept=".csv" />
         <button class="btn btn-success" id="uploadCsvBtn" onclick="uploadCSV()">
@@ -526,17 +539,18 @@
         <input type="hidden" id="editQId" />
         <label>نص السؤال:</label>
         <textarea id="qText" rows="2" placeholder="اكتب نص السؤال..."></textarea>
-        <label>الخيار 1:</label><input type="text" id="qOpt1" />
-        <label>الخيار 2:</label><input type="text" id="qOpt2" />
-        <label>الخيار 3:</label><input type="text" id="qOpt3" />
-        <label>الخيار 4:</label><input type="text" id="qOpt4" />
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <label style="margin:0;">خيارات الإجابة (من 2 إلى 10 خيارات):</label>
+          <button type="button" class="btn btn-sm btn-outline" id="btnAddOptField" onclick="addOptionField()">
+            <svg class="ico ico-sm"><use href="#i-plus"/></svg> إضافة خيار
+          </button>
+        </div>
+        <div id="dynamicOptionsContainer"></div>
+
         <label>الخيار الصحيح:</label>
-        <select id="qCorrect">
-          <option value="0">الخيار 1</option>
-          <option value="1">الخيار 2</option>
-          <option value="2">الخيار 3</option>
-          <option value="3">الخيار 4</option>
-        </select>
+        <select id="qCorrect"></select>
+
         <label>شرح الإجابة (اختياري):</label>
         <input type="text" id="qExpl" placeholder="شرح يظهر بعد الإجابة..." />
         <div style="display:flex; gap:8px;">
@@ -552,6 +566,12 @@
         <p style="font-size:0.82rem; color:var(--hint); margin-top:0;">
           ستُضاف الأسئلة الجديدة إلى الأسئلة الحالية في هذا البنك.
         </p>
+        <label>بنية الأعمدة في الملف (Structure):</label>
+        <select id="appendCsvStructure">
+          <option value="auto">تلقائي / السؤال + الخيارات + الإجابة + الشرح (اختياري)</option>
+          <option value="q_opts_expl_ans">السؤال + الخيارات + الشرح + الإجابة</option>
+          <option value="num_q_opts_ans_expl">رقم + السؤال + الخيارات + الإجابة + الشرح (اختياري)</option>
+        </select>
         <label>اختر ملف CSV:</label>
         <input type="file" id="appendCsvFile" accept=".csv" />
         <div style="display:flex; gap:8px;">
@@ -597,6 +617,13 @@
 
     let exportTargetBankId = null;
     let exportCandidateQuestions = [];
+
+    function getQuestionOptions(q) {
+      if (Array.isArray(q.options) && q.options.length >= 2) {
+        return q.options;
+      }
+      return [q.opt1, q.opt2, q.opt3, q.opt4].filter(x => x && String(x).trim() !== "" && String(x).trim() !== "-");
+    }
 
     function renderUserIdentityCard() {
       const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ").trim();
@@ -929,7 +956,7 @@
       }
 
       filtered.forEach((q, idx) => {
-        const opts = [q.opt1, q.opt2, q.opt3, q.opt4];
+        const opts = getQuestionOptions(q);
         const hasFlag = (q.explanation || "").includes("مراجعة مطلوبة");
         const optsHtml = opts.map((o, i) => `<div class="opt-item ${i === q.correct_idx ? 'correct' : ''}">${i + 1}. ${o}</div>`).join("");
         list.innerHTML += `
@@ -963,11 +990,13 @@
     async function submitAppendCsv() {
       const fileInput = document.getElementById("appendCsvFile");
       if (!fileInput.files.length) return alert("يرجى اختيار ملف CSV أولاً.");
+      const structure = document.getElementById("appendCsvStructure").value;
       const btn = document.getElementById("appendCsvBtn");
       btn.disabled = true;
       try {
         const fd = new FormData();
         fd.append("bank_id", currentBankId);
+        fd.append("structure", structure);
         fd.append("file", fileInput.files[0]);
 
         const res = await api("/api/upload_csv", { method: "POST", body: fd });
@@ -981,39 +1010,99 @@
       }
     }
 
+    function renderDynamicOptionsEditor(values = ["", "", "", ""], selectedCorrect = 0) {
+      const container = document.getElementById("dynamicOptionsContainer");
+      const safeValues = values.length >= 2 ? values.slice(0, 10) : ["", ""];
+      container.innerHTML = "";
+      safeValues.forEach((val, idx) => {
+        const row = document.createElement("div");
+        row.className = "dyn-opt-row";
+        row.innerHTML = `
+          <span class="dyn-opt-badge">${idx + 1}</span>
+          <input type="text" class="dyn-opt-input" placeholder="نص الخيار ${idx + 1}" value="${String(val || "").replace(/"/g, "&quot;")}" oninput="syncCorrectSelectOptions()" />
+          ${safeValues.length > 2 ? `<button type="button" class="btn btn-sm btn-danger" onclick="removeOptionField(${idx})">حذف</button>` : ""}
+        `;
+        container.appendChild(row);
+      });
+      document.getElementById("btnAddOptField").disabled = safeValues.length >= 10;
+      syncCorrectSelectOptions(selectedCorrect);
+    }
+
+    function getCurrentEditorOptions() {
+      return Array.from(document.querySelectorAll(".dyn-opt-input")).map(inp => inp.value);
+    }
+
+    function addOptionField() {
+      const current = getCurrentEditorOptions();
+      if (current.length >= 10) return;
+      const prevCorrect = parseInt(document.getElementById("qCorrect").value) || 0;
+      current.push("");
+      renderDynamicOptionsEditor(current, prevCorrect);
+    }
+
+    function removeOptionField(removeIdx) {
+      const current = getCurrentEditorOptions();
+      if (current.length <= 2) return;
+      let prevCorrect = parseInt(document.getElementById("qCorrect").value) || 0;
+      current.splice(removeIdx, 1);
+      if (prevCorrect >= current.length) prevCorrect = current.length - 1;
+      renderDynamicOptionsEditor(current, prevCorrect);
+    }
+
+    function syncCorrectSelectOptions(forcedIdx = null) {
+      const sel = document.getElementById("qCorrect");
+      const prev = forcedIdx !== null ? forcedIdx : (parseInt(sel.value) || 0);
+      const inputs = Array.from(document.querySelectorAll(".dyn-opt-input"));
+      sel.innerHTML = inputs.map((inp, idx) => {
+        const preview = inp.value.trim() ? ` - ${inp.value.trim().slice(0, 28)}` : "";
+        return `<option value="${idx}">الخيار ${idx + 1}${preview}</option>`;
+      }).join("");
+      sel.value = String(Math.min(prev, Math.max(0, inputs.length - 1)));
+    }
+
     function openQuestionModal(qId = null) {
       document.getElementById("editQId").value = qId || "";
       if (qId) {
         const q = questionsCache.find(x => x.id === qId);
+        const opts = getQuestionOptions(q);
         document.getElementById("qModalTitle").innerText = "تعديل السؤال";
         document.getElementById("qText").value = q.question;
-        document.getElementById("qOpt1").value = q.opt1;
-        document.getElementById("qOpt2").value = q.opt2;
-        document.getElementById("qOpt3").value = q.opt3;
-        document.getElementById("qOpt4").value = q.opt4;
-        document.getElementById("qCorrect").value = q.correct_idx;
+        renderDynamicOptionsEditor(opts, q.correct_idx);
         document.getElementById("qExpl").value = q.explanation || "";
       } else {
         document.getElementById("qModalTitle").innerText = "إضافة سؤال جديد";
-        ["qText", "qOpt1", "qOpt2", "qOpt3", "qOpt4", "qExpl"].forEach(id => document.getElementById(id).value = "");
-        document.getElementById("qCorrect").value = "0";
+        document.getElementById("qText").value = "";
+        document.getElementById("qExpl").value = "";
+        renderDynamicOptionsEditor(["", "", "", ""], 0);
       }
       document.getElementById("qModal").classList.add("open");
     }
 
     async function saveQuestion() {
       const qId = document.getElementById("editQId").value;
+      const options = getCurrentEditorOptions().map(x => x.trim()).filter(Boolean);
+      const question = document.getElementById("qText").value.trim();
+      const correct_idx = parseInt(document.getElementById("qCorrect").value);
+      const explanation = document.getElementById("qExpl").value.trim();
+
+      if (!question || options.length < 2) {
+        return alert("يرجى إدخال نص السؤال وخيارين على الأقل.");
+      }
+      if (correct_idx < 0 || correct_idx >= options.length) {
+        return alert("يرجى اختيار الإجابة الصحيحة من ضمن الخيارات المكتوبة.");
+      }
+
       const payload = {
         bank_id: currentBankId,
-        question: document.getElementById("qText").value.trim(),
-        opt1: document.getElementById("qOpt1").value.trim(),
-        opt2: document.getElementById("qOpt2").value.trim(),
-        opt3: document.getElementById("qOpt3").value.trim(),
-        opt4: document.getElementById("qOpt4").value.trim(),
-        correct_idx: parseInt(document.getElementById("qCorrect").value),
-        explanation: document.getElementById("qExpl").value.trim()
+        question,
+        options,
+        opt1: options[0] || "",
+        opt2: options[1] || "",
+        opt3: options[2] || "-",
+        opt4: options[3] || "-",
+        correct_idx,
+        explanation
       };
-      if (!payload.question || !payload.opt1 || !payload.opt2) return alert("يرجى إدخال نص السؤال وخيارين على الأقل.");
 
       const btn = document.getElementById("saveQBtn");
       btn.disabled = true;
@@ -1113,6 +1202,7 @@
 
     async function uploadCSV() {
       const bankName = document.getElementById("csvBankName").value.trim();
+      const structure = document.getElementById("csvStructure").value;
       const fileInput = document.getElementById("csvFile");
       if (!bankName || !fileInput.files.length) return alert("يرجى إدخال اسم البنك واختيار ملف CSV.");
 
@@ -1121,6 +1211,7 @@
       try {
         const fd = new FormData();
         fd.append("bank_name", bankName);
+        fd.append("structure", structure);
         fd.append("file", fileInput.files[0]);
 
         const res = await api("/api/upload_csv", { method: "POST", body: fd });
