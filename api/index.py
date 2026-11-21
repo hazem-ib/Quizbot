@@ -21,6 +21,7 @@ from telegram.constants import ParseMode
 from telegram.error import RetryAfter
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from api.pdf_mcq_importer import extract_pdf_mcq_rows
+from api.pdf_bank_exporter import build_bank_pdf_bytes
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "9268644584:AAE8woNBoXzueYqpsT4x69efYcDgP1mPP9Y").strip()
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
@@ -518,6 +519,14 @@ class ExportCsvReq(BaseModel):
     question_ids: Optional[List[int]] = None
 
 
+class ExportPdfReq(BaseModel):
+    bank_id: int
+    question_ids: Optional[List[int]] = None
+    ordered_question_ids: Optional[List[int]] = None
+    shuffle_questions: bool = False
+    settings: Optional[Dict[str, Any]] = None
+
+
 class CommunityCreateReq(BaseModel):
     title: str
     chat_id: str
@@ -784,7 +793,7 @@ async def rename_bank(bank_id: int, req: BankRenameReq, x_telegram_init_data: st
 
 
 @app.delete("/api/banks/{bank_id}")
-@app.delete("/api/banks/{bank_id}")
+@app.delete("/banks/{bank_id}")
 async def delete_bank(bank_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_delete", "لا تملك صلاحية الحذف.")
@@ -901,6 +910,124 @@ async def export_questions_csv(
         f"صدّر {len(rows)} سؤالاً كملف CSV إلى الخاص من بنك «{bank['name']}».",
     )
     return {"status": "ok", "exported_count": len(rows), "filename": filename}
+
+
+@app.post("/api/export_pdf_pair")
+@app.post("/export_pdf_pair")
+async def export_bank_pdf_pair(
+    req: ExportPdfReq,
+    x_telegram_init_data: str = Header(default=""),
+):
+    actor = verify_actor(x_telegram_init_data)
+    bank = get_bank_record(req.bank_id)
+    if not bank:
+        raise HTTPException(status_code=404, detail="البنك غير موجود.")
+
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute(
+                """SELECT id, question, opt1, opt2, opt3, opt4, options_json, correct_idx, explanation
+                   FROM questions WHERE bank_id = %s ORDER BY id ASC""",
+                (req.bank_id,),
+            )
+            all_rows = c.fetchall()
+
+    if not all_rows:
+        raise HTTPException(status_code=400, detail="البنك لا يحتوي على أسئلة.")
+
+    q_dict: Dict[int, Dict[str, Any]] = {}
+    default_order: List[int] = []
+    for r in all_rows:
+        qid = r[0]
+        default_order.append(qid)
+        opts = unpack_row_options((r[2], r[3], r[4], r[5], r[6]))
+        c_idx = r[7] if isinstance(r[7], int) and 0 <= r[7] < len(opts) else 0
+        q_dict[qid] = {
+            "id": qid,
+            "question": r[1],
+            "options": opts,
+            "opt1": opts[0] if len(opts) > 0 else "-",
+            "opt2": opts[1] if len(opts) > 1 else "-",
+            "opt3": opts[2] if len(opts) > 2 else "-",
+            "opt4": opts[3] if len(opts) > 3 else "-",
+            "correct_idx": c_idx,
+            "explanation": r[8] or "",
+        }
+
+    selected_set = set(req.question_ids) if req.question_ids is not None else set(default_order)
+    order_seq = req.ordered_question_ids if req.ordered_question_ids else default_order
+
+    seen = set()
+    final_ids: List[int] = []
+    for qid in order_seq:
+        if qid in q_dict and qid in selected_set and qid not in seen:
+            seen.add(qid)
+            final_ids.append(qid)
+    for qid in default_order:
+        if qid in selected_set and qid not in seen:
+            seen.add(qid)
+            final_ids.append(qid)
+
+    if not final_ids:
+        raise HTTPException(status_code=400, detail="يرجى تحديد سؤال واحد على الأقل لتصدير PDF.")
+
+    selected_questions = [q_dict[qid] for qid in final_ids]
+    if req.shuffle_questions:
+        random.shuffle(selected_questions)
+
+    cfg = req.settings or {}
+    try:
+        unsolved_bytes = build_bank_pdf_bytes(
+            bank_name=bank["name"],
+            questions=selected_questions,
+            solved=False,
+            settings=cfg,
+        )
+        solved_bytes = build_bank_pdf_bytes(
+            bank_name=bank["name"],
+            questions=selected_questions,
+            solved=True,
+            settings=cfg,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"تعذر توليد ملفات PDF: {str(e)}")
+
+    safe_slug = re.sub(r"[^\w\u0600-\u06FF-]+", "_", bank["name"]).strip("_") or "bank_questions"
+    unsolved_name = f"{safe_slug}_Unsolved.pdf"
+    solved_name = f"{safe_slug}_Solved.pdf"
+
+    bot_app = build_bot_app()
+    async with bot_app:
+        try:
+            await bot_app.bot.send_document(
+                chat_id=actor["user_id"],
+                document=io.BytesIO(solved_bytes),
+                filename=solved_name,
+                caption=f"النسخة المحلولة (Solved) — {bank['name']} ({len(selected_questions)} سؤال).",
+            )
+            await bot_app.bot.send_document(
+                chat_id=actor["user_id"],
+                document=io.BytesIO(unsolved_bytes),
+                filename=unsolved_name,
+                caption=f"النسخة غير المحلولة (Unsolved) — {bank['name']} ({len(selected_questions)} سؤال).",
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"تعذر إرسال ملفي PDF إلى محادثتك الخاصة: تأكد من بدء محادثة مع البوت أولاً. ({e})",
+            )
+
+    write_audit_log(
+        actor,
+        "export_pdf_pair",
+        f"صدّر نسختي PDF (محلولة وغير محلولة) لـ {len(selected_questions)} سؤال من بنك «{bank['name']}» إلى الخاص.",
+    )
+    return {
+        "status": "ok",
+        "exported_count": len(selected_questions),
+        "solved_file": solved_name,
+        "unsolved_file": unsolved_name,
+    }
 
 
 @app.post("/api/logs/{log_id}/undo")
