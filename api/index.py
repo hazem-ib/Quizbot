@@ -913,7 +913,7 @@ async def update_question(q_id: int, req: QuestionUpdate, x_telegram_init_data: 
 
 
 @app.post("/api/questions/{q_id}/move")
-@app.post("/questions/{q_id}/move")
+@app.post("/api/questions/{q_id}/move")
 async def move_question(q_id: int, req: TransferQuestionReq, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     with PooledConn() as conn:
@@ -945,7 +945,7 @@ async def move_question(q_id: int, req: TransferQuestionReq, x_telegram_init_dat
 
 
 @app.post("/api/questions/{q_id}/copy")
-@app.post("/questions/{q_id}/copy")
+@app.post("/api/questions/{q_id}/copy")
 async def copy_question(q_id: int, req: TransferQuestionReq, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     with PooledConn() as conn:
@@ -982,7 +982,7 @@ async def copy_question(q_id: int, req: TransferQuestionReq, x_telegram_init_dat
 
 
 @app.delete("/api/questions/{q_id}")
-@app.delete("/questions/{q_id}")
+@app.delete("/api/questions/{q_id}")
 async def delete_question(q_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_delete", "لا تملك صلاحية حذف الأسئلة.")
@@ -1038,7 +1038,7 @@ async def add_community(req: CommunityCreateReq, x_telegram_init_data: str = Hea
 
 
 @app.delete("/api/communities/{comm_id}")
-@app.delete("/communities/{comm_id}")
+@app.delete("/api/communities/{comm_id}")
 async def delete_community(comm_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_delete", "لا تملك صلاحية حذف الوجهات.")
@@ -1200,40 +1200,21 @@ async def execute_publish_job(
                 )
             conn.commit()
 
-        success_rate = round((sent_count / total_requested) * 100, 1) if total_requested > 0 else 0.0
-        report_lines = [
-            "━━━━━━━━━━━━━━━━━━━━",
-            "📄 **التقرير التفصيلي لعملية الإرسال**",
-            "━━━━━━━━━━━━━━━━━━━━",
-            f"• **رقم العملية:** `#{job_id}`",
-            f"• **المنفّذ:** {actor['name']} ({actor['tag']})",
-            f"• **الوجهة:** {target_label}",
-        ]
-        if quiz_title and quiz_title.strip():
-            report_lines.append(f"• **عنوان الاختبار:** {quiz_title.strip()}")
-        report_lines.extend([
-            f"• **إجمالي الأسئلة المستهدفة:** **{total_requested}**",
-            f"• **الأسئلة المرسلة بنجاح:** **{sent_count}**",
-            f"• **الأسئلة المتعذر إرسالها:** **{failed_count}**",
-            f"• **نسبة الإنجاز الفعلي:** **{success_rate}%**",
-        ])
-        if failed_count > 0:
-            report_lines.append("• **ملاحظة:** يمكنك إعادة إرسال الأسئلة المتعذرة مباشرة من تبويب الإرسال.")
+        target_name = target_label or "المحادثة الخاصة"
+        finish_msg = f"تمت عملية إرسال الاختبار إلى «{target_name}»."
 
         try:
             await bot_app.bot.send_message(
                 chat_id=admin_id,
-                text="\n".join(report_lines),
-                parse_mode="Markdown",
+                text=finish_msg,
             )
         except Exception:
             pass
 
-    actor_desc = f"{actor['name']} ({actor['tag']})" if actor["role"] == "admin" else "المالك"
     write_audit_log(
         actor,
         "publish_quiz",
-        f"أرسل {sent_count} من {total_requested} سؤالاً إلى «{target_label}» (المتعذر: {failed_count}) بواسطة {actor_desc}.",
+        finish_msg,
     )
 
 
