@@ -1,4 +1,4 @@
-<<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
@@ -307,7 +307,7 @@
       <div id="communitiesList"></div>
     </div>
 
-    <!-- تبويب الإرسال والتقارير -->
+    <!-- تبويب الإرسال والتقارير والتحكم الحي -->
     <div id="tab-publish" class="tab">
       <div class="card">
         <h3><svg class="ico"><use href="#i-send"/></svg> إرسال الاختبار</h3>
@@ -393,6 +393,38 @@
           </div>
           <div class="progress-bar-bg">
             <div id="progressBarFill" class="progress-bar-fill"></div>
+          </div>
+        </div>
+
+        <div id="liveProcessCard" class="job-card" style="display:none; margin-top:10px; border-color:rgba(59,130,246,0.45);">
+          <div class="job-top">
+            <div>
+              <strong id="liveJobTitle">عملية إرسال نشطة</strong>
+              <div id="liveJobSub" style="font-size:0.76rem; color:var(--hint);">...</div>
+            </div>
+            <span id="liveJobBadge" class="badge">قيد الإرسال</span>
+          </div>
+          <div class="job-stats">
+            <div class="stat-box">
+              <span class="stat-val" id="liveTotalCount">0</span>
+              <span class="stat-lbl">المستهدف</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-val val-ok" id="liveSentCount">0</span>
+              <span class="stat-lbl">المرسل</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-val val-err" id="liveFailedCount">0</span>
+              <span class="stat-lbl">المتوقف / المتعذر</span>
+            </div>
+          </div>
+          <div class="row-actions" style="margin-top:8px;">
+            <button type="button" class="btn btn-sm btn-outline" id="btnPauseResumeJob" onclick="togglePauseResumeActiveJob()">
+              إيقاف مؤقت
+            </button>
+            <button type="button" class="btn btn-sm btn-danger" id="btnCancelActiveJob" onclick="cancelActiveJob()">
+              إيقاف وإلغاء الإرسال
+            </button>
           </div>
         </div>
       </div>
@@ -566,6 +598,8 @@
     let pubBankQuestions = [];
     let activePubBankId = null;
     let banksLoadedOnce = false;
+    let activeJobId = null;
+    let activeJobPollTimer = null;
 
     function renderUserIdentityCard() {
       const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ").trim();
@@ -1103,6 +1137,95 @@
       document.getElementById("timerBox").style.display = checked ? "block" : "none";
     }
 
+    function stopJobPolling() {
+      if (activeJobPollTimer) {
+        clearInterval(activeJobPollTimer);
+        activeJobPollTimer = null;
+      }
+    }
+
+    async function controlPublishJob(jobId, action) {
+      await api("/api/publish_jobs/control", {
+        method: "POST",
+        body: JSON.stringify({ job_id: jobId, action })
+      });
+      await pollActiveJob(jobId);
+      await loadPublishJobs();
+    }
+
+    async function togglePauseResumeActiveJob() {
+      if (!activeJobId) return;
+      const job = await api(`/api/publish_jobs/${activeJobId}`, {}, true);
+      if (job.status === "paused") {
+        await controlPublishJob(activeJobId, "resume");
+      } else if (job.status === "queued" || job.status === "running") {
+        await controlPublishJob(activeJobId, "pause");
+      }
+    }
+
+    async function cancelActiveJob() {
+      if (!activeJobId) return;
+      if (!confirm("هل تريد إيقاف عملية الإرسال الحالية وإلغاء باقي الأسئلة؟")) return;
+      await controlPublishJob(activeJobId, "cancel");
+    }
+
+    function renderLiveProcessUI(job) {
+      const card = document.getElementById("liveProcessCard");
+      const pFill = document.getElementById("progressBarFill");
+      const pStatus = document.getElementById("progressStatus");
+      const pCounter = document.getElementById("progressCounter");
+      if (!card || !job) return;
+
+      card.style.display = "block";
+      document.getElementById("liveJobTitle").innerText = `عملية #${job.id} • ${job.target_label}`;
+      document.getElementById("liveJobSub").innerText = job.quiz_title ? `عنوان: ${job.quiz_title}` : `المنفّذ: ${job.actor_name}`;
+      document.getElementById("liveJobBadge").innerText = jobStatusText(job.status);
+      document.getElementById("liveTotalCount").innerText = job.total_count;
+      document.getElementById("liveSentCount").innerText = job.sent_count;
+      document.getElementById("liveFailedCount").innerText = job.failed_count;
+
+      const processed = (job.sent_count || 0) + (job.failed_count || 0);
+      const pct = job.total_count > 0 ? Math.min(100, Math.round((processed / job.total_count) * 100)) : 0;
+      if (pFill) pFill.style.width = `${pct}%`;
+      if (pStatus) pStatus.innerText = `الحالة: ${jobStatusText(job.status)} (${pct}%)`;
+      if (pCounter) pCounter.innerText = `${job.sent_count} / ${job.total_count}`;
+
+      const pauseBtn = document.getElementById("btnPauseResumeJob");
+      const cancelBtn = document.getElementById("btnCancelActiveJob");
+
+      if (job.status === "paused") {
+        pauseBtn.disabled = false;
+        pauseBtn.innerText = "استئناف الإرسال";
+        cancelBtn.disabled = false;
+      } else if (job.status === "queued" || job.status === "running") {
+        pauseBtn.disabled = false;
+        pauseBtn.innerText = "إيقاف مؤقت";
+        cancelBtn.disabled = false;
+      } else {
+        pauseBtn.disabled = true;
+        pauseBtn.innerText = "إيقاف مؤقت";
+        cancelBtn.disabled = true;
+        stopJobPolling();
+      }
+    }
+
+    async function pollActiveJob(jobId) {
+      try {
+        const job = await api(`/api/publish_jobs/${jobId}`, {}, true);
+        renderLiveProcessUI(job);
+        if (!["queued", "running", "paused"].includes(job.status)) {
+          await loadPublishJobs();
+        }
+      } catch (_) {}
+    }
+
+    function startJobPolling(jobId) {
+      activeJobId = jobId;
+      stopJobPolling();
+      pollActiveJob(jobId);
+      activeJobPollTimer = setInterval(() => pollActiveJob(jobId), 1500);
+    }
+
     async function publishQuiz() {
       if (currentActor?.role !== "owner" && !currentActor?.can_publish) {
         return alert("لا تملك صلاحية إرسال الاختبارات.");
@@ -1168,7 +1291,7 @@
 
       startBtn.disabled = true;
       pBox.style.display = "block";
-      pFill.style.width = "35%";
+      pFill.style.width = "25%";
       pStatus.innerText = `جاري جدولة الإرسال إلى (${targetLabel})...`;
       pCounter.innerText = `${finalCount} سؤال`;
 
@@ -1188,9 +1311,11 @@
           })
         });
         const actualCount = typeof res.queued_count === "number" ? res.queued_count : finalCount;
-        pFill.style.width = "100%";
         pStatus.innerText = `تم بدء إرسال ${actualCount} سؤال إلى (${res.target_label || targetLabel}) في الخلفية.`;
-        pCounter.innerText = `${actualCount} سؤال`;
+        pCounter.innerText = `0 / ${actualCount}`;
+        if (res.job_id) {
+          startJobPolling(res.job_id);
+        }
         await loadPublishJobs();
       } finally {
         startBtn.disabled = false;
@@ -1201,6 +1326,8 @@
       if (st === "completed") return "مكتمل";
       if (st === "partial_failed") return "مكتمل مع متعذرات";
       if (st === "failed") return "متعذر";
+      if (st === "paused") return "متوقف مؤقتاً";
+      if (st === "cancelled") return "ملغى";
       if (st === "running") return "قيد الإرسال";
       return "في الانتظار";
     }
@@ -1213,7 +1340,14 @@
         return;
       }
 
-      box.innerHTML = jobs.map(j => `
+      const activeJob = jobs.find(j => ["queued", "running", "paused"].includes(j.status));
+      if (activeJob && activeJobId !== activeJob.id) {
+        startJobPolling(activeJob.id);
+      }
+
+      box.innerHTML = jobs.map(j => {
+        const isLive = ["queued", "running", "paused"].includes(j.status);
+        return `
         <div class="job-card">
           <div class="job-top">
             <div>
@@ -1234,16 +1368,27 @@
             </div>
             <div class="stat-box">
               <span class="stat-val val-err">${j.failed_count}</span>
-              <span class="stat-lbl">المتعذر</span>
+              <span class="stat-lbl">المتعذر / المتوقف</span>
             </div>
           </div>
-          ${j.failed_count > 0 ? `
-            <button class="btn btn-sm btn-outline" onclick="retryFailedBatch(${j.id})">
-              <svg class="ico ico-sm"><use href="#i-refresh"/></svg> إعادة إرسال المتعذرة (${j.failed_count})
-            </button>
-          ` : ""}
+          <div class="row-actions" style="margin-top:6px;">
+            ${isLive ? `
+              <button class="btn btn-sm btn-outline" onclick="controlPublishJob(${j.id}, '${j.status === "paused" ? "resume" : "pause"}')">
+                ${j.status === "paused" ? "استئناف" : "إيقاف مؤقت"}
+              </button>
+              <button class="btn btn-sm btn-danger" onclick="controlPublishJob(${j.id}, 'cancel')">
+                إلغاء العملية
+              </button>
+            ` : ""}
+            ${j.failed_count > 0 ? `
+              <button class="btn btn-sm btn-outline" onclick="retryFailedBatch(${j.id})">
+                <svg class="ico ico-sm"><use href="#i-refresh"/></svg> إعادة إرسال (${j.failed_count})
+              </button>
+            ` : ""}
+          </div>
         </div>
-      `).join("");
+      `;
+      }).join("");
     }
 
     async function retryFailedBatch(jobId) {
@@ -1252,6 +1397,9 @@
         body: JSON.stringify({ job_id: jobId })
       });
       alert(`تمت جدولة إعادة إرسال ${res.retried_count} سؤال متعذر إلى (${res.target_label}).`);
+      if (res.job_id) {
+        startJobPolling(res.job_id);
+      }
       await loadPublishJobs();
     }
 
