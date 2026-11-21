@@ -558,3 +558,11 @@ async def remove_admin(admin_id: int, x_telegram_init_data: str = Header(default
     c.close()
     conn.close()
     return {"status": "ok"}
+
+@app.api_route("/{full_path:path}", methods=["GET", "POST"])
+async def catch_all(full_path: str, request: Request):
+    if "setup_webhook" in full_path:
+        return await setup_webhook(request)
+    if "webhook" in full_path and request.method == "POST":
+        return await telegram_webhook(request)
+    raise HTTPException(status_code=404, detail=f"Path received by FastAPI: /{full_path}")
