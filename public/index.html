@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
@@ -307,7 +307,7 @@
       <div id="communitiesList"></div>
     </div>
 
-    <!-- تبويب الإرسال والتقارير والتحكم الحي -->
+    <!-- تبويب الإرسال والعملية الحالية -->
     <div id="tab-publish" class="tab">
       <div class="card">
         <h3><svg class="ico"><use href="#i-send"/></svg> إرسال الاختبار</h3>
@@ -399,7 +399,7 @@
         <div id="liveProcessCard" class="job-card" style="display:none; margin-top:10px; border-color:rgba(59,130,246,0.45);">
           <div class="job-top">
             <div>
-              <strong id="liveJobTitle">عملية إرسال نشطة</strong>
+              <strong id="liveJobTitle">العملية الحالية</strong>
               <div id="liveJobSub" style="font-size:0.76rem; color:var(--hint);">...</div>
             </div>
             <span id="liveJobBadge" class="badge">قيد الإرسال</span>
@@ -431,7 +431,7 @@
 
       <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-          <h3 style="margin:0;">آخر تقرير إرسال</h3>
+          <h3 style="margin:0;">تقرير العملية الحالية</h3>
           <button class="btn btn-outline btn-sm" onclick="loadPublishJobs()">
             <svg class="ico ico-sm"><use href="#i-refresh"/></svg> تحديث
           </button>
@@ -489,7 +489,7 @@
             <button class="btn btn-outline btn-sm" onclick="loadLogs()">
               <svg class="ico ico-sm"><use href="#i-refresh"/></svg> تحديث
             </button>
-            <button class="btn btn-danger btn-sm" id="btnClearLogs" style="display:none;" onclick="clearLogs()">
+            <button class="btn btn-danger btn-sm" id="btnClearLogs" onclick="clearLogs()">
               <svg class="ico ico-sm"><use href="#i-trash"/></svg> مسح السجل
             </button>
           </div>
@@ -660,7 +660,7 @@
       const canMgrAdmins = currentActor.role === "owner" || currentActor.can_manage_admins;
       document.getElementById("nav-admins").style.display = canMgrAdmins ? "flex" : "none";
       document.getElementById("permManageRow").style.display = currentActor.role === "owner" ? "flex" : "none";
-      document.getElementById("btnClearLogs").style.display = currentActor.role === "owner" ? "inline-flex" : "none";
+      document.getElementById("btnClearLogs").style.display = canMgrAdmins ? "inline-flex" : "none";
     }
 
     async function initApp() {
@@ -1165,7 +1165,7 @@
 
     async function cancelActiveJob() {
       if (!activeJobId) return;
-      if (!confirm("هل تريد إيقاف عملية الإرسال الحالية وإلغاء باقي الأسئلة؟")) return;
+      if (!confirm("هل تريد إيقاف العملية الحالية وإلغاء باقي الأسئلة؟")) return;
       await controlPublishJob(activeJobId, "cancel");
     }
 
@@ -1177,7 +1177,7 @@
       if (!card || !job) return;
 
       card.style.display = "block";
-      document.getElementById("liveJobTitle").innerText = `عملية #${job.id} • ${job.target_label}`;
+      document.getElementById("liveJobTitle").innerText = `العملية الحالية #${job.id} • ${job.target_label}`;
       document.getElementById("liveJobSub").innerText = job.quiz_title ? `عنوان: ${job.quiz_title}` : `المنفّذ: ${job.actor_name}`;
       document.getElementById("liveJobBadge").innerText = jobStatusText(job.status);
       document.getElementById("liveTotalCount").innerText = job.total_count;
@@ -1347,66 +1347,68 @@
       const jobs = await api("/api/publish_jobs");
       const box = document.getElementById("publishJobsList");
       if (!jobs || jobs.length === 0) {
-        box.innerHTML = `<div style="text-align:center; color:var(--hint); padding:12px;">لا يوجد تقرير حالي.</div>`;
+        stopJobPolling();
+        activeJobId = null;
+        document.getElementById("liveProcessCard").style.display = "none";
+        box.innerHTML = `<div style="text-align:center; color:var(--hint); padding:12px;">لا توجد عملية حالية.</div>`;
         return;
       }
 
-      const latestJob = jobs[0];
-      if (["queued", "running", "paused"].includes(latestJob.status)) {
-        if (activeJobId !== latestJob.id) {
-          startJobPolling(latestJob.id);
+      const currentJob = jobs[0];
+      if (["queued", "running", "paused"].includes(currentJob.status)) {
+        if (activeJobId !== currentJob.id) {
+          startJobPolling(currentJob.id);
         }
-      } else if (activeJobId === latestJob.id) {
-        renderLiveProcessUI(latestJob);
+      } else {
+        activeJobId = currentJob.id;
+        renderLiveProcessUI(currentJob);
       }
 
-      box.innerHTML = jobs.map(j => {
-        const isLive = ["queued", "running", "paused"].includes(j.status);
-        return `
+      const isLive = ["queued", "running", "paused"].includes(currentJob.status);
+      box.innerHTML = `
         <div class="job-card">
           <div class="job-top">
             <div>
-              <strong>${j.target_label}</strong>
-              ${j.quiz_title ? `<div style="font-size:0.78rem; color:var(--hint);">${j.quiz_title}</div>` : ""}
+              <strong>${currentJob.target_label}</strong>
+              ${currentJob.quiz_title ? `<div style="font-size:0.78rem; color:var(--hint);">${currentJob.quiz_title}</div>` : ""}
             </div>
-            <span class="badge">${jobStatusText(j.status)} (#${j.id})</span>
+            <span class="badge">${jobStatusText(currentJob.status)} (#${currentJob.id})</span>
           </div>
-          <div style="font-size:0.75rem; color:var(--hint);">المنفّذ: ${j.actor_name} (${j.actor_tag}) • الإنجاز: ${j.success_rate}%</div>
+          <div style="font-size:0.75rem; color:var(--hint);">المنفّذ: ${currentJob.actor_name} (${currentJob.actor_tag}) • الإنجاز: ${currentJob.success_rate}%</div>
           <div class="job-stats">
             <div class="stat-box">
-              <span class="stat-val">${j.total_count}</span>
+              <span class="stat-val">${currentJob.total_count}</span>
               <span class="stat-lbl">المستهدف</span>
             </div>
             <div class="stat-box">
-              <span class="stat-val val-ok">${j.sent_count}</span>
+              <span class="stat-val val-ok">${currentJob.sent_count}</span>
               <span class="stat-lbl">المرسل فعلياً</span>
             </div>
             <div class="stat-box">
-              <span class="stat-val val-err">${j.failed_count}</span>
+              <span class="stat-val val-err">${currentJob.failed_count}</span>
               <span class="stat-lbl">المتعذر / المتوقف</span>
             </div>
           </div>
           <div class="row-actions" style="margin-top:6px;">
             ${isLive ? `
-              <button class="btn btn-sm btn-outline" onclick="controlPublishJob(${j.id}, '${j.status === "paused" ? "resume" : "pause"}')">
-                ${j.status === "paused" ? "استئناف" : "إيقاف مؤقت"}
+              <button class="btn btn-sm btn-outline" onclick="controlPublishJob(${currentJob.id}, '${currentJob.status === "paused" ? "resume" : "pause"}')">
+                ${currentJob.status === "paused" ? "استئناف" : "إيقاف مؤقت"}
               </button>
-              <button class="btn btn-sm btn-danger" onclick="controlPublishJob(${j.id}, 'cancel')">
+              <button class="btn btn-sm btn-danger" onclick="controlPublishJob(${currentJob.id}, 'cancel')">
                 إلغاء العملية
               </button>
             ` : ""}
-            ${j.failed_count > 0 ? `
-              <button class="btn btn-sm btn-outline" onclick="retryFailedBatch(${j.id})">
-                <svg class="ico ico-sm"><use href="#i-refresh"/></svg> إعادة إرسال (${j.failed_count})
+            ${currentJob.failed_count > 0 ? `
+              <button class="btn btn-sm btn-outline" onclick="retryFailedBatch(${currentJob.id})">
+                <svg class="ico ico-sm"><use href="#i-refresh"/></svg> إعادة إرسال (${currentJob.failed_count})
               </button>
             ` : ""}
-            <button class="btn btn-sm btn-danger" onclick="deletePublishJob(${j.id})">
+            <button class="btn btn-sm btn-danger" onclick="deletePublishJob(${currentJob.id})">
               <svg class="ico ico-sm"><use href="#i-trash"/></svg> حذف التقرير
             </button>
           </div>
         </div>
       `;
-      }).join("");
     }
 
     async function retryFailedBatch(jobId) {
@@ -1549,6 +1551,7 @@
       if (!confirm("مسح جميع السجلات الحالية نهائياً؟")) return;
       await api("/api/logs", { method: "DELETE" });
       await loadLogs();
+      alert("تم مسح السجل بنجاح.");
     }
 
     initApp();
