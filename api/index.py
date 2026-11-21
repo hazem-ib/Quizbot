@@ -1,5 +1,6 @@
 import os
 import io
+import re
 import json
 import hmac
 import hashlib
@@ -18,7 +19,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "9268644584:AAE8woNBoXzueYqpsT4x69efYcDgP1mPP9Y")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
-app = FastAPI(title="Telegram Quiz Mini App v3")
+app = FastAPI(title="Telegram Quiz Mini App v3.1 Secure")
 
 def get_conn():
     if not DATABASE_URL:
@@ -82,30 +83,32 @@ def is_admin(user_id: int) -> bool:
 
 def verify_telegram_init_data(init_data: str) -> dict:
     init_db()
-    if not init_data:
-        owner = get_owner_id()
-        if owner:
-            return {"id": owner, "first_name": "Owner"}
-        raise HTTPException(status_code=401, detail="افتح التطبيق من داخل تيليجرام أولاً لتسجيل المالك")
+    # إغلاق الثغرة تماماً: منع أي دخول من خارج تيليجرام بدون توقيع رقمي صحيح
+    if not init_data or not init_data.strip():
+        raise HTTPException(status_code=403, detail="⛔ غير مصرح: يجب فتح التطبيق من داخل تيليجرام حصراً.")
 
     parsed = dict(urllib.parse.parse_qsl(init_data))
     hash_val = parsed.pop("hash", None)
     if not hash_val:
-        raise HTTPException(status_code=401, detail="Invalid InitData")
+        raise HTTPException(status_code=403, detail="⛔ توقيع تيليجرام مفقود.")
 
     data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
     secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
     calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
 
     if calculated_hash != hash_val:
-        raise HTTPException(status_code=403, detail="فشل التحقق من هوية تيليجرام")
+        raise HTTPException(status_code=403, detail="⛔ فشل التحقق الأمني من هوية تيليجرام.")
 
     user_info = json.loads(parsed.get("user", "{}"))
     user_id = user_info.get("id")
-    if get_owner_id() is None and user_id:
+    if not user_id:
+        raise HTTPException(status_code=403, detail="⛔ تعذر قراءة معرف المستخدم.")
+
+    if get_owner_id() is None:
         set_owner_id(user_id, user_info.get("first_name", "Owner"))
+
     if not is_admin(user_id):
-        raise HTTPException(status_code=403, detail="⛔ غير مصرح لك بالدخول لهذا التطبيق")
+        raise HTTPException(status_code=403, detail="⛔ عذراً، هذا التطبيق مخصص للمالك والمشرفين فقط.")
     return user_info
 
 @app.get("/", response_class=HTMLResponse)
@@ -167,7 +170,7 @@ def build_bot_app(webapp_url: str = ""):
             return
 
         url = webapp_url or f"https://{os.environ.get('VERCEL_URL', '')}"
-        keyboard = [[InlineKeyboardButton("🚀 فتح تطبيق إدارة الاختبارات (v3)", web_app=WebAppInfo(url=url))]]
+        keyboard = [[InlineKeyboardButton("🚀 فتح تطبيق إدارة الاختبارات", web_app=WebAppInfo(url=url))]]
         await update.message.reply_text(
             f"👋 أهلاً بك يا **{user.first_name}**!\n\n"
             "• اضغط على الزر بالأسفل لفتح **التطبيق الكامل** لإدارة الأسئلة، المجتمعات، والتوقيت.\n"
@@ -217,7 +220,7 @@ async def setup_webhook(request: Request):
             menu_button=MenuButtonWebApp(text="📱 فتح التطبيق", web_app=WebAppInfo(url=base_url))
         )
     return {
-        "status": "Webhook & Menu Button configured successfully! (v3)",
+        "status": "Webhook & Menu Button configured successfully! (v3.1 Secure)",
         "app_url": base_url,
         "webhook_url": webhook_url
     }
@@ -296,6 +299,26 @@ async def delete_bank(bank_id: int, x_telegram_init_data: str = Header(default="
     conn.close()
     return {"status": "ok"}
 
+def parse_correct_index(ans_raw_val, opts: list) -> Optional[int]:
+    if pd.isna(ans_raw_val):
+        return None
+    s = str(ans_raw_val).strip()
+    if not s or s.lower() == 'nan':
+        return None
+    s_upper = s.upper()
+    letter_map = {'A': 0, 'B': 1, 'C': 2, 'D': 3, 'أ': 0, 'ب': 1, 'ج': 2, 'د': 3}
+    if s_upper in letter_map:
+        return letter_map[s_upper]
+    # استخراج الرقم لو مكتوب Option 1 أو 1.0 أو (2)
+    m = re.search(r'[1-4]', s_upper)
+    if m and len(s_upper) <= 12:
+        return int(m.group(0)) - 1
+    # مطابقة مع نص الإجابة نفسها
+    for i, opt in enumerate(opts):
+        if s.lower() == opt.lower():
+            return i
+    return None
+
 @app.post("/api/upload_csv")
 @app.post("/upload_csv")
 async def upload_csv(
@@ -318,8 +341,9 @@ async def upload_csv(
     if df.shape[1] < 6:
         raise HTTPException(status_code=400, detail=f"الملف يحتوي على {df.shape[1]} أعمدة فقط! يجب أن يحتوي على 6 أعمدة على الأقل.")
 
-    first_ans = str(df.iloc[0, 5]).strip()
-    if first_ans not in ['1', '2', '3', '4', '0', '1.0', '2.0', '3.0', '4.0']:
+    # تجاهل صف العناوين تلقائياً إذا لم يكن العمود السادس إجابة صالحة
+    first_opts = [str(df.iloc[0, i]).strip() if not pd.isna(df.iloc[0, i]) else "" for i in range(1, 5)]
+    if parse_correct_index(df.iloc[0, 5], first_opts) is None:
         df = df.iloc[1:]
 
     conn = get_conn()
@@ -334,17 +358,19 @@ async def upload_csv(
             if pd.isna(row[0]) or str(row[0]).strip() == "":
                 continue
             q_text = str(row[0]).strip()
-            opts = [str(row[i]).strip() if not pd.isna(row[i]) else "-" for i in range(1, 5)]
-            ans_str = str(row[5]).strip().upper()
-            ans_map = {'A': 1, 'B': 2, 'C': 3, 'D': 4}
-            if ans_str in ans_map:
-                ans_raw = ans_map[ans_str]
-            else:
-                try:
-                    ans_raw = int(float(ans_str))
-                except ValueError:
-                    raise HTTPException(status_code=400, detail=f"خطأ في الصف {idx+1}: قيمة الإجابة الصحيحة '{ans_str}' غير صالحة (يجب أن تكون 1-4 أو A-D)")
-            c_idx = ans_raw - 1 if 1 <= ans_raw <= 4 else 0
+            opts = [str(row[i]).strip() if not pd.isna(row[i]) and str(row[i]).strip() != "" else "-" for i in range(1, 5)]
+            # تخطي الصفوف الفارغة تماماً
+            if all(o == "-" for o in opts):
+                continue
+
+            c_idx = parse_correct_index(row[5], opts)
+            if c_idx is None:
+                val_found = "" if pd.isna(row[5]) else str(row[5]).strip()
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"خطأ في الصف {idx+1} (السؤال: {q_text[:30]}...): العمود السادس فارغ أو غير مفهوم ('{val_found}')."
+                )
+
             expl = str(row[6]).strip() if df.shape[1] > 6 and not pd.isna(row[6]) else ""
             c.execute("""INSERT INTO questions (bank_id, question, opt1, opt2, opt3, opt4, correct_idx, explanation)
                          VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
