@@ -123,6 +123,7 @@
     .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 11px; font-size: 0.85rem; }
     .switch-row input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--btn); flex-shrink: 0; }
     .hint-box { background: rgba(59,130,246,0.1); border-right: 3px solid var(--btn); padding: 10px 12px; border-radius: 10px; font-size: 0.8rem; margin-bottom: 13px; color: var(--text); line-height: 1.55; }
+    .err-box { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.35); color: #fca5a5; padding: 9px 11px; border-radius: 10px; font-size: 0.78rem; margin-top: 8px; word-break: break-word; }
 
     .select-list { max-height: 230px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 8px; background: var(--bg); margin-bottom: 12px; }
     .select-q-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.83rem; }
@@ -418,6 +419,7 @@
               <span class="stat-lbl">المتوقف / المتعذر</span>
             </div>
           </div>
+          <div id="liveJobErrBox" class="err-box" style="display:none;"></div>
           <div class="row-actions" style="margin-top:8px;">
             <button type="button" class="btn btn-sm btn-outline" id="btnPauseResumeJob" onclick="togglePauseResumeActiveJob()">
               إيقاف مؤقت
@@ -1174,6 +1176,7 @@
       const pFill = document.getElementById("progressBarFill");
       const pStatus = document.getElementById("progressStatus");
       const pCounter = document.getElementById("progressCounter");
+      const errBox = document.getElementById("liveJobErrBox");
       if (!card || !job) return;
 
       card.style.display = "block";
@@ -1183,6 +1186,16 @@
       document.getElementById("liveTotalCount").innerText = job.total_count;
       document.getElementById("liveSentCount").innerText = job.sent_count;
       document.getElementById("liveFailedCount").innerText = job.failed_count;
+
+      if (errBox) {
+        if (job.last_error) {
+          errBox.style.display = "block";
+          errBox.innerText = `تفاصيل الاستجابة من تيليجرام: ${job.last_error}`;
+        } else {
+          errBox.style.display = "none";
+          errBox.innerText = "";
+        }
+      }
 
       const processed = (job.sent_count || 0) + (job.failed_count || 0);
       const pct = job.total_count > 0 ? Math.min(100, Math.round((processed / job.total_count) * 100)) : 0;
@@ -1395,6 +1408,7 @@
               <span class="stat-lbl">المتعذر / المتوقف</span>
             </div>
           </div>
+          ${currentJob.last_error ? `<div class="err-box">السبب: ${currentJob.last_error}</div>` : ""}
           <div class="row-actions" style="margin-top:6px;">
             ${isLive ? `
               <button class="btn btn-sm btn-outline" onclick="controlPublishJob(${currentJob.id}, '${currentJob.status === "paused" ? "resume" : "pause"}')">
