@@ -533,28 +533,28 @@
           </div>
           <div class="color-grid">
             <div class="color-chip">
-              <span>رقم السؤال (Q1.)</span>
-              <input type="color" id="pdfColQNum" value="#2b6cb0" onchange="savePdfPrefs()" />
+              <span>رقم السؤال</span>
+              <input type="color" id="pdfColQNum" value="#2563eb" onchange="savePdfPrefs()" />
             </div>
             <div class="color-chip">
               <span>دائرة الخيار (A/B/C/D)</span>
-              <input type="color" id="pdfColBadge" value="#e6f0fa" onchange="savePdfPrefs()" />
+              <input type="color" id="pdfColBadge" value="#dbeafe" onchange="savePdfPrefs()" />
             </div>
             <div class="color-chip">
               <span>نص دوائر الخيارات</span>
-              <input type="color" id="pdfColBadgeText" value="#2563eb" onchange="savePdfPrefs()" />
+              <input type="color" id="pdfColBadgeText" value="#1d4ed8" onchange="savePdfPrefs()" />
             </div>
             <div class="color-chip">
               <span>خلفية بطاقة السؤال</span>
-              <input type="color" id="pdfColCardBg" value="#f5f8fb" onchange="savePdfPrefs()" />
+              <input type="color" id="pdfColCardBg" value="#f6f9fe" onchange="savePdfPrefs()" />
             </div>
             <div class="color-chip">
               <span>إطار بطاقة السؤال</span>
-              <input type="color" id="pdfColCardBorder" value="#dce6f0" onchange="savePdfPrefs()" />
+              <input type="color" id="pdfColCardBorder" value="#dae4f0" onchange="savePdfPrefs()" />
             </div>
             <div class="color-chip">
               <span>خلفية الصفحة</span>
-              <input type="color" id="pdfColPageBg" value="#ffffff" onchange="savePdfPrefs()" />
+              <input type="color" id="pdfColPageBg" value="#fefcfa" onchange="savePdfPrefs()" />
             </div>
             <div class="color-chip">
               <span>نص السؤال والخيارات</span>
@@ -562,7 +562,7 @@
             </div>
             <div class="color-chip">
               <span>الصح (نسخة محلولة)</span>
-              <input type="color" id="pdfColCorrect" value="#dc2626" onchange="savePdfPrefs()" />
+              <input type="color" id="pdfColCorrect" value="#059669" onchange="savePdfPrefs()" />
             </div>
           </div>
           <div class="switch-row" style="margin-top:8px; margin-bottom:0;">
@@ -614,8 +614,16 @@
         </div>
 
         <div class="card" style="padding:12px; margin-bottom:12px;">
-          <strong style="display:block; margin-bottom:8px; font-size:0.88rem;">المسافات والخطوط</strong>
+          <strong style="display:block; margin-bottom:8px; font-size:0.88rem;">الخط والمسافات</strong>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div style="grid-column: span 2;">
+              <label>نوع الخط (مريح للعين / أطفال):</label>
+              <select id="pdfFontStyle" onchange="savePdfPrefs()">
+                <option value="soft_rounded" selected>ناعم بحواف دائرية وسميكة (مريح للعين وأطفال)</option>
+                <option value="bold_friendly">واضح وسميك (مناسب للأطفال والوضوح العالي)</option>
+                <option value="clean_sans">حديث ناعم واحترافي</option>
+              </select>
+            </div>
             <div>
               <label>ترقيم الخيارات:</label>
               <select id="pdfOptStyle" onchange="savePdfPrefs()">
@@ -627,7 +635,7 @@
             </div>
             <div>
               <label>حجم خط السؤال والخيارات:</label>
-              <input type="number" id="pdfBodyFont" value="14" step="0.5" min="10" max="20" onchange="savePdfPrefs()" />
+              <input type="number" id="pdfBodyFont" value="13" step="0.5" min="10" max="20" onchange="savePdfPrefs()" />
             </div>
             <div>
               <label>المسافة بين السؤال والخيارات:</label>
@@ -639,7 +647,7 @@
             </div>
             <div style="grid-column: span 2;">
               <label>المسافة بين بطاقات الأسئلة:</label>
-              <input type="number" id="pdfGapQuestions" value="14" min="4" max="40" onchange="savePdfPrefs()" />
+              <input type="number" id="pdfGapQuestions" value="13" min="4" max="40" onchange="savePdfPrefs()" />
             </div>
           </div>
 
@@ -784,7 +792,7 @@
     let pdfStudioItems = [];
     let pdfCustomHeadings = [];
 
-    const PDF_PREFS_KEY = "quiz_native_pdf_prefs_v3";
+    const PDF_PREFS_KEY = "quiz_native_pdf_prefs_v4";
 
     function getQuestionOptions(q) {
       if (Array.isArray(q.options) && q.options.length >= 2) {
@@ -969,14 +977,14 @@
     }
 
     function resetPdfColorsToCardStyle() {
-      document.getElementById("pdfColQNum").value = "#2b6cb0";
-      document.getElementById("pdfColBadge").value = "#e6f0fa";
-      document.getElementById("pdfColBadgeText").value = "#2563eb";
-      document.getElementById("pdfColCardBg").value = "#f5f8fb";
-      document.getElementById("pdfColCardBorder").value = "#dce6f0";
-      document.getElementById("pdfColPageBg").value = "#ffffff";
+      document.getElementById("pdfColQNum").value = "#2563eb";
+      document.getElementById("pdfColBadge").value = "#dbeafe";
+      document.getElementById("pdfColBadgeText").value = "#1d4ed8";
+      document.getElementById("pdfColCardBg").value = "#f6f9fe";
+      document.getElementById("pdfColCardBorder").value = "#dae4f0";
+      document.getElementById("pdfColPageBg").value = "#fefcfa";
       document.getElementById("pdfColText").value = "#1e293b";
-      document.getElementById("pdfColCorrect").value = "#dc2626";
+      document.getElementById("pdfColCorrect").value = "#059669";
       document.getElementById("pdfCorrectUnderline").checked = true;
       savePdfPrefs();
     }
@@ -993,6 +1001,7 @@
           colText: document.getElementById("pdfColText").value,
           colCorrect: document.getElementById("pdfColCorrect").value,
           correctUnderline: document.getElementById("pdfCorrectUnderline").checked,
+          fontStyle: document.getElementById("pdfFontStyle").value,
           optStyle: document.getElementById("pdfOptStyle").value,
           bodyFont: document.getElementById("pdfBodyFont").value,
           gapQOpts: document.getElementById("pdfGapQOpts").value,
@@ -1018,6 +1027,7 @@
         if (p.colText) document.getElementById("pdfColText").value = p.colText;
         if (p.colCorrect) document.getElementById("pdfColCorrect").value = p.colCorrect;
         if (typeof p.correctUnderline === "boolean") document.getElementById("pdfCorrectUnderline").checked = p.correctUnderline;
+        if (p.fontStyle) document.getElementById("pdfFontStyle").value = p.fontStyle;
         if (p.optStyle) document.getElementById("pdfOptStyle").value = p.optStyle;
         if (p.bodyFont) document.getElementById("pdfBodyFont").value = p.bodyFont;
         if (p.gapQOpts) document.getElementById("pdfGapQOpts").value = p.gapQOpts;
@@ -1153,11 +1163,12 @@
           col_text: document.getElementById("pdfColText").value,
           col_correct: document.getElementById("pdfColCorrect").value,
           correct_underline: Boolean(document.getElementById("pdfCorrectUnderline").checked),
+          font_style: document.getElementById("pdfFontStyle").value,
           opt_style: document.getElementById("pdfOptStyle").value,
-          body_font: parseFloat(document.getElementById("pdfBodyFont").value) || 14,
+          body_font: parseFloat(document.getElementById("pdfBodyFont").value) || 13,
           gap_q_opts: parseFloat(document.getElementById("pdfGapQOpts").value) || 10,
           gap_opts: parseFloat(document.getElementById("pdfGapOpts").value) || 6,
-          gap_questions: parseFloat(document.getElementById("pdfGapQuestions").value) || 14,
+          gap_questions: parseFloat(document.getElementById("pdfGapQuestions").value) || 13,
           show_expl: Boolean(document.getElementById("pdfShowExpl").checked),
           custom_headings: pdfCustomHeadings
         }
