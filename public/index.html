@@ -20,7 +20,7 @@
       --radius: 16px;
     }
     * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { margin: 0; padding: 14px 14px 98px; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; min-height: 100vh; }
+    body { margin: 0; padding: 14px 14px 96px; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; min-height: 100vh; }
 
     .ico { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.85; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
     .ico-sm { width: 15px; height: 15px; }
@@ -37,7 +37,7 @@
       display: flex; align-items: center; justify-content: center; margin-bottom: 14px; color: #60a5fa;
     }
     #authScreen p { color: #94a3b8; font-size: 0.92rem; max-width: 320px; line-height: 1.65; }
-    #appContainer { display: none; width: 100%; max-width: 960px; margin: 0 auto; }
+    #appContainer { display: none; width: 100%; max-width: 720px; margin: 0 auto; }
 
     .profile-header {
       display: flex; justify-content: space-between; align-items: center; gap: 10px;
@@ -119,7 +119,7 @@
 
     .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.82); backdrop-filter: blur(4px); z-index: 200; align-items: center; justify-content: center; padding: 14px; }
     .modal.open { display: flex; }
-    .modal-content { background: var(--sec-bg); border: 1px solid var(--card-border); border-radius: var(--radius); padding: 18px; width: 100%; max-width: 580px; max-height: 92vh; overflow-y: auto; }
+    .modal-content { background: var(--sec-bg); border: 1px solid var(--card-border); border-radius: var(--radius); padding: 18px; width: 100%; max-width: 540px; max-height: 85vh; overflow-y: auto; }
 
     .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 11px; font-size: 0.85rem; }
     .switch-row input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--btn); flex-shrink: 0; }
@@ -580,9 +580,6 @@
     const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
     if (tg) {
       tg.expand();
-      if (typeof tg.requestFullscreen === "function") {
-        try { tg.requestFullscreen(); } catch (_) {}
-      }
     }
     const initData = tg ? (tg.initData || "") : "";
     const tgUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : {};
