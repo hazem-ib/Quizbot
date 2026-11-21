@@ -308,12 +308,15 @@ async def upload_csv(
     df = None
     for enc in ['utf-8-sig', 'utf-8', 'cp1256', 'windows-1256', 'latin1']:
         try:
-            df = pd.read_csv(io.BytesIO(content), header=None, encoding=enc)
+            df = pd.read_csv(io.BytesIO(content), header=None, encoding=enc, sep=None, engine='python')
             break
         except Exception:
             continue
     if df is None or df.empty:
         raise HTTPException(status_code=400, detail="تعذر قراءة ملف CSV أو الملف فارغ")
+
+    if df.shape[1] < 6:
+        raise HTTPException(status_code=400, detail=f"الملف يحتوي على {df.shape[1]} أعمدة فقط! يجب أن يحتوي على 6 أعمدة على الأقل.")
 
     first_ans = str(df.iloc[0, 5]).strip()
     if first_ans not in ['1', '2', '3', '4', '0', '1.0', '2.0', '3.0', '4.0']:
@@ -321,28 +324,44 @@ async def upload_csv(
 
     conn = get_conn()
     c = conn.cursor()
-    c.execute("INSERT INTO banks (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (bank_name.strip(),))
-    c.execute("SELECT id FROM banks WHERE name = %s", (bank_name.strip(),))
-    bank_id = c.fetchone()[0]
+    try:
+        c.execute("INSERT INTO banks (name) VALUES (%s) ON CONFLICT (name) DO NOTHING", (bank_name.strip(),))
+        c.execute("SELECT id FROM banks WHERE name = %s", (bank_name.strip(),))
+        bank_id = c.fetchone()[0]
 
-    added = 0
-    for _, row in df.iterrows():
-        if pd.isna(row[0]):
-            continue
-        q_text = str(row[0]).strip()
-        opts = [str(row[i]).strip() if not pd.isna(row[i]) else "-" for i in range(1, 5)]
-        ans_raw = int(float(str(row[5]).strip()))
-        c_idx = ans_raw - 1 if 1 <= ans_raw <= 4 else 0
-        expl = str(row[6]).strip() if len(row) > 6 and not pd.isna(row[6]) else ""
-        c.execute("""INSERT INTO questions (bank_id, question, opt1, opt2, opt3, opt4, correct_idx, explanation)
-                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                  (bank_id, q_text, opts[0], opts[1], opts[2], opts[3], c_idx, expl))
-        added += 1
+        added = 0
+        for idx, row in df.iterrows():
+            if pd.isna(row[0]) or str(row[0]).strip() == "":
+                continue
+            q_text = str(row[0]).strip()
+            opts = [str(row[i]).strip() if not pd.isna(row[i]) else "-" for i in range(1, 5)]
+            ans_str = str(row[5]).strip().upper()
+            ans_map = {'A': 1, 'B': 2, 'C': 3, 'D': 4}
+            if ans_str in ans_map:
+                ans_raw = ans_map[ans_str]
+            else:
+                try:
+                    ans_raw = int(float(ans_str))
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"خطأ في الصف {idx+1}: قيمة الإجابة الصحيحة '{ans_str}' غير صالحة (يجب أن تكون 1-4 أو A-D)")
+            c_idx = ans_raw - 1 if 1 <= ans_raw <= 4 else 0
+            expl = str(row[6]).strip() if df.shape[1] > 6 and not pd.isna(row[6]) else ""
+            c.execute("""INSERT INTO questions (bank_id, question, opt1, opt2, opt3, opt4, correct_idx, explanation)
+                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                      (bank_id, q_text, opts[0], opts[1], opts[2], opts[3], c_idx, expl))
+            added += 1
 
-    conn.commit()
-    c.close()
-    conn.close()
-    return {"status": "ok", "added": added, "bank_id": bank_id}
+        conn.commit()
+        return {"status": "ok", "added": added, "bank_id": bank_id}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail=f"خطأ أثناء الحفظ: {str(e)}")
+    finally:
+        c.close()
+        conn.close()
 
 @app.get("/api/banks/{bank_id}/questions")
 @app.get("/banks/{bank_id}/questions")
