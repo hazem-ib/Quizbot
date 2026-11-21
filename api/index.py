@@ -13,12 +13,12 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Requ
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Poll, MenuButtonWebApp
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "9268644584:AAE8woNBoXzueYqpsT4x69efYcDgP1mPP9Y")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
-app = FastAPI(title="Telegram Quiz Mini App on Vercel")
+app = FastAPI(title="Telegram Quiz Mini App v3")
 
 def get_conn():
     if not DATABASE_URL:
@@ -39,6 +39,11 @@ def init_db():
                     opt1 TEXT, opt2 TEXT, opt3 TEXT, opt4 TEXT,
                     correct_idx INTEGER,
                     explanation TEXT DEFAULT '')""")
+    c.execute("""CREATE TABLE IF NOT EXISTS communities (
+                    id SERIAL PRIMARY KEY,
+                    title TEXT,
+                    chat_id TEXT,
+                    topic_id INTEGER DEFAULT NULL)""")
     conn.commit()
     c.close()
     conn.close()
@@ -109,7 +114,7 @@ async def serve_home():
     if os.path.exists(html_path):
         with open(html_path, "r", encoding="utf-8") as f:
             return f.read()
-    return "<h1>App is running! Go to /api/setup_webhook</h1>"
+    return "<h1>App Ready! Open /api/setup_webhook</h1>"
 
 class QuestionUpdate(BaseModel):
     question: str
@@ -129,12 +134,17 @@ class MoveQuestionReq(BaseModel):
 class BankRenameReq(BaseModel):
     name: str
 
+class CommunityCreateReq(BaseModel):
+    title: str
+    chat_id: str
+    topic_id: Optional[int] = None
+
 class PublishReq(BaseModel):
     bank_id: int
     target_type: str
     chat_id: Optional[str] = None
     topic_id: Optional[int] = None
-    delay_sec: float = 1.2
+    delay_sec: float = 0.0
     shuffle_questions: bool = False
     shuffle_options: bool = False
     open_period: Optional[int] = None
@@ -157,18 +167,43 @@ def build_bot_app(webapp_url: str = ""):
             return
 
         url = webapp_url or f"https://{os.environ.get('VERCEL_URL', '')}"
-        keyboard = [[InlineKeyboardButton("🚀 فتح تطبيق إدارة الاختبارات (App)", web_app=WebAppInfo(url=url))]]
+        keyboard = [[InlineKeyboardButton("🚀 فتح تطبيق إدارة الاختبارات (v3)", web_app=WebAppInfo(url=url))]]
         await update.message.reply_text(
             f"👋 أهلاً بك يا **{user.first_name}**!\n\n"
-            "اضغط على الزر بالأسفل لفتح **التطبيق الكامل (Mini App)** لإدارة ملفات CSV، تعديل الأسئلة، ونشرها في الجروبات:",
+            "• اضغط على الزر بالأسفل لفتح **التطبيق الكامل** لإدارة الأسئلة، المجتمعات، والتوقيت.\n"
+            "• أرسل `/id` داخل أي جروب أو قناة فرعية (Topic) أو حوّل رسالة من القناة لهنا لاستخراج الـ **Chat ID** تلقائياً.",
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
+    async def get_chat_id_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat = update.effective_chat
+        msg = update.effective_message
+        topic_id = getattr(msg, "message_thread_id", None)
+        text = f"📌 **بيانات المحادثة / القناة:**\n• **الاسم:** `{chat.title or chat.first_name}`\n• **Chat ID:** `{chat.id}`"
+        if topic_id:
+            text += f"\n• **Topic ID:** `{topic_id}`"
+        await msg.reply_text(text, parse_mode="Markdown")
+
+    async def handle_forwarded(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        msg = update.effective_message
+        if msg.forward_origin:
+            origin = msg.forward_origin
+            if hasattr(origin, "chat") and origin.chat:
+                await msg.reply_text(
+                    f"✅ **تم استخراج بيانات القناة/الجروب:**\n"
+                    f"• **الاسم:** `{origin.chat.title}`\n"
+                    f"• **Chat ID:** `{origin.chat.id}`",
+                    parse_mode="Markdown"
+                )
+
     application.add_handler(CommandHandler("start", start_cmd))
+    application.add_handler(CommandHandler("id", get_chat_id_cmd))
+    application.add_handler(MessageHandler(filters.FORWARDED, handle_forwarded))
     return application
 
 @app.get("/api/setup_webhook")
+@app.get("/setup_webhook")
 async def setup_webhook(request: Request):
     init_db()
     host = request.headers.get("host")
@@ -182,12 +217,13 @@ async def setup_webhook(request: Request):
             menu_button=MenuButtonWebApp(text="📱 فتح التطبيق", web_app=WebAppInfo(url=base_url))
         )
     return {
-        "status": "Webhook & Menu Button configured successfully!",
+        "status": "Webhook & Menu Button configured successfully! (v3)",
         "app_url": base_url,
         "webhook_url": webhook_url
     }
 
 @app.post("/api/webhook")
+@app.post("/webhook")
 async def telegram_webhook(request: Request):
     host = request.headers.get("host")
     base_url = f"https://{host}"
@@ -199,6 +235,7 @@ async def telegram_webhook(request: Request):
     return {"ok": True}
 
 @app.get("/api/me")
+@app.get("/me")
 async def get_me(x_telegram_init_data: str = Header(default="")):
     user = verify_telegram_init_data(x_telegram_init_data)
     uid = user.get("id")
@@ -206,6 +243,7 @@ async def get_me(x_telegram_init_data: str = Header(default="")):
     return {"user": user, "is_owner": uid == owner, "owner_id": owner}
 
 @app.get("/api/banks")
+@app.get("/banks")
 async def get_banks(x_telegram_init_data: str = Header(default="")):
     verify_telegram_init_data(x_telegram_init_data)
     conn = get_conn()
@@ -217,6 +255,7 @@ async def get_banks(x_telegram_init_data: str = Header(default="")):
     return [{"id": r[0], "name": r[1], "count": r[2]} for r in rows]
 
 @app.post("/api/banks")
+@app.post("/banks")
 async def create_bank(req: BankRenameReq, x_telegram_init_data: str = Header(default="")):
     verify_telegram_init_data(x_telegram_init_data)
     conn = get_conn()
@@ -234,6 +273,7 @@ async def create_bank(req: BankRenameReq, x_telegram_init_data: str = Header(def
         conn.close()
 
 @app.put("/api/banks/{bank_id}")
+@app.put("/banks/{bank_id}")
 async def rename_bank(bank_id: int, req: BankRenameReq, x_telegram_init_data: str = Header(default="")):
     verify_telegram_init_data(x_telegram_init_data)
     conn = get_conn()
@@ -245,6 +285,7 @@ async def rename_bank(bank_id: int, req: BankRenameReq, x_telegram_init_data: st
     return {"status": "ok"}
 
 @app.delete("/api/banks/{bank_id}")
+@app.delete("/banks/{bank_id}")
 async def delete_bank(bank_id: int, x_telegram_init_data: str = Header(default="")):
     verify_telegram_init_data(x_telegram_init_data)
     conn = get_conn()
@@ -256,6 +297,7 @@ async def delete_bank(bank_id: int, x_telegram_init_data: str = Header(default="
     return {"status": "ok"}
 
 @app.post("/api/upload_csv")
+@app.post("/upload_csv")
 async def upload_csv(
     bank_name: str = Form(...),
     file: UploadFile = File(...),
@@ -303,6 +345,7 @@ async def upload_csv(
     return {"status": "ok", "added": added, "bank_id": bank_id}
 
 @app.get("/api/banks/{bank_id}/questions")
+@app.get("/banks/{bank_id}/questions")
 async def get_questions(bank_id: int, x_telegram_init_data: str = Header(default="")):
     verify_telegram_init_data(x_telegram_init_data)
     conn = get_conn()
@@ -317,6 +360,7 @@ async def get_questions(bank_id: int, x_telegram_init_data: str = Header(default
     ]
 
 @app.post("/api/questions")
+@app.post("/questions")
 async def add_question(req: QuestionCreate, x_telegram_init_data: str = Header(default="")):
     verify_telegram_init_data(x_telegram_init_data)
     conn = get_conn()
@@ -330,6 +374,7 @@ async def add_question(req: QuestionCreate, x_telegram_init_data: str = Header(d
     return {"status": "ok"}
 
 @app.put("/api/questions/{q_id}")
+@app.put("/questions/{q_id}")
 async def update_question(q_id: int, req: QuestionUpdate, x_telegram_init_data: str = Header(default="")):
     verify_telegram_init_data(x_telegram_init_data)
     conn = get_conn()
@@ -342,6 +387,7 @@ async def update_question(q_id: int, req: QuestionUpdate, x_telegram_init_data: 
     return {"status": "ok"}
 
 @app.post("/api/questions/{q_id}/move")
+@app.post("/questions/{q_id}/move")
 async def move_question(q_id: int, req: MoveQuestionReq, x_telegram_init_data: str = Header(default="")):
     verify_telegram_init_data(x_telegram_init_data)
     conn = get_conn()
@@ -353,6 +399,7 @@ async def move_question(q_id: int, req: MoveQuestionReq, x_telegram_init_data: s
     return {"status": "ok"}
 
 @app.delete("/api/questions/{q_id}")
+@app.delete("/questions/{q_id}")
 async def delete_question(q_id: int, x_telegram_init_data: str = Header(default="")):
     verify_telegram_init_data(x_telegram_init_data)
     conn = get_conn()
@@ -363,12 +410,65 @@ async def delete_question(q_id: int, x_telegram_init_data: str = Header(default=
     conn.close()
     return {"status": "ok"}
 
+@app.get("/api/communities")
+@app.get("/communities")
+async def get_communities(x_telegram_init_data: str = Header(default="")):
+    verify_telegram_init_data(x_telegram_init_data)
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT id, title, chat_id, topic_id FROM communities ORDER BY id DESC")
+    rows = c.fetchall()
+    c.close()
+    conn.close()
+    return [{"id": r[0], "title": r[1], "chat_id": r[2], "topic_id": r[3]} for r in rows]
+
+@app.post("/api/communities")
+@app.post("/communities")
+async def add_community(req: CommunityCreateReq, x_telegram_init_data: str = Header(default="")):
+    verify_telegram_init_data(x_telegram_init_data)
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("INSERT INTO communities (title, chat_id, topic_id) VALUES (%s, %s, %s)",
+              (req.title.strip(), req.chat_id.strip(), req.topic_id))
+    conn.commit()
+    c.close()
+    conn.close()
+    return {"status": "ok"}
+
+@app.delete("/api/communities/{comm_id}")
+@app.delete("/communities/{comm_id}")
+async def delete_community(comm_id: int, x_telegram_init_data: str = Header(default="")):
+    verify_telegram_init_data(x_telegram_init_data)
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("DELETE FROM communities WHERE id = %s", (comm_id,))
+    conn.commit()
+    c.close()
+    conn.close()
+    return {"status": "ok"}
+
+@app.post("/api/test_community")
+@app.post("/test_community")
+async def test_community(req: CommunityCreateReq, x_telegram_init_data: str = Header(default="")):
+    verify_telegram_init_data(x_telegram_init_data)
+    bot_app = build_bot_app()
+    async with bot_app:
+        try:
+            kwargs = {"chat_id": req.chat_id.strip(), "text": "✅ تم التحقق من الاتصال! البوت جاهز لإرسال الاختبارات هنا."}
+            if req.topic_id:
+                kwargs["message_thread_id"] = req.topic_id
+            await bot_app.bot.send_message(**kwargs)
+            return {"status": "ok"}
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"فشل الاتصال: تأكد أن البوت مشرف (Admin) ولديه صلاحية إرسال الرسائل. ({e})")
+
 @app.post("/api/publish")
+@app.post("/publish")
 async def publish_quiz(req: PublishReq, x_telegram_init_data: str = Header(default="")):
     user = verify_telegram_init_data(x_telegram_init_data)
     target_chat = user.get("id") if req.target_type == "private" else req.chat_id
     if not target_chat:
-        raise HTTPException(status_code=400, detail="يرجى تحديد معرّف الجروب أو القناة")
+        raise HTTPException(status_code=400, detail="يرجى تحديد الوجهة أو اختيار مجتمع/قناة")
 
     conn = get_conn()
     c = conn.cursor()
@@ -385,7 +485,7 @@ async def publish_quiz(req: PublishReq, x_telegram_init_data: str = Header(defau
 
     bot_app = build_bot_app()
     async with bot_app:
-        for q_text, o1, o2, o3, o4, c_idx, expl in questions:
+        for idx, (q_text, o1, o2, o3, o4, c_idx, expl) in enumerate(questions):
             opts = [o1[:98], o2[:98], o3[:98], o4[:98]]
             if req.shuffle_options:
                 indexed = list(enumerate(opts))
@@ -409,11 +509,14 @@ async def publish_quiz(req: PublishReq, x_telegram_init_data: str = Header(defau
                 kwargs["open_period"] = req.open_period
 
             await bot_app.bot.send_poll(**kwargs)
-            await asyncio.sleep(max(1.0, req.delay_sec))
+            wait_time = 0.35 if req.delay_sec <= 0 else req.delay_sec
+            if idx < len(questions) - 1:
+                await asyncio.sleep(wait_time)
 
     return {"status": "completed", "count": len(questions)}
 
 @app.get("/api/admins")
+@app.get("/admins")
 async def list_admins(x_telegram_init_data: str = Header(default="")):
     user = verify_telegram_init_data(x_telegram_init_data)
     owner = get_owner_id()
@@ -428,6 +531,7 @@ async def list_admins(x_telegram_init_data: str = Header(default="")):
     return [{"user_id": r[0], "name": r[1], "is_owner": r[0] == owner} for r in rows]
 
 @app.post("/api/admins")
+@app.post("/admins")
 async def add_admin(req: AdminAddReq, x_telegram_init_data: str = Header(default="")):
     user = verify_telegram_init_data(x_telegram_init_data)
     if user.get("id") != get_owner_id():
@@ -441,6 +545,7 @@ async def add_admin(req: AdminAddReq, x_telegram_init_data: str = Header(default
     return {"status": "ok"}
 
 @app.delete("/api/admins/{admin_id}")
+@app.delete("/admins/{admin_id}")
 async def remove_admin(admin_id: int, x_telegram_init_data: str = Header(default="")):
     user = verify_telegram_init_data(x_telegram_init_data)
     owner = get_owner_id()
