@@ -873,7 +873,6 @@ async def export_questions_csv(
     if not rows:
         raise HTTPException(status_code=400, detail="لا توجد أسئلة محددة للتصدير.")
 
-    letters = "ABCDEFGHIJ"
     buf = io.StringIO()
     writer = csv.writer(buf)
     for r in rows:
@@ -882,8 +881,8 @@ async def export_questions_csv(
         padded_opts = list(opts)
         while len(padded_opts) < 4:
             padded_opts.append("-")
-        ans_letter = letters[c_idx] if isinstance(c_idx, int) and 0 <= c_idx < len(letters) else "A"
-        writer.writerow([q_text, *padded_opts, ans_letter, expl or ""])
+        ans_text = opts[c_idx] if isinstance(c_idx, int) and 0 <= c_idx < len(opts) else (opts[0] if opts else "")
+        writer.writerow([q_text, *padded_opts, ans_text, expl or ""])
 
     csv_bytes = buf.getvalue().encode("utf-8-sig")
     safe_slug = re.sub(r"[^\w\u0600-\u06FF-]+", "_", bank["name"]).strip("_") or "bank_questions"
