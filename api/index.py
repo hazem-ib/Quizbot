@@ -873,16 +873,25 @@ async def export_questions_csv(
     if not rows:
         raise HTTPException(status_code=400, detail="لا توجد أسئلة محددة للتصدير.")
 
-    buf = io.StringIO()
-    writer = csv.writer(buf)
+    unpacked_rows = []
+    max_opts_count = 4
     for r in rows:
         _, q_text, o1, o2, o3, o4, opts_json, c_idx, expl = r
         opts = unpack_row_options((o1, o2, o3, o4, opts_json))
+        max_opts_count = max(max_opts_count, len(opts))
+        ans_text = opts[c_idx] if isinstance(c_idx, int) and 0 <= c_idx < len(opts) else ""
+        unpacked_rows.append((q_text or "", opts, ans_text, expl or ""))
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    header = ["Question"] + [f"Option {i + 1}" for i in range(max_opts_count)] + ["Correct Answer", "Explanation"]
+    writer.writerow(header)
+
+    for q_text, opts, ans_text, expl in unpacked_rows:
         padded_opts = list(opts)
-        while len(padded_opts) < 4:
+        while len(padded_opts) < max_opts_count:
             padded_opts.append("-")
-        ans_text = opts[c_idx] if isinstance(c_idx, int) and 0 <= c_idx < len(opts) else (opts[0] if opts else "")
-        writer.writerow([q_text, *padded_opts, ans_text, expl or ""])
+        writer.writerow([q_text, *padded_opts[:max_opts_count], ans_text, expl])
 
     csv_bytes = buf.getvalue().encode("utf-8-sig")
     safe_slug = re.sub(r"[^\w\u0600-\u06FF-]+", "_", bank["name"]).strip("_") or "bank_questions"
