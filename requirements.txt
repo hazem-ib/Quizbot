@@ -6,4 +6,3 @@ pandas
 psycopg2-binary
 python-telegram-bot
 pymupdf
-weasyprint
