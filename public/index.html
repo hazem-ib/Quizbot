@@ -22,18 +22,18 @@
   </script>
   <style>
     :root {
-      --bg: #08090d;
-      --surface: rgba(24, 27, 36, 0.78);
-      --surface-elevated: rgba(34, 38, 50, 0.72);
-      --hairline: rgba(255, 255, 255, 0.08);
-      --specular-top: rgba(255, 255, 255, 0.34);
-      --text: #f5f7fa;
-      --hint: #8e96a8;
-      --accent: #3b82f6;
-      --success: #10b981;
-      --danger: #ef4444;
-      --warn: #f59e0b;
-      --radius: 20px;
+      --bg: #07080d;
+      --surface: rgba(255, 255, 255, 0.045);
+      --hairline: rgba(255, 255, 255, 0.09);
+      --specular: rgba(255, 255, 255, 0.28);
+      --text: #f6f8fb;
+      --hint: #96a0b5;
+      --accent: #60a5fa;
+      --success: #34d399;
+      --danger: #f87171;
+      --warn: #fbbf24;
+      --radius-card: 20px;
+      --radius-btn: 14px;
     }
 
     * {
@@ -44,52 +44,53 @@
 
     body {
       margin: 0;
-      padding: 14px 14px 104px;
+      padding: 14px 14px 108px;
       background:
-        radial-gradient(600px circle at 82% -8%, rgba(56, 189, 248, 0.13), transparent 60%),
-        radial-gradient(520px circle at 12% 18%, rgba(99, 102, 241, 0.11), transparent 62%),
-        radial-gradient(640px circle at 50% 95%, rgba(16, 185, 129, 0.08), transparent 65%),
+        radial-gradient(620px circle at 84% -6%, rgba(96, 165, 250, 0.16), transparent 62%),
+        radial-gradient(540px circle at 12% 24%, rgba(167, 139, 250, 0.12), transparent 64%),
+        radial-gradient(660px circle at 50% 98%, rgba(52, 211, 153, 0.09), transparent 65%),
         var(--bg);
       color: var(--text);
       -webkit-font-smoothing: antialiased;
       min-height: 100vh;
     }
 
-    .ico { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.85; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+    .ico { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
     .ico-sm { width: 15px; height: 15px; }
     .ico-lg { width: 34px; height: 34px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
     /* Auth Screen */
     #authScreen {
-      position: fixed; inset: 0; background: #07080b; z-index: 9999;
+      position: fixed; inset: 0; background: #07080c; z-index: 9999;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       text-align: center; padding: 24px;
     }
     .auth-ring {
       width: 68px; height: 68px; border-radius: 22px;
       background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.11);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
       display: flex; align-items: center; justify-content: center; margin-bottom: 14px; color: #93c5fd;
     }
     #authScreen p { color: #94a3b8; font-size: 0.92rem; max-width: 340px; line-height: 1.65; }
     #appContainer { display: none; width: 100%; max-width: 680px; margin: 0 auto; }
 
-    /* Clean Apple-style Header */
+    /* Liquid Glass Surfaces */
     .profile-header {
       display: flex; justify-content: space-between; align-items: center; gap: 10px;
-      background: var(--surface);
-      backdrop-filter: blur(20px) saturate(140%);
-      -webkit-backdrop-filter: blur(20px) saturate(140%);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0.025) 100%);
+      backdrop-filter: blur(22px) saturate(155%);
+      -webkit-backdrop-filter: blur(22px) saturate(155%);
       border: 1px solid var(--hairline);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 8px 24px rgba(0, 0, 0, 0.28);
+      box-shadow: inset 0 1px 0 var(--specular), 0 12px 30px rgba(0, 0, 0, 0.35);
       border-radius: 22px; padding: 12px 14px; margin-bottom: 14px;
     }
     .user-identity { display: flex; align-items: center; gap: 11px; min-width: 0; }
     .avatar-box {
       width: 44px; height: 44px; border-radius: 14px; overflow: hidden; flex-shrink: 0;
       background: rgba(255, 255, 255, 0.07);
-      border: 1px solid rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
       display: flex; align-items: center; justify-content: center; color: #e2e8f0; font-weight: 700;
     }
     .avatar-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -100,29 +101,31 @@
     .header-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
     .badge {
       background: rgba(255, 255, 255, 0.06); color: #cbd5e1;
-      border: 1px solid rgba(255, 255, 255, 0.09);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
       padding: 3px 10px; border-radius: 999px; font-size: 0.71rem; font-weight: 600;
     }
     .badge-tag {
-      background: rgba(16, 185, 129, 0.12); color: #6ee7b7;
-      border: 1px solid rgba(16, 185, 129, 0.22);
+      background: rgba(52, 211, 153, 0.1); color: #6ee7b7;
+      border: 1px solid rgba(52, 211, 153, 0.2);
       padding: 3px 10px; border-radius: 999px; font-size: 0.71rem; font-weight: 600;
     }
     .badge-owner {
-      background: rgba(245, 158, 11, 0.12); color: #fcd34d;
-      border: 1px solid rgba(245, 158, 11, 0.24);
+      background: rgba(251, 191, 36, 0.1); color: #fde68a;
+      border: 1px solid rgba(251, 191, 36, 0.22);
     }
 
-    /* Clean Content Cards (No heavy neon borders) */
     .card {
-      background: var(--surface);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.022) 100%);
+      backdrop-filter: blur(18px) saturate(145%);
+      -webkit-backdrop-filter: blur(18px) saturate(145%);
       border: 1px solid var(--hairline);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.11), 0 6px 20px rgba(0, 0, 0, 0.22);
-      border-radius: var(--radius); padding: 15px; margin-bottom: 12px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 8px 24px rgba(0, 0, 0, 0.28);
+      border-radius: var(--radius-card); padding: 15px; margin-bottom: 12px;
     }
     .card h3 { margin: 0 0 12px; font-size: 0.98rem; font-weight: 700; display: flex; align-items: center; gap: 7px; }
 
-    /* True Liquid Glass Interactive Controls */
+    /* Liquid Glass Specular & Refraction Buttons */
     .liquid-pill {
       position: relative;
       overflow: hidden;
@@ -133,20 +136,35 @@
       --sx: 1;
       --sy: 1;
       transform: translate3d(var(--tx), var(--ty), 0) scale(var(--sx), var(--sy));
-      transition: transform 460ms cubic-bezier(0.22, 1.4, 0.36, 1), background 180ms ease, box-shadow 220ms ease;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 100%);
-      backdrop-filter: blur(14px) saturate(165%);
-      -webkit-backdrop-filter: blur(14px) saturate(165%);
-      border: 1px solid rgba(255, 255, 255, 0.14);
+      transition: transform 420ms cubic-bezier(0.22, 1.35, 0.36, 1), background 180ms ease, border-color 180ms ease;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.03) 100%);
+      backdrop-filter: blur(16px) saturate(160%);
+      -webkit-backdrop-filter: blur(16px) saturate(160%);
+      border: 1px solid rgba(255, 255, 255, 0.11);
       box-shadow:
-        inset 0 1px 0.5px var(--specular-top),
-        inset 0 -1px 1px rgba(0, 0, 0, 0.35),
-        0 6px 16px rgba(0, 0, 0, 0.26);
+        inset 0 1px 0 rgba(255, 255, 255, 0.26),
+        inset 0 -1px 0 rgba(255, 255, 255, 0.05),
+        0 6px 18px rgba(0, 0, 0, 0.25);
     }
 
-    .liquid-pill.is-refracting {
-      backdrop-filter: url(#apple-liquid-refract) blur(6px) saturate(175%);
-      -webkit-backdrop-filter: blur(14px) saturate(175%);
+    .liquid-pill::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border-radius: inherit;
+      padding: 1px;
+      background: radial-gradient(
+        circle 90px at var(--mx) var(--my),
+        rgba(255, 255, 255, 0.55),
+        rgba(255, 255, 255, 0.08) 65%,
+        transparent 100%
+      );
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      opacity: 0;
+      transition: opacity 220ms ease;
     }
 
     .liquid-pill::after {
@@ -156,32 +174,30 @@
       pointer-events: none;
       border-radius: inherit;
       background: radial-gradient(
-        circle 64px at var(--mx) var(--my),
-        rgba(255, 255, 255, 0.32),
-        rgba(255, 255, 255, 0.06) 48%,
-        transparent 75%
+        circle 74px at var(--mx) var(--my),
+        rgba(255, 255, 255, 0.24),
+        rgba(255, 255, 255, 0.04) 55%,
+        transparent 80%
       );
       opacity: 0;
-      transition: opacity 220ms ease;
+      transition: opacity 200ms ease;
     }
 
-    .liquid-pill.is-grabbed {
-      transition: transform 50ms linear, box-shadow 120ms ease;
-      box-shadow:
-        inset 0 1.5px 1px rgba(255, 255, 255, 0.55),
-        inset 0 -2px 4px rgba(0, 0, 0, 0.4),
-        0 12px 26px rgba(0, 0, 0, 0.38);
-    }
-
+    .liquid-pill:hover::before,
+    .liquid-pill.is-grabbed::before,
     .liquid-pill.is-grabbed::after {
       opacity: 1;
     }
 
+    .liquid-pill.is-grabbed {
+      transition: transform 50ms linear;
+    }
+
     .btn {
-      color: #ffffff;
-      border-radius: 999px;
-      padding: 11px 16px;
-      font-size: 0.85rem;
+      color: var(--text);
+      border-radius: var(--radius-btn);
+      padding: 10px 14px;
+      font-size: 0.84rem;
       font-weight: 600;
       cursor: pointer;
       width: 100%;
@@ -190,29 +206,31 @@
       justify-content: center;
       gap: 6px;
     }
-    .btn:disabled { opacity: 0.38; cursor: not-allowed; }
-    .btn:active:not(:disabled) { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.36; cursor: not-allowed; }
+    .btn:active:not(:disabled) { transform: scale(0.975); }
 
     .btn-primary-glass {
-      background: linear-gradient(180deg, rgba(59, 130, 246, 0.52) 0%, rgba(37, 99, 235, 0.34) 100%);
-      border-color: rgba(147, 197, 253, 0.28);
+      background: linear-gradient(180deg, rgba(96, 165, 250, 0.22) 0%, rgba(59, 130, 246, 0.08) 100%);
+      border-color: rgba(147, 197, 253, 0.24);
+      color: #dbeafe;
     }
     .btn-success {
-      background: linear-gradient(180deg, rgba(16, 185, 129, 0.48) 0%, rgba(5, 150, 105, 0.32) 100%);
-      border-color: rgba(110, 231, 183, 0.26);
+      background: linear-gradient(180deg, rgba(52, 211, 153, 0.2) 0%, rgba(16, 185, 129, 0.08) 100%);
+      border-color: rgba(110, 231, 183, 0.22);
+      color: #d1fae5;
     }
     .btn-outline {
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.03) 100%);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.025) 100%);
       color: #e2e8f0;
     }
     .btn-danger {
-      background: linear-gradient(180deg, rgba(239, 68, 68, 0.26) 0%, rgba(185, 28, 28, 0.16) 100%);
-      border-color: rgba(252, 165, 165, 0.22);
-      color: #fca5a5;
+      background: linear-gradient(180deg, rgba(248, 113, 113, 0.17) 0%, rgba(239, 68, 68, 0.07) 100%);
+      border-color: rgba(252, 165, 165, 0.2);
+      color: #fecaca;
     }
-    .btn-sm { padding: 7px 12px; font-size: 0.77rem; width: auto; }
+    .btn-sm { padding: 7px 11px; font-size: 0.77rem; width: auto; border-radius: 12px; }
 
-    /* Clean Bank Card Actions Layout */
+    /* Bank Card Actions Layout */
     .bank-actions-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -229,27 +247,27 @@
     .bank-secondary-bar .btn-sm { flex: 1; }
 
     input, select, textarea {
-      width: 100%; padding: 10px 13px; border-radius: 14px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      background: rgba(12, 14, 20, 0.75);
+      width: 100%; padding: 10px 13px; border-radius: 13px;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      background: rgba(255, 255, 255, 0.035);
       color: var(--text); margin-bottom: 11px; font-size: 0.88rem; outline: none;
       transition: border-color 0.18s;
     }
     input[type="color"] {
       width: 44px; height: 32px; padding: 2px; margin-bottom: 0; border-radius: 8px; cursor: pointer;
     }
-    input:focus, select:focus, textarea:focus { border-color: rgba(147, 197, 253, 0.5); }
+    input:focus, select:focus, textarea:focus { border-color: rgba(147, 197, 253, 0.45); }
     label { display: block; font-size: 0.79rem; color: var(--hint); margin-bottom: 5px; font-weight: 500; }
 
     .dyn-opt-row { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
     .dyn-opt-row input { margin-bottom: 0; flex: 1; }
     .dyn-opt-badge {
       width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
-      background: rgba(59, 130, 246, 0.16); color: #93c5fd;
+      background: rgba(96, 165, 250, 0.14); color: #93c5fd;
       font-size: 0.76rem; font-weight: 700; display: flex; align-items: center; justify-content: center;
     }
 
-    /* Apple iOS Liquid Glass Floating Dock */
+    /* Liquid Glass Floating Dock with SVG Refraction Lens */
     .nav-dock-wrap {
       position: fixed;
       bottom: 12px;
@@ -263,36 +281,49 @@
       position: relative;
       display: flex;
       align-items: center;
-      padding: 5px;
-      border-radius: 999px;
-      background: linear-gradient(180deg, rgba(36, 40, 52, 0.76) 0%, rgba(20, 22, 30, 0.84) 100%);
-      backdrop-filter: blur(22px) saturate(180%);
-      -webkit-backdrop-filter: blur(22px) saturate(180%);
-      border: 1px solid rgba(255, 255, 255, 0.14);
+      padding: 4px;
+      border-radius: 25px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.085) 0%, rgba(255, 255, 255, 0.035) 100%);
+      backdrop-filter: blur(26px) saturate(170%);
+      -webkit-backdrop-filter: blur(26px) saturate(170%);
+      border: 1px solid rgba(255, 255, 255, 0.11);
       box-shadow:
-        inset 0 1px 0.5px rgba(255, 255, 255, 0.28),
-        0 14px 34px rgba(0, 0, 0, 0.45);
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
+        0 14px 36px rgba(0, 0, 0, 0.48);
       touch-action: pan-y;
     }
-    .nav-liquid-indicator {
+    .nav-liquid-lens {
       position: absolute;
-      top: 5px;
-      bottom: 5px;
-      left: 5px;
+      top: 4px;
+      bottom: 4px;
+      left: 4px;
       width: 64px;
-      border-radius: 999px;
+      border-radius: 21px;
       pointer-events: none;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.07) 100%);
-      border: 1px solid rgba(255, 255, 255, 0.24);
+      background: radial-gradient(
+        circle at 50% 25%,
+        rgba(255, 255, 255, 0.24) 0%,
+        rgba(255, 255, 255, 0.07) 60%,
+        rgba(255, 255, 255, 0.02) 100%
+      );
+      border: 1px solid rgba(255, 255, 255, 0.18);
       box-shadow:
-        inset 0 1px 0.5px rgba(255, 255, 255, 0.55),
-        0 4px 12px rgba(0, 0, 0, 0.25);
-      transition: transform 380ms cubic-bezier(0.22, 1.32, 0.36, 1), width 320ms cubic-bezier(0.22, 1.32, 0.36, 1);
+        inset 0 1px 1px rgba(255, 255, 255, 0.42),
+        inset 0 -1px 2px rgba(255, 255, 255, 0.08),
+        0 6px 18px rgba(0, 0, 0, 0.28);
+      filter: url(#lg-refraction-filter);
+      transition: transform 400ms cubic-bezier(0.22, 1.35, 0.36, 1), width 320ms cubic-bezier(0.22, 1.35, 0.36, 1);
       z-index: 1;
     }
-    .nav-liquid-indicator.is-dragging {
+    .nav-liquid-lens.is-dragging {
       transition: none;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(147, 197, 253, 0.12) 100%);
+      background: radial-gradient(
+        circle at 50% 20%,
+        rgba(255, 255, 255, 0.3) 0%,
+        rgba(255, 255, 255, 0.1) 65%,
+        rgba(255, 255, 255, 0.03) 100%
+      );
+      border-color: rgba(255, 255, 255, 0.28);
     }
     .nav-item {
       position: relative;
@@ -307,46 +338,47 @@
       font-size: 0.65rem;
       cursor: pointer;
       padding: 6px 2px;
-      border-radius: 999px;
+      border-radius: 21px;
       user-select: none;
       transition: color 0.18s ease, transform 0.2s ease;
     }
     .nav-item.active {
       color: #ffffff;
       font-weight: 700;
+      text-shadow: 0 1px 10px rgba(255, 255, 255, 0.22);
     }
 
     .tab { display: none; }
     .tab.active { display: block; }
     .row-actions { display: flex; gap: 6px; margin-top: 11px; flex-wrap: wrap; }
-    .opt-item { padding: 8px 11px; border-radius: 12px; background: rgba(12, 14, 20, 0.65); margin-bottom: 6px; font-size: 0.84rem; border: 1px solid transparent; }
-    .opt-item.correct { border-color: rgba(16, 185, 129, 0.38); background: rgba(16, 185, 129, 0.1); color: #6ee7b7; font-weight: 600; }
+    .opt-item { padding: 8px 11px; border-radius: 11px; background: rgba(255, 255, 255, 0.03); margin-bottom: 6px; font-size: 0.84rem; border: 1px solid transparent; }
+    .opt-item.correct { border-color: rgba(52, 211, 153, 0.3); background: rgba(52, 211, 153, 0.08); color: #6ee7b7; font-weight: 600; }
 
-    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.78); backdrop-filter: blur(8px); z-index: 200; align-items: center; justify-content: center; padding: 14px; }
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.72); backdrop-filter: blur(12px); z-index: 200; align-items: center; justify-content: center; padding: 14px; }
     .modal.open { display: flex; }
-    .modal-content { background: #12151e; border: 1px solid var(--hairline); border-radius: 22px; padding: 18px; width: 100%; max-width: 640px; max-height: 88vh; overflow-y: auto; }
+    .modal-content { background: rgba(18, 21, 30, 0.92); backdrop-filter: blur(24px); border: 1px solid var(--hairline); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18); border-radius: 20px; padding: 18px; width: 100%; max-width: 640px; max-height: 88vh; overflow-y: auto; }
 
     .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 11px; font-size: 0.85rem; }
     .switch-row input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); flex-shrink: 0; }
-    .hint-box { background: rgba(59,130,246,0.09); border-right: 3px solid rgba(96, 165, 250, 0.7); padding: 10px 12px; border-radius: 12px; font-size: 0.8rem; margin-bottom: 13px; color: #cbd5e1; line-height: 1.55; }
-    .warn-box { background: rgba(245,158,11,0.1); border-right: 3px solid var(--warn); padding: 11px 13px; border-radius: 12px; font-size: 0.8rem; margin-top: 12px; color: #fde68a; line-height: 1.6; }
+    .hint-box { background: rgba(96,165,250,0.08); border-right: 3px solid rgba(147, 197, 253, 0.6); padding: 10px 12px; border-radius: 12px; font-size: 0.8rem; margin-bottom: 13px; color: #cbd5e1; line-height: 1.55; }
+    .warn-box { background: rgba(251,191,36,0.09); border-right: 3px solid var(--warn); padding: 11px 13px; border-radius: 12px; font-size: 0.8rem; margin-top: 12px; color: #fde68a; line-height: 1.6; }
 
-    .select-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--hairline); border-radius: 14px; padding: 8px; background: rgba(10, 12, 18, 0.7); margin-bottom: 12px; }
+    .select-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--hairline); border-radius: 14px; padding: 8px; background: rgba(255, 255, 255, 0.025); margin-bottom: 12px; }
     .select-q-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.83rem; }
     .select-q-item:last-child { border-bottom: none; }
     .select-q-item input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0; }
     .select-q-item.excluded { opacity: 0.4; text-decoration: line-through; }
 
     .color-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-    .color-chip { display: flex; justify-content: space-between; align-items: center; background: rgba(10, 12, 18, 0.7); padding: 7px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.07); font-size: 0.8rem; }
+    .color-chip { display: flex; justify-content: space-between; align-items: center; background: rgba(255, 255, 255, 0.03); padding: 7px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.07); font-size: 0.8rem; }
 
-    .progress-box { background: rgba(10, 12, 18, 0.7); border-radius: 14px; padding: 13px; margin-top: 13px; border: 1px solid rgba(59,130,246,0.28); display: none; }
+    .progress-box { background: rgba(255, 255, 255, 0.03); border-radius: 14px; padding: 13px; margin-top: 13px; border: 1px solid rgba(96,165,250,0.22); display: none; }
     .progress-bar-bg { width: 100%; height: 8px; background: rgba(255,255,255,0.07); border-radius: 99px; overflow: hidden; margin: 9px 0 3px; }
-    .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); width: 0%; transition: width 0.3s; }
+    .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #60a5fa, #34d399); width: 0%; transition: width 0.3s; }
 
     .perm-pills { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
     .perm-pill { font-size: 0.7rem; padding: 3px 8px; border-radius: 8px; background: rgba(255,255,255,0.05); color: var(--hint); }
-    .perm-pill.active { background: rgba(16, 185, 129, 0.14); color: #6ee7b7; }
+    .perm-pill.active { background: rgba(52, 211, 153, 0.12); color: #6ee7b7; }
 
     .log-item { border-bottom: 1px solid var(--hairline); padding: 10px 0; }
     .log-item:last-child { border-bottom: none; }
@@ -356,19 +388,19 @@
 
     .studio-toolbar {
       display: flex; gap: 6px; flex-wrap: wrap;
-      background: rgba(10, 12, 18, 0.7); border: 1px solid var(--hairline);
+      background: rgba(255, 255, 255, 0.03); border: 1px solid var(--hairline);
       border-radius: 14px; padding: 8px; margin-bottom: 10px;
     }
     .fmt-btn {
-      padding: 6px 11px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12);
-      background: rgba(255, 255, 255, 0.06);
+      padding: 6px 11px; border-radius: 11px; border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255, 255, 255, 0.05);
       color: var(--text); font-size: 0.78rem; font-weight: 600;
       cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
     }
 
     .grid-row-card {
-      background: rgba(10, 12, 18, 0.65); border: 1px solid var(--hairline);
-      border-radius: 16px; padding: 10px; margin-bottom: 10px;
+      background: rgba(255, 255, 255, 0.03); border: 1px solid var(--hairline);
+      border-radius: 15px; padding: 10px; margin-bottom: 10px;
     }
     .grid-row-head {
       display: flex; justify-content: space-between; align-items: center;
@@ -381,24 +413,24 @@
     .grid-btn-slot input { margin-bottom: 0; padding: 8px 10px; font-size: 0.82rem; }
 
     .tg-preview-frame {
-      background: rgba(12, 15, 23, 0.9); border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 18px; padding: 14px; margin-bottom: 12px;
+      background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px; padding: 14px; margin-bottom: 12px;
     }
     .tg-preview-label {
       font-size: 0.72rem; color: #93c5fd; margin-bottom: 8px;
       display: flex; justify-content: space-between; align-items: center;
     }
     .tg-bubble {
-      background: #172133; border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 15px; padding: 12px 14px; font-size: 0.88rem;
+      background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 14px; padding: 12px 14px; font-size: 0.88rem;
       line-height: 1.6; color: #f8fafc; white-space: pre-wrap; word-break: break-word;
     }
     .tg-bubble blockquote {
       margin: 6px 0; padding: 4px 10px;
-      border-right: 3px solid #38bdf8; background: rgba(56, 189, 248, 0.08);
+      border-right: 3px solid #60a5fa; background: rgba(96, 165, 250, 0.08);
       border-radius: 0 8px 8px 0; color: #e2e8f0;
     }
-    .tg-bubble a { color: #60a5fa; text-decoration: underline; }
+    .tg-bubble a { color: #93c5fd; text-decoration: underline; }
     .tg-bubble code {
       background: rgba(255,255,255,0.08); padding: 1px 5px;
       border-radius: 6px; font-family: monospace; font-size: 0.82rem;
@@ -406,7 +438,7 @@
     .tg-kb-preview { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
     .tg-kb-row { display: flex; gap: 6px; }
     .tg-kb-pill {
-      flex: 1; background: rgba(30, 41, 59, 0.9);
+      flex: 1; background: rgba(255, 255, 255, 0.06);
       border: 1px solid rgba(255, 255, 255, 0.09);
       color: #e2e8f0; border-radius: 10px; padding: 8px 10px;
       font-size: 0.8rem; font-weight: 600;
@@ -417,12 +449,17 @@
 </head>
 <body>
 
-  <!-- SVG Optical Refraction Filter (Apple Liquid Glass Edge Lensing) -->
   <svg width="0" height="0" style="position:absolute; visibility:hidden;" aria-hidden="true">
     <defs>
-      <filter id="apple-liquid-refract" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">
-        <feImage id="liquidDispMapImg" result="dispMap" preserveAspectRatio="none" />
-        <feDisplacementMap in="SourceGraphic" in2="dispMap" scale="14" xChannelSelector="R" yChannelSelector="G" />
+      <filter id="lg-refraction-filter" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.018 0.035" numOctaves="2" seed="7" result="noise" />
+        <feGaussianBlur in="noise" stdDeviation="2.2" result="softMap" />
+        <feDisplacementMap in="SourceGraphic" in2="softMap" scale="9" xChannelSelector="R" yChannelSelector="G" result="refracted" />
+        <feComponentTransfer in="refracted" result="boosted">
+          <feFuncR type="linear" slope="1.05" intercept="0.01" />
+          <feFuncG type="linear" slope="1.05" intercept="0.01" />
+          <feFuncB type="linear" slope="1.08" intercept="0.02" />
+        </feComponentTransfer>
       </filter>
 
       <symbol id="i-folder" viewBox="0 0 24 24">
@@ -871,10 +908,10 @@
       </div>
     </div>
 
-    <!-- Apple Liquid Glass Floating Dock -->
+    <!-- Liquid Glass Floating Dock with SVG Refraction Lens -->
     <div class="nav-dock-wrap">
       <div class="nav-bar" id="navDock">
-        <div class="nav-liquid-indicator" id="navLiquidIndicator"></div>
+        <div class="nav-liquid-lens" id="navLiquidLens"></div>
         <div class="nav-item active" id="nav-banks" data-tab="banks" onclick="switchTab('banks')">
           <svg class="ico"><use href="#i-folder"/></svg><span>البنوك</span>
         </div>
@@ -1184,73 +1221,13 @@
 
     const PDF_PREFS_KEY = "quiz_native_pdf_prefs_v4";
 
-    /* Generate SVG Optical Edge Displacement Map (Apple Liquid Glass Rim Lensing) */
-    function initAppleLiquidRefractionFilter() {
-      try {
-        const w = 160;
-        const h = 64;
-        const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        const img = ctx.createImageData(w, h);
-        const data = img.data;
-        const rx = w / 2;
-        const ry = h / 2;
-        const r = Math.min(rx, ry);
-
-        for (let y = 0; y < h; y++) {
-          for (let x = 0; x < w; x++) {
-            const idx = (y * w + x) * 4;
-            const px = x + 0.5 - rx;
-            const py = y + 0.5 - ry;
-            const bx = rx - r;
-            const by = ry - r;
-            const qx = Math.abs(px) - bx;
-            const qy = Math.abs(py) - by;
-            const len = Math.hypot(Math.max(qx, 0), Math.max(qy, 0));
-            const sdf = len + Math.min(Math.max(qx, qy), 0) - r;
-
-            let nx = 0;
-            let ny = 0;
-            const rimWidth = 14;
-            if (sdf < 0 && sdf > -rimWidth) {
-              const t = 1 - Math.abs(sdf) / rimWidth;
-              const bend = t * t;
-              const d = Math.hypot(px, py) || 1;
-              nx = (px / d) * bend;
-              ny = (py / d) * bend;
-            }
-            data[idx] = Math.round(128 + nx * 120);
-            data[idx + 1] = Math.round(128 + ny * 120);
-            data[idx + 2] = 128;
-            data[idx + 3] = 255;
-          }
-        }
-        ctx.putImageData(img, 0, 0);
-        const feImg = document.getElementById("liquidDispMapImg");
-        if (feImg) {
-          feImg.setAttribute("href", canvas.toDataURL("image/png"));
-        }
-
-        const isChromium = Boolean(window.chrome);
-        if (isChromium) {
-          document.documentElement.dataset.liquidRefractSupported = "1";
-        }
-      } catch (_) {}
-    }
-
     function bindLiquidGrabPhysics(el) {
       if (!el || el.dataset.lgBound) return;
       el.dataset.lgBound = "1";
-      if (document.documentElement.dataset.liquidRefractSupported === "1") {
-        el.classList.add("is-refracting");
-      }
 
       let activePointerId = null;
       let startX = 0;
       let startY = 0;
-      let moved = false;
 
       const updateSpecular = (clientX, clientY) => {
         const rect = el.getBoundingClientRect();
@@ -1269,35 +1246,29 @@
         el.style.setProperty("--sy", "1");
       };
 
+      el.addEventListener("pointermove", (e) => {
+        if (activePointerId !== null && e.pointerId !== activePointerId) return;
+        updateSpecular(e.clientX, e.clientY);
+        if (e.pointerId === activePointerId) {
+          const dx = e.clientX - startX;
+          const dy = e.clientY - startY;
+          const clampedX = Math.max(-6, Math.min(6, dx * 0.16));
+          const clampedY = Math.max(-5, Math.min(5, dy * 0.16));
+          el.style.setProperty("--tx", `${clampedX.toFixed(1)}px`);
+          el.style.setProperty("--ty", `${clampedY.toFixed(1)}px`);
+        }
+      });
+
       el.addEventListener("pointerdown", (e) => {
         if (el.disabled) return;
         if (e.button !== 0 && e.pointerType === "mouse") return;
         activePointerId = e.pointerId;
         startX = e.clientX;
         startY = e.clientY;
-        moved = false;
         el.classList.add("is-grabbed");
         updateSpecular(e.clientX, e.clientY);
-        el.style.setProperty("--sx", "1.025");
-        el.style.setProperty("--sy", "0.96");
-      });
-
-      el.addEventListener("pointermove", (e) => {
-        if (e.pointerId !== activePointerId) return;
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        if (Math.hypot(dx, dy) > 8) moved = true;
-
-        const clampedX = Math.max(-10, Math.min(10, dx * 0.25));
-        const clampedY = Math.max(-7, Math.min(7, dy * 0.25));
-        const stretchX = 1 + Math.min(0.05, Math.abs(clampedX) * 0.004);
-        const squashY = 1 - Math.min(0.04, Math.abs(clampedX) * 0.003);
-
-        updateSpecular(e.clientX, e.clientY);
-        el.style.setProperty("--tx", `${clampedX.toFixed(1)}px`);
-        el.style.setProperty("--ty", `${clampedY.toFixed(1)}px`);
-        el.style.setProperty("--sx", stretchX.toFixed(3));
-        el.style.setProperty("--sy", squashY.toFixed(3));
+        el.style.setProperty("--sx", "1.015");
+        el.style.setProperty("--sy", "0.98");
       });
 
       const endGesture = (e) => {
@@ -1307,55 +1278,55 @@
 
       el.addEventListener("pointerup", endGesture);
       el.addEventListener("pointercancel", endGesture);
-      el.addEventListener("pointerleave", endGesture);
+      el.addEventListener("pointerleave", () => {
+        if (activePointerId === null) resetFluid();
+      });
     }
 
     function initLiquidGlassButtons(root = document) {
       root.querySelectorAll(".liquid-pill").forEach(bindLiquidGrabPhysics);
     }
 
-    /* Interactive Morphing Liquid Glass Pill on Bottom Dock */
-    function positionNavLiquidIndicator(targetItem = null, animate = true) {
+    function positionNavLiquidLens(targetItem = null, animate = true) {
       const dock = document.getElementById("navDock");
-      const pill = document.getElementById("navLiquidIndicator");
-      if (!dock || !pill) return;
+      const lens = document.getElementById("navLiquidLens");
+      if (!dock || !lens) return;
       const activeItem = targetItem || dock.querySelector(".nav-item.active");
       if (!activeItem || activeItem.offsetParent === null) return;
 
-      if (!animate) pill.style.transition = "none";
+      if (!animate) lens.style.transition = "none";
       const left = activeItem.offsetLeft;
       const width = activeItem.offsetWidth;
-      pill.style.width = `${width}px`;
-      pill.style.transform = `translate3d(${left - 5}px, 0, 0)`;
+      lens.style.width = `${width}px`;
+      lens.style.transform = `translate3d(${left - 4}px, 0, 0)`;
       if (!animate) {
-        void pill.offsetWidth;
-        pill.style.transition = "";
+        void lens.offsetWidth;
+        lens.style.transition = "";
       }
     }
 
     function initLiquidDockSwipe() {
       const dock = document.getElementById("navDock");
-      const pill = document.getElementById("navLiquidIndicator");
-      if (!dock || !pill || dock.dataset.swipeBound) return;
+      const lens = document.getElementById("navLiquidLens");
+      if (!dock || !lens || dock.dataset.swipeBound) return;
       dock.dataset.swipeBound = "1";
 
       let dragging = false;
-
       const visibleItems = () => Array.from(dock.querySelectorAll(".nav-item")).filter(el => el.offsetParent !== null);
 
-      const movePillToClientX = (clientX) => {
+      const moveLensToClientX = (clientX) => {
         const dockRect = dock.getBoundingClientRect();
         const items = visibleItems();
         if (!items.length) return null;
 
         const w = items[0].offsetWidth;
-        const minLeft = 5;
-        const maxLeft = dock.clientWidth - w - 5;
+        const minLeft = 4;
+        const maxLeft = dock.clientWidth - w - 4;
         const relX = clientX - dockRect.left - w / 2;
         const clampedLeft = Math.max(minLeft, Math.min(maxLeft, relX));
 
-        pill.style.width = `${w}px`;
-        pill.style.transform = `translate3d(${clampedLeft - 5}px, 0, 0) scaleX(1.08) scaleY(0.92)`;
+        lens.style.width = `${w}px`;
+        lens.style.transform = `translate3d(${clampedLeft - 4}px, 0, 0) scaleX(1.06) scaleY(0.94)`;
 
         let closest = items[0];
         let bestDist = Infinity;
@@ -1372,35 +1343,35 @@
 
       dock.addEventListener("pointerdown", (e) => {
         dragging = true;
-        pill.classList.add("is-dragging");
-        movePillToClientX(e.clientX);
+        lens.classList.add("is-dragging");
+        moveLensToClientX(e.clientX);
       });
 
       dock.addEventListener("pointermove", (e) => {
         if (!dragging) return;
-        movePillToClientX(e.clientX);
+        moveLensToClientX(e.clientX);
       });
 
       const releaseDock = (e) => {
         if (!dragging) return;
         dragging = false;
-        pill.classList.remove("is-dragging");
-        const chosen = movePillToClientX(e.clientX);
+        lens.classList.remove("is-dragging");
+        const chosen = moveLensToClientX(e.clientX);
         if (chosen && chosen.dataset.tab) {
           switchTab(chosen.dataset.tab);
         } else {
-          positionNavLiquidIndicator();
+          positionNavLiquidLens();
         }
       };
 
       dock.addEventListener("pointerup", releaseDock);
       dock.addEventListener("pointercancel", () => {
         dragging = false;
-        pill.classList.remove("is-dragging");
-        positionNavLiquidIndicator();
+        lens.classList.remove("is-dragging");
+        positionNavLiquidLens();
       });
 
-      window.addEventListener("resize", () => positionNavLiquidIndicator(null, false));
+      window.addEventListener("resize", () => positionNavLiquidLens(null, false));
     }
 
     function normalizeRowsMatrix(raw) {
@@ -1546,11 +1517,10 @@
       document.getElementById("btnClearLogs").style.display = currentActor.role === "owner" ? "inline-flex" : "none";
       syncTemplateActionButtons();
       initLiquidGlassButtons();
-      requestAnimationFrame(() => positionNavLiquidIndicator(null, false));
+      requestAnimationFrame(() => positionNavLiquidLens(null, false));
     }
 
     async function initApp() {
-      initAppleLiquidRefractionFilter();
       initLiquidGlassButtons();
       initLiquidDockSwipe();
 
@@ -1576,7 +1546,7 @@
         await Promise.all(tasks);
         syncBroadcastCommSelect();
         initLiquidGlassButtons();
-        requestAnimationFrame(() => positionNavLiquidIndicator(null, false));
+        requestAnimationFrame(() => positionNavLiquidLens(null, false));
       } catch (e) {
         blockAccess(e.message);
       }
@@ -1589,7 +1559,7 @@
       const nav = document.getElementById("nav-" + tabName);
       if (nav) {
         nav.classList.add("active");
-        positionNavLiquidIndicator(nav, true);
+        positionNavLiquidLens(nav, true);
       }
 
       if (tabName === "publish") {
@@ -2196,7 +2166,7 @@
         return;
       }
       box.innerHTML = pdfCustomHeadings.map((h, i) => `
-        <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(10,12,18,0.7); padding:6px 10px; border-radius:10px; margin-top:6px; font-size:0.8rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:6px 10px; border-radius:10px; margin-top:6px; font-size:0.8rem;">
           <span><b>${h.text}</b> <small style="color:var(--hint);">(${h.placement})</small></span>
           <button type="button" class="btn btn-sm btn-danger liquid-pill" style="padding:3px 9px;" onclick="removeCustomPdfHeading(${i})">حذف</button>
         </div>
@@ -2425,7 +2395,7 @@
         const hasFlag = (q.explanation || "").includes("مراجعة مطلوبة");
         const optsHtml = opts.map((o, i) => `<div class="opt-item ${i === q.correct_idx ? 'correct' : ''}">${i + 1}. ${o}</div>`).join("");
         list.innerHTML += `
-          <div class="card" id="q-card-${q.id}" style="${hasFlag ? 'border-color: rgba(245, 158, 11, 0.35);' : ''}">
+          <div class="card" id="q-card-${q.id}" style="${hasFlag ? 'border-color: rgba(251, 191, 36, 0.35);' : ''}">
             <div style="margin-bottom:8px; font-weight:600; line-height:1.45;">${idx + 1}. ${q.question}</div>
             ${optsHtml}
             ${q.explanation ? `<div style="font-size:0.8rem; color:${hasFlag ? '#fbbf24' : 'var(--hint)'}; margin-top:6px;">شرح / تنبيه: ${q.explanation}</div>` : ""}
