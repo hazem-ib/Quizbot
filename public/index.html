@@ -36,7 +36,7 @@
       background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.28);
       display: flex; align-items: center; justify-content: center; margin-bottom: 14px; color: #60a5fa;
     }
-    #authScreen p { color: #94a3b8; font-size: 0.92rem; max-width: 320px; line-height: 1.65; }
+    #authScreen p { color: #cbd5e1; font-size: 0.92rem; max-width: 340px; line-height: 1.65; }
     #appContainer { display: none; width: 100%; max-width: 720px; margin: 0 auto; }
 
     .profile-header {
@@ -695,7 +695,6 @@
       </div>
     </div>
 
-    <!-- استوديو تصدير PDF نصي أصلي سريع وخفيف -->
     <div id="pdfStudioModal" class="modal">
       <div class="modal-content" style="max-width:650px;">
         <h3><svg class="ico"><use href="#i-download"/></svg> استوديو PDF (ملف نصي أصلي — نسختان في الخاص)</h3>
@@ -1057,7 +1056,10 @@
     }
 
     function blockAccess(reason) {
-      document.getElementById("appContainer").remove();
+      const authScreen = document.getElementById("authScreen");
+      const appContainer = document.getElementById("appContainer");
+      if (appContainer) appContainer.style.display = "none";
+      if (authScreen) authScreen.style.display = "flex";
       document.getElementById("authRing").style.borderColor = "rgba(239, 68, 68, 0.35)";
       document.getElementById("authRing").style.background = "rgba(239, 68, 68, 0.12)";
       document.getElementById("authRing").style.color = "#f87171";
@@ -1073,9 +1075,9 @@
       }
       const res = await fetch(url, options);
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: "تعذر إتمام الطلب." }));
+        const err = await res.json().catch(() => ({ detail: `تعذر إتمام الطلب (HTTP ${res.status}).` }));
         if (!silent) alert(err.detail || "تعذر إتمام الطلب.");
-        throw new Error(err.detail || "Request failed");
+        throw new Error(err.detail || `HTTP ${res.status}`);
       }
       return res.json();
     }
@@ -1107,7 +1109,7 @@
 
     async function initApp() {
       if (!initData || initData.trim() === "") {
-        blockAccess("هذا التطبيق متاح فقط من داخل بوت تيليجرام.");
+        blockAccess("هذا التطبيق متاح فقط من داخل بوت تيليجرام. افتحه من زر البوت بعد ضبط /api/setup_webhook.");
         return;
       }
 
