@@ -5,6 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>منظومة إدارة الاختبارات والنشر</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script>
+    window.addEventListener("error", function (event) {
+      const msg = (event && event.message) || "خطأ غير متوقع في الواجهة";
+      const line = (event && event.lineno) || "";
+      const box = document.getElementById("authScreen") || document.body;
+      if (box) {
+        box.style.display = "flex";
+        box.innerHTML =
+          "<div style='max-width:480px;text-align:right;background:#111a2e;border:1px solid rgba(239,68,68,0.4);padding:18px;border-radius:14px;color:#fca5a5;font-family:monospace;white-space:pre-wrap;direction:ltr;'>" +
+          "Runtime Error: " + String(msg).replace(/</g, "&lt;") +
+          (line ? "\nLine: " + line : "") +
+          "</div>";
+      }
+    });
+  </script>
   <style>
     :root {
       --bg: var(--tg-theme-bg-color, #090e1a);
@@ -950,8 +965,8 @@
 
   <script>
     const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
-    if (tg) {
-      tg.expand();
+    if (tg && typeof tg.expand === "function") {
+      try { tg.expand(); } catch (_) {}
     }
     const initData = tg ? (tg.initData || "") : "";
     const tgUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : {};
@@ -961,7 +976,7 @@
     let commsCache = [];
     let adminsCache = [];
     let templatesCache = [];
-    let bcRows = [{ text: "", url: "" }];
+    let bcRows = [[{ text: "", url: "" }]];
     let currentBankId = null;
     let currentBankName = "";
     let questionsCache = [];
@@ -978,6 +993,22 @@
     let pdfCustomHeadings = [];
 
     const PDF_PREFS_KEY = "quiz_native_pdf_prefs_v4";
+
+    function normalizeRowsMatrix(raw) {
+      if (!Array.isArray(raw)) return [];
+      return raw.map(r => {
+        if (Array.isArray(r)) {
+          return r.filter(b => b && typeof b === "object").map(b => ({
+            text: String(b.text || ""),
+            url: String(b.url || "")
+          }));
+        }
+        if (r && typeof r === "object") {
+          return [{ text: String(r.text || ""), url: String(r.url || "") }];
+        }
+        return [];
+      });
+    }
 
     function getQuestionOptions(q) {
       if (Array.isArray(q.options) && q.options.length >= 2) {
@@ -1119,6 +1150,7 @@
         document.getElementById("appContainer").style.display = "block";
         applyActorUI();
 
+        bcRows = normalizeRowsMatrix(bcRows);
         renderBroadcastGridEditor();
         renderBroadcastPreview();
 
@@ -1150,6 +1182,7 @@
       } else if (tabName === "broadcast") {
         await Promise.all([loadCommunities(), loadTemplates()]);
         syncBroadcastCommSelect();
+        bcRows = normalizeRowsMatrix(bcRows);
         renderBroadcastGridEditor();
         renderBroadcastPreview();
       } else if (tabName === "banks") {
@@ -1205,6 +1238,7 @@
     }
 
     function addBroadcastRow() {
+      bcRows = normalizeRowsMatrix(bcRows);
       if (bcRows.length >= 12) return alert("الحد الأقصى هو 12 صف أزرار.");
       bcRows.push([{ text: "", url: "" }]);
       renderBroadcastGridEditor();
@@ -1212,6 +1246,7 @@
     }
 
     function addButtonToRow(rIdx) {
+      bcRows = normalizeRowsMatrix(bcRows);
       if (!bcRows[rIdx]) return;
       if (bcRows[rIdx].length >= 4) return alert("الحد الأقصى هو 4 أزرار في الصف الواحد.");
       bcRows[rIdx].push({ text: "", url: "" });
@@ -1220,6 +1255,7 @@
     }
 
     function removeButtonFromRow(rIdx, bIdx) {
+      bcRows = normalizeRowsMatrix(bcRows);
       if (!bcRows[rIdx]) return;
       bcRows[rIdx].splice(bIdx, 1);
       if (bcRows[rIdx].length === 0) {
@@ -1230,6 +1266,7 @@
     }
 
     function moveBroadcastRow(rIdx, delta) {
+      bcRows = normalizeRowsMatrix(bcRows);
       const target = rIdx + delta;
       if (target < 0 || target >= bcRows.length) return;
       const tmp = bcRows[rIdx];
@@ -1240,6 +1277,7 @@
     }
 
     function moveButtonInRow(rIdx, bIdx, delta) {
+      bcRows = normalizeRowsMatrix(bcRows);
       const row = bcRows[rIdx];
       if (!row) return;
       const target = bIdx + delta;
@@ -1252,6 +1290,7 @@
     }
 
     function onBroadcastBtnInput(rIdx, bIdx, field, val) {
+      bcRows = normalizeRowsMatrix(bcRows);
       if (!bcRows[rIdx] || !bcRows[rIdx][bIdx]) return;
       bcRows[rIdx][bIdx][field] = val;
       renderBroadcastPreview();
@@ -1260,6 +1299,7 @@
     function renderBroadcastGridEditor() {
       const box = document.getElementById("bcButtonsGridEditor");
       if (!box) return;
+      bcRows = normalizeRowsMatrix(bcRows);
       if (!bcRows.length) {
         box.innerHTML = `<div style="font-size:0.8rem; color:var(--hint); padding:6px 0;">لا توجد أزرار روابط حالياً. أضف صفاً إذا رغبت.</div>`;
         return;
@@ -1297,6 +1337,7 @@
       const counter = document.getElementById("bcCharCounter");
       if (!bodyEl || !bubble || !kbBox) return;
 
+      bcRows = normalizeRowsMatrix(bcRows);
       const raw = bodyEl.value || "";
       if (counter) {
         counter.innerText = `${raw.length} / 4000`;
@@ -1309,8 +1350,8 @@
         bubble.innerHTML = sanitizePreviewHtml(raw.replace(/\n/g, "<br>"));
       }
 
-      const rowsHtml = (bcRows || []).map(row => {
-        const activeBtns = (row || []).filter(b => (b.text || "").trim() || (b.url || "").trim());
+      const rowsHtml = bcRows.map(row => {
+        const activeBtns = row.filter(b => (b.text || "").trim() || (b.url || "").trim());
         if (!activeBtns.length) return "";
         const pills = activeBtns.map(b => {
           const t = escapeHtmlText((b.text || "").trim() || "زر بدون نص");
@@ -1364,10 +1405,8 @@
       document.getElementById("bcBodyInput").value = tpl.body_html || "";
       document.getElementById("bcDisablePreview").checked = Boolean(tpl.disable_preview);
 
-      const loadedBtns = Array.isArray(tpl.buttons) ? tpl.buttons : [];
-      bcRows = loadedBtns.length
-        ? loadedBtns.map(r => Array.isArray(r) ? r.map(b => ({ text: b.text || "", url: b.url || "" })) : [])
-        : [[{ text: "", url: "" }]];
+      const loadedBtns = normalizeRowsMatrix(tpl.buttons);
+      bcRows = loadedBtns.length ? loadedBtns : [[{ text: "", url: "" }]];
 
       renderBroadcastGridEditor();
       renderBroadcastPreview();
@@ -1388,10 +1427,11 @@
     }
 
     function collectCleanedButtons() {
+      bcRows = normalizeRowsMatrix(bcRows);
       const cleaned = [];
-      for (const row of (bcRows || [])) {
+      for (const row of bcRows) {
         const validInRow = [];
-        for (const btn of (row || [])) {
+        for (const btn of row) {
           const text = (btn.text || "").trim();
           const url = (btn.url || "").trim();
           if (!text && !url) continue;
