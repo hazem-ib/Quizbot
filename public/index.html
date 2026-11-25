@@ -22,18 +22,19 @@
   </script>
   <style>
     :root {
-      --bg: #07080d;
-      --surface: rgba(255, 255, 255, 0.045);
-      --hairline: rgba(255, 255, 255, 0.09);
-      --specular: rgba(255, 255, 255, 0.28);
-      --text: #f6f8fb;
-      --hint: #96a0b5;
-      --accent: #60a5fa;
-      --success: #34d399;
-      --danger: #f87171;
-      --warn: #fbbf24;
-      --radius-card: 20px;
-      --radius-btn: 14px;
+      --bg: #08090c;
+      --surface: rgba(18, 20, 26, 0.78);
+      --surface-elevated: rgba(24, 27, 35, 0.86);
+      --hairline: rgba(255, 255, 255, 0.08);
+      --specular: rgba(255, 255, 255, 0.16);
+      --text: #eef1f6;
+      --hint: #8f98ab;
+      --accent: #93c5fd;
+      --success: #6ee7b7;
+      --danger: #fca5a5;
+      --warn: #fcd34d;
+      --radius-card: 18px;
+      --radius-btn: 13px;
     }
 
     * {
@@ -44,11 +45,10 @@
 
     body {
       margin: 0;
-      padding: 14px 14px 108px;
+      padding: 14px 14px 106px;
       background:
-        radial-gradient(620px circle at 84% -6%, rgba(96, 165, 250, 0.16), transparent 62%),
-        radial-gradient(540px circle at 12% 24%, rgba(167, 139, 250, 0.12), transparent 64%),
-        radial-gradient(660px circle at 50% 98%, rgba(52, 211, 153, 0.09), transparent 65%),
+        radial-gradient(650px circle at 80% -8%, rgba(255, 255, 255, 0.045), transparent 60%),
+        radial-gradient(580px circle at 15% 25%, rgba(255, 255, 255, 0.03), transparent 65%),
         var(--bg);
       color: var(--text);
       -webkit-font-smoothing: antialiased;
@@ -61,36 +61,36 @@
 
     /* Auth Screen */
     #authScreen {
-      position: fixed; inset: 0; background: #07080c; z-index: 9999;
+      position: fixed; inset: 0; background: #08090c; z-index: 9999;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       text-align: center; padding: 24px;
     }
     .auth-ring {
-      width: 68px; height: 68px; border-radius: 22px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.11);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
-      display: flex; align-items: center; justify-content: center; margin-bottom: 14px; color: #93c5fd;
+      width: 68px; height: 68px; border-radius: 20px;
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      box-shadow: inset 0 1px 0 var(--specular);
+      display: flex; align-items: center; justify-content: center; margin-bottom: 14px; color: #cbd5e1;
     }
-    #authScreen p { color: #94a3b8; font-size: 0.92rem; max-width: 340px; line-height: 1.65; }
+    #authScreen p { color: var(--hint); font-size: 0.92rem; max-width: 340px; line-height: 1.65; }
     #appContainer { display: none; width: 100%; max-width: 680px; margin: 0 auto; }
 
-    /* Liquid Glass Surfaces */
+    /* Dark Liquid Glass Surfaces */
     .profile-header {
       display: flex; justify-content: space-between; align-items: center; gap: 10px;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0.025) 100%);
-      backdrop-filter: blur(22px) saturate(155%);
-      -webkit-backdrop-filter: blur(22px) saturate(155%);
+      background: linear-gradient(180deg, rgba(24, 27, 35, 0.84) 0%, rgba(14, 16, 21, 0.88) 100%);
+      backdrop-filter: blur(22px) saturate(130%);
+      -webkit-backdrop-filter: blur(22px) saturate(130%);
       border: 1px solid var(--hairline);
-      box-shadow: inset 0 1px 0 var(--specular), 0 12px 30px rgba(0, 0, 0, 0.35);
-      border-radius: 22px; padding: 12px 14px; margin-bottom: 14px;
+      box-shadow: inset 0 1px 0 var(--specular), 0 10px 26px rgba(0, 0, 0, 0.42);
+      border-radius: 20px; padding: 12px 14px; margin-bottom: 14px;
     }
     .user-identity { display: flex; align-items: center; gap: 11px; min-width: 0; }
     .avatar-box {
       width: 44px; height: 44px; border-radius: 14px; overflow: hidden; flex-shrink: 0;
-      background: rgba(255, 255, 255, 0.07);
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
       display: flex; align-items: center; justify-content: center; color: #e2e8f0; font-weight: 700;
     }
     .avatar-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -100,101 +100,36 @@
 
     .header-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
     .badge {
-      background: rgba(255, 255, 255, 0.06); color: #cbd5e1;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+      background: rgba(255, 255, 255, 0.055); color: #d1d5db;
+      border: 1px solid rgba(255, 255, 255, 0.09);
       padding: 3px 10px; border-radius: 999px; font-size: 0.71rem; font-weight: 600;
     }
     .badge-tag {
-      background: rgba(52, 211, 153, 0.1); color: #6ee7b7;
-      border: 1px solid rgba(52, 211, 153, 0.2);
+      background: rgba(255, 255, 255, 0.04); color: #a5b4fc;
+      border: 1px solid rgba(255, 255, 255, 0.08);
       padding: 3px 10px; border-radius: 999px; font-size: 0.71rem; font-weight: 600;
     }
     .badge-owner {
-      background: rgba(251, 191, 36, 0.1); color: #fde68a;
-      border: 1px solid rgba(251, 191, 36, 0.22);
+      background: rgba(255, 255, 255, 0.07); color: #f3f4f6;
+      border: 1px solid rgba(255, 255, 255, 0.14);
     }
 
     .card {
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.022) 100%);
-      backdrop-filter: blur(18px) saturate(145%);
-      -webkit-backdrop-filter: blur(18px) saturate(145%);
+      background: linear-gradient(180deg, rgba(21, 24, 31, 0.82) 0%, rgba(13, 15, 20, 0.86) 100%);
+      backdrop-filter: blur(18px) saturate(125%);
+      -webkit-backdrop-filter: blur(18px) saturate(125%);
       border: 1px solid var(--hairline);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 8px 24px rgba(0, 0, 0, 0.28);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 8px 22px rgba(0, 0, 0, 0.35);
       border-radius: var(--radius-card); padding: 15px; margin-bottom: 12px;
     }
     .card h3 { margin: 0 0 12px; font-size: 0.98rem; font-weight: 700; display: flex; align-items: center; gap: 7px; }
 
-    /* Liquid Glass Specular & Refraction Buttons */
-    .liquid-pill {
-      position: relative;
-      overflow: hidden;
-      --mx: 50%;
-      --my: 50%;
-      --tx: 0px;
-      --ty: 0px;
-      --sx: 1;
-      --sy: 1;
-      transform: translate3d(var(--tx), var(--ty), 0) scale(var(--sx), var(--sy));
-      transition: transform 420ms cubic-bezier(0.22, 1.35, 0.36, 1), background 180ms ease, border-color 180ms ease;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.03) 100%);
-      backdrop-filter: blur(16px) saturate(160%);
-      -webkit-backdrop-filter: blur(16px) saturate(160%);
-      border: 1px solid rgba(255, 255, 255, 0.11);
-      box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.26),
-        inset 0 -1px 0 rgba(255, 255, 255, 0.05),
-        0 6px 18px rgba(0, 0, 0, 0.25);
-    }
-
-    .liquid-pill::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      border-radius: inherit;
-      padding: 1px;
-      background: radial-gradient(
-        circle 90px at var(--mx) var(--my),
-        rgba(255, 255, 255, 0.55),
-        rgba(255, 255, 255, 0.08) 65%,
-        transparent 100%
-      );
-      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-      opacity: 0;
-      transition: opacity 220ms ease;
-    }
-
-    .liquid-pill::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      border-radius: inherit;
-      background: radial-gradient(
-        circle 74px at var(--mx) var(--my),
-        rgba(255, 255, 255, 0.24),
-        rgba(255, 255, 255, 0.04) 55%,
-        transparent 80%
-      );
-      opacity: 0;
-      transition: opacity 200ms ease;
-    }
-
-    .liquid-pill:hover::before,
-    .liquid-pill.is-grabbed::before,
-    .liquid-pill.is-grabbed::after {
-      opacity: 1;
-    }
-
-    .liquid-pill.is-grabbed {
-      transition: transform 50ms linear;
-    }
-
+    /* Natural Dark Glass Buttons */
     .btn {
+      background: linear-gradient(180deg, rgba(28, 32, 41, 0.9) 0%, rgba(17, 20, 26, 0.94) 100%);
       color: var(--text);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 3px 10px rgba(0, 0, 0, 0.28);
       border-radius: var(--radius-btn);
       padding: 10px 14px;
       font-size: 0.84rem;
@@ -205,30 +140,36 @@
       align-items: center;
       justify-content: center;
       gap: 6px;
+      transition: background 0.16s ease, border-color 0.16s ease, transform 0.14s ease;
     }
+    .btn:hover:not(:disabled) {
+      background: linear-gradient(180deg, rgba(35, 40, 51, 0.94) 0%, rgba(21, 24, 31, 0.96) 100%);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+    .btn:active:not(:disabled) { transform: scale(0.985); }
     .btn:disabled { opacity: 0.36; cursor: not-allowed; }
-    .btn:active:not(:disabled) { transform: scale(0.975); }
 
     .btn-primary-glass {
-      background: linear-gradient(180deg, rgba(96, 165, 250, 0.22) 0%, rgba(59, 130, 246, 0.08) 100%);
-      border-color: rgba(147, 197, 253, 0.24);
-      color: #dbeafe;
+      background: linear-gradient(180deg, rgba(34, 43, 58, 0.92) 0%, rgba(20, 26, 36, 0.95) 100%);
+      border-color: rgba(147, 197, 253, 0.18);
+      color: #e2ecff;
     }
     .btn-success {
-      background: linear-gradient(180deg, rgba(52, 211, 153, 0.2) 0%, rgba(16, 185, 129, 0.08) 100%);
-      border-color: rgba(110, 231, 183, 0.22);
-      color: #d1fae5;
+      background: linear-gradient(180deg, rgba(25, 45, 40, 0.92) 0%, rgba(15, 27, 24, 0.95) 100%);
+      border-color: rgba(110, 231, 183, 0.18);
+      color: #dcfce7;
     }
     .btn-outline {
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.025) 100%);
-      color: #e2e8f0;
+      background: linear-gradient(180deg, rgba(24, 27, 35, 0.85) 0%, rgba(15, 17, 23, 0.9) 100%);
+      border-color: rgba(255, 255, 255, 0.09);
+      color: #d1d5db;
     }
     .btn-danger {
-      background: linear-gradient(180deg, rgba(248, 113, 113, 0.17) 0%, rgba(239, 68, 68, 0.07) 100%);
-      border-color: rgba(252, 165, 165, 0.2);
+      background: linear-gradient(180deg, rgba(48, 24, 28, 0.9) 0%, rgba(29, 14, 17, 0.94) 100%);
+      border-color: rgba(252, 165, 165, 0.18);
       color: #fecaca;
     }
-    .btn-sm { padding: 7px 11px; font-size: 0.77rem; width: auto; border-radius: 12px; }
+    .btn-sm { padding: 7px 11px; font-size: 0.77rem; width: auto; border-radius: 11px; }
 
     /* Bank Card Actions Layout */
     .bank-actions-grid {
@@ -248,26 +189,26 @@
 
     input, select, textarea {
       width: 100%; padding: 10px 13px; border-radius: 13px;
-      border: 1px solid rgba(255, 255, 255, 0.09);
-      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(12, 14, 19, 0.78);
       color: var(--text); margin-bottom: 11px; font-size: 0.88rem; outline: none;
       transition: border-color 0.18s;
     }
     input[type="color"] {
       width: 44px; height: 32px; padding: 2px; margin-bottom: 0; border-radius: 8px; cursor: pointer;
     }
-    input:focus, select:focus, textarea:focus { border-color: rgba(147, 197, 253, 0.45); }
+    input:focus, select:focus, textarea:focus { border-color: rgba(255, 255, 255, 0.24); }
     label { display: block; font-size: 0.79rem; color: var(--hint); margin-bottom: 5px; font-weight: 500; }
 
     .dyn-opt-row { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
     .dyn-opt-row input { margin-bottom: 0; flex: 1; }
     .dyn-opt-badge {
       width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
-      background: rgba(96, 165, 250, 0.14); color: #93c5fd;
+      background: rgba(255, 255, 255, 0.07); color: #e2e8f0;
       font-size: 0.76rem; font-weight: 700; display: flex; align-items: center; justify-content: center;
     }
 
-    /* Liquid Glass Floating Dock with SVG Refraction Lens */
+    /* Dark Liquid Glass Floating Dock with Refraction Lens */
     .nav-dock-wrap {
       position: fixed;
       bottom: 12px;
@@ -282,14 +223,14 @@
       display: flex;
       align-items: center;
       padding: 4px;
-      border-radius: 25px;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.085) 0%, rgba(255, 255, 255, 0.035) 100%);
-      backdrop-filter: blur(26px) saturate(170%);
-      -webkit-backdrop-filter: blur(26px) saturate(170%);
-      border: 1px solid rgba(255, 255, 255, 0.11);
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(22, 25, 33, 0.88) 0%, rgba(12, 14, 19, 0.94) 100%);
+      backdrop-filter: blur(26px) saturate(140%);
+      -webkit-backdrop-filter: blur(26px) saturate(140%);
+      border: 1px solid rgba(255, 255, 255, 0.09);
       box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.22),
-        0 14px 36px rgba(0, 0, 0, 0.48);
+        inset 0 1px 0 rgba(255, 255, 255, 0.16),
+        0 14px 36px rgba(0, 0, 0, 0.52);
       touch-action: pan-y;
     }
     .nav-liquid-lens {
@@ -298,32 +239,21 @@
       bottom: 4px;
       left: 4px;
       width: 64px;
-      border-radius: 21px;
+      border-radius: 20px;
       pointer-events: none;
-      background: radial-gradient(
-        circle at 50% 25%,
-        rgba(255, 255, 255, 0.24) 0%,
-        rgba(255, 255, 255, 0.07) 60%,
-        rgba(255, 255, 255, 0.02) 100%
-      );
-      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0.04) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.14);
       box-shadow:
-        inset 0 1px 1px rgba(255, 255, 255, 0.42),
-        inset 0 -1px 2px rgba(255, 255, 255, 0.08),
-        0 6px 18px rgba(0, 0, 0, 0.28);
+        inset 0 1px 0 rgba(255, 255, 255, 0.25),
+        0 4px 14px rgba(0, 0, 0, 0.35);
       filter: url(#lg-refraction-filter);
-      transition: transform 400ms cubic-bezier(0.22, 1.35, 0.36, 1), width 320ms cubic-bezier(0.22, 1.35, 0.36, 1);
+      transition: transform 390ms cubic-bezier(0.22, 1.32, 0.36, 1), width 320ms cubic-bezier(0.22, 1.32, 0.36, 1);
       z-index: 1;
     }
     .nav-liquid-lens.is-dragging {
       transition: none;
-      background: radial-gradient(
-        circle at 50% 20%,
-        rgba(255, 255, 255, 0.3) 0%,
-        rgba(255, 255, 255, 0.1) 65%,
-        rgba(255, 255, 255, 0.03) 100%
-      );
-      border-color: rgba(255, 255, 255, 0.28);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.17) 0%, rgba(255, 255, 255, 0.06) 100%);
+      border-color: rgba(255, 255, 255, 0.22);
     }
     .nav-item {
       position: relative;
@@ -338,47 +268,46 @@
       font-size: 0.65rem;
       cursor: pointer;
       padding: 6px 2px;
-      border-radius: 21px;
+      border-radius: 20px;
       user-select: none;
       transition: color 0.18s ease, transform 0.2s ease;
     }
     .nav-item.active {
       color: #ffffff;
       font-weight: 700;
-      text-shadow: 0 1px 10px rgba(255, 255, 255, 0.22);
     }
 
     .tab { display: none; }
     .tab.active { display: block; }
     .row-actions { display: flex; gap: 6px; margin-top: 11px; flex-wrap: wrap; }
-    .opt-item { padding: 8px 11px; border-radius: 11px; background: rgba(255, 255, 255, 0.03); margin-bottom: 6px; font-size: 0.84rem; border: 1px solid transparent; }
-    .opt-item.correct { border-color: rgba(52, 211, 153, 0.3); background: rgba(52, 211, 153, 0.08); color: #6ee7b7; font-weight: 600; }
+    .opt-item { padding: 8px 11px; border-radius: 11px; background: rgba(255, 255, 255, 0.025); margin-bottom: 6px; font-size: 0.84rem; border: 1px solid transparent; }
+    .opt-item.correct { border-color: rgba(110, 231, 183, 0.25); background: rgba(110, 231, 183, 0.07); color: #a7f3d0; font-weight: 600; }
 
-    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.72); backdrop-filter: blur(12px); z-index: 200; align-items: center; justify-content: center; padding: 14px; }
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.74); backdrop-filter: blur(12px); z-index: 200; align-items: center; justify-content: center; padding: 14px; }
     .modal.open { display: flex; }
-    .modal-content { background: rgba(18, 21, 30, 0.92); backdrop-filter: blur(24px); border: 1px solid var(--hairline); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18); border-radius: 20px; padding: 18px; width: 100%; max-width: 640px; max-height: 88vh; overflow-y: auto; }
+    .modal-content { background: rgba(18, 21, 28, 0.95); backdrop-filter: blur(22px); border: 1px solid var(--hairline); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14); border-radius: 20px; padding: 18px; width: 100%; max-width: 640px; max-height: 88vh; overflow-y: auto; }
 
     .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 11px; font-size: 0.85rem; }
-    .switch-row input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); flex-shrink: 0; }
-    .hint-box { background: rgba(96,165,250,0.08); border-right: 3px solid rgba(147, 197, 253, 0.6); padding: 10px 12px; border-radius: 12px; font-size: 0.8rem; margin-bottom: 13px; color: #cbd5e1; line-height: 1.55; }
-    .warn-box { background: rgba(251,191,36,0.09); border-right: 3px solid var(--warn); padding: 11px 13px; border-radius: 12px; font-size: 0.8rem; margin-top: 12px; color: #fde68a; line-height: 1.6; }
+    .switch-row input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: #cbd5e1; flex-shrink: 0; }
+    .hint-box { background: rgba(255, 255, 255, 0.03); border-right: 3px solid rgba(255, 255, 255, 0.24); padding: 10px 12px; border-radius: 12px; font-size: 0.8rem; margin-bottom: 13px; color: #cbd5e1; line-height: 1.55; }
+    .warn-box { background: rgba(252, 211, 77, 0.07); border-right: 3px solid rgba(252, 211, 77, 0.45); padding: 11px 13px; border-radius: 12px; font-size: 0.8rem; margin-top: 12px; color: #fde68a; line-height: 1.6; }
 
-    .select-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--hairline); border-radius: 14px; padding: 8px; background: rgba(255, 255, 255, 0.025); margin-bottom: 12px; }
+    .select-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--hairline); border-radius: 14px; padding: 8px; background: rgba(12, 14, 19, 0.65); margin-bottom: 12px; }
     .select-q-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.83rem; }
     .select-q-item:last-child { border-bottom: none; }
     .select-q-item input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0; }
     .select-q-item.excluded { opacity: 0.4; text-decoration: line-through; }
 
     .color-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-    .color-chip { display: flex; justify-content: space-between; align-items: center; background: rgba(255, 255, 255, 0.03); padding: 7px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.07); font-size: 0.8rem; }
+    .color-chip { display: flex; justify-content: space-between; align-items: center; background: rgba(255, 255, 255, 0.025); padding: 7px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.07); font-size: 0.8rem; }
 
-    .progress-box { background: rgba(255, 255, 255, 0.03); border-radius: 14px; padding: 13px; margin-top: 13px; border: 1px solid rgba(96,165,250,0.22); display: none; }
+    .progress-box { background: rgba(255, 255, 255, 0.025); border-radius: 14px; padding: 13px; margin-top: 13px; border: 1px solid var(--hairline); display: none; }
     .progress-bar-bg { width: 100%; height: 8px; background: rgba(255,255,255,0.07); border-radius: 99px; overflow: hidden; margin: 9px 0 3px; }
-    .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #60a5fa, #34d399); width: 0%; transition: width 0.3s; }
+    .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #93c5fd, #6ee7b7); width: 0%; transition: width 0.3s; }
 
     .perm-pills { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
-    .perm-pill { font-size: 0.7rem; padding: 3px 8px; border-radius: 8px; background: rgba(255,255,255,0.05); color: var(--hint); }
-    .perm-pill.active { background: rgba(52, 211, 153, 0.12); color: #6ee7b7; }
+    .perm-pill { font-size: 0.7rem; padding: 3px 8px; border-radius: 8px; background: rgba(255,255,255,0.04); color: var(--hint); }
+    .perm-pill.active { background: rgba(255, 255, 255, 0.09); color: #e2e8f0; }
 
     .log-item { border-bottom: 1px solid var(--hairline); padding: 10px 0; }
     .log-item:last-child { border-bottom: none; }
@@ -388,18 +317,18 @@
 
     .studio-toolbar {
       display: flex; gap: 6px; flex-wrap: wrap;
-      background: rgba(255, 255, 255, 0.03); border: 1px solid var(--hairline);
+      background: rgba(12, 14, 19, 0.72); border: 1px solid var(--hairline);
       border-radius: 14px; padding: 8px; margin-bottom: 10px;
     }
     .fmt-btn {
-      padding: 6px 11px; border-radius: 11px; border: 1px solid rgba(255,255,255,0.1);
-      background: rgba(255, 255, 255, 0.05);
+      padding: 6px 11px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.09);
+      background: rgba(255, 255, 255, 0.04);
       color: var(--text); font-size: 0.78rem; font-weight: 600;
       cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
     }
 
     .grid-row-card {
-      background: rgba(255, 255, 255, 0.03); border: 1px solid var(--hairline);
+      background: rgba(255, 255, 255, 0.025); border: 1px solid var(--hairline);
       border-radius: 15px; padding: 10px; margin-bottom: 10px;
     }
     .grid-row-head {
@@ -413,22 +342,22 @@
     .grid-btn-slot input { margin-bottom: 0; padding: 8px 10px; font-size: 0.82rem; }
 
     .tg-preview-frame {
-      background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(12, 14, 19, 0.72); border: 1px solid var(--hairline);
       border-radius: 16px; padding: 14px; margin-bottom: 12px;
     }
     .tg-preview-label {
-      font-size: 0.72rem; color: #93c5fd; margin-bottom: 8px;
+      font-size: 0.72rem; color: var(--hint); margin-bottom: 8px;
       display: flex; justify-content: space-between; align-items: center;
     }
     .tg-bubble {
-      background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255,255,255,0.07);
+      background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255,255,255,0.07);
       border-radius: 14px; padding: 12px 14px; font-size: 0.88rem;
-      line-height: 1.6; color: #f8fafc; white-space: pre-wrap; word-break: break-word;
+      line-height: 1.6; color: #f3f4f6; white-space: pre-wrap; word-break: break-word;
     }
     .tg-bubble blockquote {
       margin: 6px 0; padding: 4px 10px;
-      border-right: 3px solid #60a5fa; background: rgba(96, 165, 250, 0.08);
-      border-radius: 0 8px 8px 0; color: #e2e8f0;
+      border-right: 3px solid rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.04);
+      border-radius: 0 8px 8px 0; color: #e5e7eb;
     }
     .tg-bubble a { color: #93c5fd; text-decoration: underline; }
     .tg-bubble code {
@@ -438,9 +367,9 @@
     .tg-kb-preview { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
     .tg-kb-row { display: flex; gap: 6px; }
     .tg-kb-pill {
-      flex: 1; background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.09);
-      color: #e2e8f0; border-radius: 10px; padding: 8px 10px;
+      flex: 1; background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #e5e7eb; border-radius: 10px; padding: 8px 10px;
       font-size: 0.8rem; font-weight: 600;
       display: flex; align-items: center; justify-content: space-between; gap: 6px;
       text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -454,12 +383,7 @@
       <filter id="lg-refraction-filter" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">
         <feTurbulence type="fractalNoise" baseFrequency="0.018 0.035" numOctaves="2" seed="7" result="noise" />
         <feGaussianBlur in="noise" stdDeviation="2.2" result="softMap" />
-        <feDisplacementMap in="SourceGraphic" in2="softMap" scale="9" xChannelSelector="R" yChannelSelector="G" result="refracted" />
-        <feComponentTransfer in="refracted" result="boosted">
-          <feFuncR type="linear" slope="1.05" intercept="0.01" />
-          <feFuncG type="linear" slope="1.05" intercept="0.01" />
-          <feFuncB type="linear" slope="1.08" intercept="0.02" />
-        </feComponentTransfer>
+        <feDisplacementMap in="SourceGraphic" in2="softMap" scale="8" xChannelSelector="R" yChannelSelector="G" />
       </filter>
 
       <symbol id="i-folder" viewBox="0 0 24 24">
@@ -553,10 +477,10 @@
 
     <div id="tab-banks" class="tab active">
       <div style="display:flex; gap:9px; margin-bottom:14px;">
-        <button class="btn btn-primary-glass liquid-pill" style="flex:1;" id="btnNewBank" onclick="openNewBankModal()">
+        <button class="btn btn-primary-glass" style="flex:1;" id="btnNewBank" onclick="openNewBankModal()">
           <svg class="ico"><use href="#i-plus"/></svg> بنك جديد
         </button>
-        <button class="btn btn-success liquid-pill" style="flex:1;" id="btnGoUpload" onclick="switchTab('upload')">
+        <button class="btn btn-success" style="flex:1;" id="btnGoUpload" onclick="switchTab('upload')">
           <svg class="ico"><use href="#i-upload"/></svg> استيراد ملفات
         </button>
       </div>
@@ -566,25 +490,25 @@
     <div id="tab-questions" class="tab">
       <div class="card" style="padding:13px;">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:10px;">
-          <button class="btn btn-outline btn-sm liquid-pill" onclick="switchTab('banks')">
+          <button class="btn btn-outline btn-sm" onclick="switchTab('banks')">
             <svg class="ico ico-sm"><use href="#i-back"/></svg> البنوك
           </button>
           <strong id="currentBankTitle" style="font-size:1rem; text-align:center;">البنك</strong>
-          <button class="btn btn-outline btn-sm liquid-pill" id="btnRenameBank" onclick="renameCurrentBank()">
+          <button class="btn btn-outline btn-sm" id="btnRenameBank" onclick="renameCurrentBank()">
             <svg class="ico ico-sm"><use href="#i-edit"/></svg> الاسم
           </button>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-          <button class="btn btn-sm btn-primary-glass liquid-pill" id="btnAddQ" onclick="openQuestionModal()">
+          <button class="btn btn-sm btn-primary-glass" id="btnAddQ" onclick="openQuestionModal()">
             <svg class="ico ico-sm"><use href="#i-plus"/></svg> إضافة سؤال
           </button>
-          <button class="btn btn-sm btn-success liquid-pill" id="btnAppendCsv" onclick="openAppendCsvModal()">
+          <button class="btn btn-sm btn-success" id="btnAppendCsv" onclick="openAppendCsvModal()">
             <svg class="ico ico-sm"><use href="#i-upload"/></svg> دمج CSV
           </button>
-          <button class="btn btn-sm btn-outline liquid-pill" onclick="openPdfStudioModal(currentBankId, currentBankName, questionsCache)">
+          <button class="btn btn-sm btn-outline" onclick="openPdfStudioModal(currentBankId, currentBankName, questionsCache)">
             <svg class="ico ico-sm"><use href="#i-download"/></svg> تصدير PDF
           </button>
-          <button class="btn btn-sm btn-outline liquid-pill" onclick="openExportCsvModal(currentBankId, currentBankName, questionsCache)">
+          <button class="btn btn-sm btn-outline" onclick="openExportCsvModal(currentBankId, currentBankName, questionsCache)">
             <svg class="ico ico-sm"><use href="#i-download"/></svg> CSV للخاص
           </button>
         </div>
@@ -605,7 +529,7 @@
         <input type="text" id="pdfBankName" placeholder="مثال: علم الأدوية - بنك PDF" />
         <label>ملف PDF:</label>
         <input type="file" id="pdfFile" accept=".pdf,application/pdf" />
-        <button class="btn btn-primary-glass liquid-pill" id="uploadPdfBtn" onclick="uploadPDF()">
+        <button class="btn btn-primary-glass" id="uploadPdfBtn" onclick="uploadPDF()">
           <svg class="ico"><use href="#i-upload"/></svg> استخراج وحفظ أسئلة PDF
         </button>
         <div id="pdfReviewReport" style="display:none;"></div>
@@ -626,7 +550,7 @@
         </select>
         <label>ملف CSV:</label>
         <input type="file" id="csvFile" accept=".csv" />
-        <button class="btn btn-success liquid-pill" id="uploadCsvBtn" onclick="uploadCSV()">
+        <button class="btn btn-success" id="uploadCsvBtn" onclick="uploadCSV()">
           <svg class="ico"><use href="#i-upload"/></svg> إنشاء البنك واستيراد الأسئلة
         </button>
       </div>
@@ -645,8 +569,8 @@
         <label>رقم الموضوع (Topic ID - اختياري):</label>
         <input type="number" id="commTopicId" placeholder="اتركه فارغاً إذا لم تكن هناك مواضيع" />
         <div style="display:flex; gap:8px;">
-          <button class="btn btn-outline liquid-pill" onclick="testCommunity()">فحص الصلاحيات</button>
-          <button class="btn btn-success liquid-pill" onclick="saveCommunity()">حفظ الوجهة</button>
+          <button class="btn btn-outline" onclick="testCommunity()">فحص الصلاحيات</button>
+          <button class="btn btn-success" onclick="saveCommunity()">حفظ الوجهة</button>
         </div>
       </div>
       <div id="communitiesList"></div>
@@ -662,7 +586,7 @@
               <option value="">-- رسالة حرة (بدون تيمبلت) --</option>
             </select>
           </div>
-          <button type="button" class="btn btn-sm btn-outline liquid-pill" style="margin-bottom:11px;" onclick="clearBroadcastDraft()">
+          <button type="button" class="btn btn-sm btn-outline" style="margin-bottom:11px;" onclick="clearBroadcastDraft()">
             جديد
           </button>
         </div>
@@ -679,13 +603,13 @@
         </div>
 
         <div class="row-actions" style="margin-top:4px;">
-          <button type="button" class="btn btn-sm btn-success liquid-pill" onclick="saveAsNewTemplate()">
+          <button type="button" class="btn btn-sm btn-success" onclick="saveAsNewTemplate()">
             <svg class="ico ico-sm"><use href="#i-save"/></svg> حفظ كتيمبلت جديد
           </button>
-          <button type="button" class="btn btn-sm btn-primary-glass liquid-pill" id="btnUpdateTemplate" disabled onclick="updateSelectedTemplate()">
+          <button type="button" class="btn btn-sm btn-primary-glass" id="btnUpdateTemplate" disabled onclick="updateSelectedTemplate()">
             <svg class="ico ico-sm"><use href="#i-edit"/></svg> حفظ التعديل
           </button>
-          <button type="button" class="btn btn-sm btn-danger liquid-pill" id="btnDeleteTemplate" disabled onclick="deleteSelectedTemplate()">
+          <button type="button" class="btn btn-sm btn-danger" id="btnDeleteTemplate" disabled onclick="deleteSelectedTemplate()">
             <svg class="ico ico-sm"><use href="#i-trash"/></svg> حذف
           </button>
         </div>
@@ -694,13 +618,13 @@
       <div class="card">
         <h3><svg class="ico"><use href="#i-edit"/></svg> محرر الرسالة وتنسيقها</h3>
         <div class="studio-toolbar">
-          <button type="button" class="fmt-btn liquid-pill" onclick="wrapSelection('<b>', '</b>')"><b>B</b></button>
-          <button type="button" class="fmt-btn liquid-pill" onclick="wrapSelection('<i>', '</i>')"><i>I</i></button>
-          <button type="button" class="fmt-btn liquid-pill" onclick="wrapSelection('<u>', '</u>')"><u>U</u></button>
-          <button type="button" class="fmt-btn liquid-pill" onclick="wrapSelection('<s>', '</s>')"><s>S</s></button>
-          <button type="button" class="fmt-btn liquid-pill" onclick="wrapSelection('<code>', '</code>')">Code</button>
-          <button type="button" class="fmt-btn liquid-pill" onclick="wrapSelection('<blockquote>', '</blockquote>')">Quote</button>
-          <button type="button" class="fmt-btn liquid-pill" onclick="insertTextLink()">
+          <button type="button" class="fmt-btn" onclick="wrapSelection('<b>', '</b>')"><b>B</b></button>
+          <button type="button" class="fmt-btn" onclick="wrapSelection('<i>', '</i>')"><i>I</i></button>
+          <button type="button" class="fmt-btn" onclick="wrapSelection('<u>', '</u>')"><u>U</u></button>
+          <button type="button" class="fmt-btn" onclick="wrapSelection('<s>', '</s>')"><s>S</s></button>
+          <button type="button" class="fmt-btn" onclick="wrapSelection('<code>', '</code>')">Code</button>
+          <button type="button" class="fmt-btn" onclick="wrapSelection('<blockquote>', '</blockquote>')">Quote</button>
+          <button type="button" class="fmt-btn" onclick="insertTextLink()">
             <svg class="ico ico-sm"><use href="#i-link"/></svg> رابط نصي
           </button>
         </div>
@@ -710,7 +634,7 @@
           <label style="margin:0; font-weight:600; color:var(--text);">
             <svg class="ico ico-sm" style="vertical-align:middle;"><use href="#i-link"/></svg> شبكة أزرار الروابط (صفوف وأعمدة)
           </label>
-          <button type="button" class="btn btn-sm btn-outline liquid-pill" onclick="addBroadcastRow()">
+          <button type="button" class="btn btn-sm btn-outline" onclick="addBroadcastRow()">
             <svg class="ico ico-sm"><use href="#i-plus"/></svg> إضافة صف أزرار
           </button>
         </div>
@@ -752,7 +676,7 @@
           <input type="checkbox" id="bcPin" />
         </div>
 
-        <button type="button" class="btn btn-success liquid-pill" id="btnSendBroadcast" onclick="sendBroadcastMessage()">
+        <button type="button" class="btn btn-success" id="btnSendBroadcast" onclick="sendBroadcastMessage()">
           <svg class="ico"><use href="#i-send"/></svg> إرسال الرسالة الآن
         </button>
       </div>
@@ -777,8 +701,8 @@
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
             <small id="selectedCountBadge" style="color:var(--success); font-weight:bold;">الأسئلة المحددة: 0</small>
             <div style="display:flex; gap:6px;">
-              <button type="button" class="btn btn-sm btn-outline liquid-pill" onclick="toggleAllSelective(true)">تحديد الكل</button>
-              <button type="button" class="btn btn-sm btn-outline liquid-pill" onclick="toggleAllSelective(false)">إلغاء الكل</button>
+              <button type="button" class="btn btn-sm btn-outline" onclick="toggleAllSelective(true)">تحديد الكل</button>
+              <button type="button" class="btn btn-sm btn-outline" onclick="toggleAllSelective(false)">إلغاء الكل</button>
             </div>
           </div>
           <div id="selectiveQuestionsList" class="select-list"></div>
@@ -832,7 +756,7 @@
           <input type="checkbox" id="pubShuffleOpt" />
         </div>
 
-        <button id="pubStartBtn" class="btn btn-primary-glass liquid-pill" onclick="publishQuiz()">
+        <button id="pubStartBtn" class="btn btn-primary-glass" onclick="publishQuiz()">
           <svg class="ico"><use href="#i-send"/></svg> بدء الإرسال
         </button>
 
@@ -881,8 +805,8 @@
         </div>
 
         <div style="display:flex; gap:8px;">
-          <button class="btn btn-primary-glass liquid-pill" onclick="saveAdminPermissions()">حفظ المشرف والصلاحيات</button>
-          <button class="btn btn-outline btn-sm liquid-pill" onclick="resetAdminForm()">تفريغ</button>
+          <button class="btn btn-primary-glass" onclick="saveAdminPermissions()">حفظ المشرف والصلاحيات</button>
+          <button class="btn btn-outline btn-sm" onclick="resetAdminForm()">تفريغ</button>
         </div>
       </div>
       <div id="adminsList"></div>
@@ -893,10 +817,10 @@
         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;">
           <h3 style="margin:0;"><svg class="ico"><use href="#i-log"/></svg> سجل العمليات</h3>
           <div style="display:flex; gap:6px;">
-            <button class="btn btn-outline btn-sm liquid-pill" onclick="loadLogs()">
+            <button class="btn btn-outline btn-sm" onclick="loadLogs()">
               <svg class="ico ico-sm"><use href="#i-refresh"/></svg> تحديث
             </button>
-            <button class="btn btn-danger btn-sm liquid-pill" id="btnClearLogs" style="display:none;" onclick="clearLogs()">
+            <button class="btn btn-danger btn-sm" id="btnClearLogs" style="display:none;" onclick="clearLogs()">
               <svg class="ico ico-sm"><use href="#i-trash"/></svg> مسح
             </button>
           </div>
@@ -908,7 +832,7 @@
       </div>
     </div>
 
-    <!-- Liquid Glass Floating Dock with SVG Refraction Lens -->
+    <!-- Dark Liquid Glass Floating Dock -->
     <div class="nav-dock-wrap">
       <div class="nav-bar" id="navDock">
         <div class="nav-liquid-lens" id="navLiquidLens"></div>
@@ -945,8 +869,8 @@
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
           <label style="margin:0;">تحديد الأسئلة وترتيبها (<span id="pdfSelCount">0</span>):</label>
           <div style="display:flex; gap:6px;">
-            <button type="button" class="btn btn-sm btn-outline liquid-pill" onclick="setAllPdfQuestions(true)">تحديد الكل</button>
-            <button type="button" class="btn btn-sm btn-outline liquid-pill" onclick="setAllPdfQuestions(false)">إلغاء التحديد</button>
+            <button type="button" class="btn btn-sm btn-outline" onclick="setAllPdfQuestions(true)">تحديد الكل</button>
+            <button type="button" class="btn btn-sm btn-outline" onclick="setAllPdfQuestions(false)">إلغاء التحديد</button>
           </div>
         </div>
         <div id="pdfQuestionsOrderList" class="select-list" style="max-height:185px;"></div>
@@ -954,7 +878,7 @@
         <div class="card" style="padding:12px; margin-bottom:10px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
             <strong style="font-size:0.88rem;">تخصيص الألوان (Colors)</strong>
-            <button type="button" class="btn btn-sm btn-outline liquid-pill" onclick="resetPdfColorsToCardStyle()">ألوان البطاقة الافتراضية</button>
+            <button type="button" class="btn btn-sm btn-outline" onclick="resetPdfColorsToCardStyle()">ألوان البطاقة الافتراضية</button>
           </div>
           <div class="color-grid">
             <div class="color-chip">
@@ -1033,7 +957,7 @@
             <label style="margin:0; display:flex; align-items:center; gap:5px;">
               <input type="checkbox" id="pdfHeadingBorder" style="width:auto; margin:0;" /> إطار للعنوان
             </label>
-            <button type="button" class="btn btn-sm btn-outline liquid-pill" onclick="addCustomPdfHeading()">+ إضافة العنوان</button>
+            <button type="button" class="btn btn-sm btn-outline" onclick="addCustomPdfHeading()">+ إضافة العنوان</button>
           </div>
           <div id="pdfHeadingsList" style="margin-top:8px;"></div>
         </div>
@@ -1087,12 +1011,12 @@
         </div>
 
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="btn btn-success liquid-pill" style="flex:1; min-width:210px;" id="confirmPdfPairBtn" onclick="generateAndSendBothPdfs()">
+          <button class="btn btn-success" style="flex:1; min-width:210px;" id="confirmPdfPairBtn" onclick="generateAndSendBothPdfs()">
             <svg class="ico ico-sm"><use href="#i-send"/></svg> توليد وإرسال النسختين إلى الخاص
           </button>
-          <button class="btn btn-outline liquid-pill" onclick="closeModal('pdfStudioModal')">إغلاق</button>
+          <button class="btn btn-outline" onclick="closeModal('pdfStudioModal')">إغلاق</button>
         </div>
-        <div id="localPdfStatus" style="font-size:0.82rem; color:#34d399; margin-top:8px; text-align:center;"></div>
+        <div id="localPdfStatus" style="font-size:0.82rem; color:#6ee7b7; margin-top:8px; text-align:center;"></div>
       </div>
     </div>
 
@@ -1111,18 +1035,18 @@
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
             <small id="exportSelectedCount" style="color:var(--success); font-weight:bold;">الأسئلة المحددة: 0</small>
             <div style="display:flex; gap:6px;">
-              <button type="button" class="btn btn-sm btn-outline liquid-pill" onclick="toggleAllExport(true)">تحديد الكل</button>
-              <button type="button" class="btn btn-sm btn-outline liquid-pill" onclick="toggleAllExport(false)">إلغاء الكل</button>
+              <button type="button" class="btn btn-sm btn-outline" onclick="toggleAllExport(true)">تحديد الكل</button>
+              <button type="button" class="btn btn-sm btn-outline" onclick="toggleAllExport(false)">إلغاء الكل</button>
             </div>
           </div>
           <div id="exportQuestionsList" class="select-list"></div>
         </div>
 
         <div style="display:flex; gap:8px;">
-          <button class="btn btn-success liquid-pill" id="confirmExportCsvBtn" onclick="confirmExportCsv()">
+          <button class="btn btn-success" id="confirmExportCsvBtn" onclick="confirmExportCsv()">
             <svg class="ico ico-sm"><use href="#i-send"/></svg> إرسال CSV إلى الخاص
           </button>
-          <button class="btn btn-outline liquid-pill" onclick="closeModal('exportCsvModal')">إلغاء</button>
+          <button class="btn btn-outline" onclick="closeModal('exportCsvModal')">إلغاء</button>
         </div>
       </div>
     </div>
@@ -1136,7 +1060,7 @@
 
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
           <label style="margin:0;">خيارات الإجابة (من 2 إلى 10 خيارات):</label>
-          <button type="button" class="btn btn-sm btn-outline liquid-pill" id="btnAddOptField" onclick="addOptionField()">
+          <button type="button" class="btn btn-sm btn-outline" id="btnAddOptField" onclick="addOptionField()">
             <svg class="ico ico-sm"><use href="#i-plus"/></svg> إضافة خيار
           </button>
         </div>
@@ -1148,8 +1072,8 @@
         <label>شرح الإجابة (اختياري):</label>
         <input type="text" id="qExpl" placeholder="شرح يظهر بعد الإجابة..." />
         <div style="display:flex; gap:8px;">
-          <button class="btn btn-success liquid-pill" id="saveQBtn" onclick="saveQuestion()">حفظ</button>
-          <button class="btn btn-outline liquid-pill" onclick="closeModal('qModal')">إلغاء</button>
+          <button class="btn btn-success" id="saveQBtn" onclick="saveQuestion()">حفظ</button>
+          <button class="btn btn-outline" onclick="closeModal('qModal')">إلغاء</button>
         </div>
       </div>
     </div>
@@ -1169,8 +1093,8 @@
         <label>اختر ملف CSV:</label>
         <input type="file" id="appendCsvFile" accept=".csv" />
         <div style="display:flex; gap:8px;">
-          <button class="btn btn-success liquid-pill" id="appendCsvBtn" onclick="submitAppendCsv()">بدء الدمج</button>
-          <button class="btn btn-outline liquid-pill" onclick="closeModal('appendCsvModal')">إلغاء</button>
+          <button class="btn btn-success" id="appendCsvBtn" onclick="submitAppendCsv()">بدء الدمج</button>
+          <button class="btn btn-outline" onclick="closeModal('appendCsvModal')">إلغاء</button>
         </div>
       </div>
     </div>
@@ -1183,8 +1107,8 @@
         <label>البنك المستهدف:</label>
         <select id="transferTargetBank"></select>
         <div style="display:flex; gap:8px;">
-          <button class="btn btn-primary-glass liquid-pill" id="confirmTransferBtn" onclick="confirmTransferQuestion()">تأكيد</button>
-          <button class="btn btn-outline liquid-pill" onclick="closeModal('transferModal')">إلغاء</button>
+          <button class="btn btn-primary-glass" id="confirmTransferBtn" onclick="confirmTransferQuestion()">تأكيد</button>
+          <button class="btn btn-outline" onclick="closeModal('transferModal')">إلغاء</button>
         </div>
       </div>
     </div>
@@ -1220,72 +1144,6 @@
     let pdfCustomHeadings = [];
 
     const PDF_PREFS_KEY = "quiz_native_pdf_prefs_v4";
-
-    function bindLiquidGrabPhysics(el) {
-      if (!el || el.dataset.lgBound) return;
-      el.dataset.lgBound = "1";
-
-      let activePointerId = null;
-      let startX = 0;
-      let startY = 0;
-
-      const updateSpecular = (clientX, clientY) => {
-        const rect = el.getBoundingClientRect();
-        const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
-        const y = Math.max(0, Math.min(rect.height, clientY - rect.top));
-        el.style.setProperty("--mx", `${x}px`);
-        el.style.setProperty("--my", `${y}px`);
-      };
-
-      const resetFluid = () => {
-        activePointerId = null;
-        el.classList.remove("is-grabbed");
-        el.style.setProperty("--tx", "0px");
-        el.style.setProperty("--ty", "0px");
-        el.style.setProperty("--sx", "1");
-        el.style.setProperty("--sy", "1");
-      };
-
-      el.addEventListener("pointermove", (e) => {
-        if (activePointerId !== null && e.pointerId !== activePointerId) return;
-        updateSpecular(e.clientX, e.clientY);
-        if (e.pointerId === activePointerId) {
-          const dx = e.clientX - startX;
-          const dy = e.clientY - startY;
-          const clampedX = Math.max(-6, Math.min(6, dx * 0.16));
-          const clampedY = Math.max(-5, Math.min(5, dy * 0.16));
-          el.style.setProperty("--tx", `${clampedX.toFixed(1)}px`);
-          el.style.setProperty("--ty", `${clampedY.toFixed(1)}px`);
-        }
-      });
-
-      el.addEventListener("pointerdown", (e) => {
-        if (el.disabled) return;
-        if (e.button !== 0 && e.pointerType === "mouse") return;
-        activePointerId = e.pointerId;
-        startX = e.clientX;
-        startY = e.clientY;
-        el.classList.add("is-grabbed");
-        updateSpecular(e.clientX, e.clientY);
-        el.style.setProperty("--sx", "1.015");
-        el.style.setProperty("--sy", "0.98");
-      });
-
-      const endGesture = (e) => {
-        if (e.pointerId !== activePointerId) return;
-        resetFluid();
-      };
-
-      el.addEventListener("pointerup", endGesture);
-      el.addEventListener("pointercancel", endGesture);
-      el.addEventListener("pointerleave", () => {
-        if (activePointerId === null) resetFluid();
-      });
-    }
-
-    function initLiquidGlassButtons(root = document) {
-      root.querySelectorAll(".liquid-pill").forEach(bindLiquidGrabPhysics);
-    }
 
     function positionNavLiquidLens(targetItem = null, animate = true) {
       const dock = document.getElementById("navDock");
@@ -1326,7 +1184,7 @@
         const clampedLeft = Math.max(minLeft, Math.min(maxLeft, relX));
 
         lens.style.width = `${w}px`;
-        lens.style.transform = `translate3d(${clampedLeft - 4}px, 0, 0) scaleX(1.06) scaleY(0.94)`;
+        lens.style.transform = `translate3d(${clampedLeft - 4}px, 0, 0) scaleX(1.05) scaleY(0.95)`;
 
         let closest = items[0];
         let bestDist = Infinity;
@@ -1516,12 +1374,10 @@
       document.getElementById("permManageRow").style.display = currentActor.role === "owner" ? "flex" : "none";
       document.getElementById("btnClearLogs").style.display = currentActor.role === "owner" ? "inline-flex" : "none";
       syncTemplateActionButtons();
-      initLiquidGlassButtons();
       requestAnimationFrame(() => positionNavLiquidLens(null, false));
     }
 
     async function initApp() {
-      initLiquidGlassButtons();
       initLiquidDockSwipe();
 
       if (!initData || initData.trim() === "") {
@@ -1545,7 +1401,6 @@
         }
         await Promise.all(tasks);
         syncBroadcastCommSelect();
-        initLiquidGlassButtons();
         requestAnimationFrame(() => positionNavLiquidLens(null, false));
       } catch (e) {
         blockAccess(e.message);
@@ -1584,7 +1439,6 @@
       } else if (tabName === "admins" && (currentActor?.role === "owner" || currentActor?.can_manage_admins)) {
         await loadAdmins();
       }
-      initLiquidGlassButtons();
     }
 
     function wrapSelection(openTag, closeTag) {
@@ -1701,9 +1555,9 @@
           <div class="grid-row-head">
             <span>صف #${rIdx + 1} (${row.length} زر)</span>
             <div style="display:flex; gap:4px;">
-              <button type="button" class="btn btn-sm btn-outline liquid-pill" style="padding:3px 9px;" onclick="addButtonToRow(${rIdx})">+ زر</button>
-              <button type="button" class="btn btn-sm btn-outline liquid-pill" style="padding:3px 8px;" onclick="moveBroadcastRow(${rIdx}, -1)">▲</button>
-              <button type="button" class="btn btn-sm btn-outline liquid-pill" style="padding:3px 8px;" onclick="moveBroadcastRow(${rIdx}, 1)">▼</button>
+              <button type="button" class="btn btn-sm btn-outline" style="padding:3px 9px;" onclick="addButtonToRow(${rIdx})">+ زر</button>
+              <button type="button" class="btn btn-sm btn-outline" style="padding:3px 8px;" onclick="moveBroadcastRow(${rIdx}, -1)">▲</button>
+              <button type="button" class="btn btn-sm btn-outline" style="padding:3px 8px;" onclick="moveBroadcastRow(${rIdx}, 1)">▼</button>
             </div>
           </div>
           ${row.map((btn, bIdx) => `
@@ -1711,15 +1565,14 @@
               <input type="text" placeholder="نص الزر" value="${escapeHtmlText(btn.text)}" oninput="onBroadcastBtnInput(${rIdx}, ${bIdx}, 'text', this.value)" />
               <input type="url" placeholder="https://..." value="${escapeHtmlText(btn.url)}" oninput="onBroadcastBtnInput(${rIdx}, ${bIdx}, 'url', this.value)" />
               <div style="display:flex; gap:3px;">
-                <button type="button" class="btn btn-sm btn-outline liquid-pill" style="padding:5px 7px;" onclick="moveButtonInRow(${rIdx}, ${bIdx}, -1)">◀</button>
-                <button type="button" class="btn btn-sm btn-outline liquid-pill" style="padding:5px 7px;" onclick="moveButtonInRow(${rIdx}, ${bIdx}, 1)">▶</button>
-                <button type="button" class="btn btn-sm btn-danger liquid-pill" style="padding:5px 8px;" onclick="removeButtonFromRow(${rIdx}, ${bIdx})">×</button>
+                <button type="button" class="btn btn-sm btn-outline" style="padding:5px 7px;" onclick="moveButtonInRow(${rIdx}, ${bIdx}, -1)">◀</button>
+                <button type="button" class="btn btn-sm btn-outline" style="padding:5px 7px;" onclick="moveButtonInRow(${rIdx}, ${bIdx}, 1)">▶</button>
+                <button type="button" class="btn btn-sm btn-danger" style="padding:5px 8px;" onclick="removeButtonFromRow(${rIdx}, ${bIdx})">×</button>
               </div>
             </div>
           `).join("")}
         </div>
       `).join("");
-      initLiquidGlassButtons(box);
     }
 
     function renderBroadcastPreview() {
@@ -1983,28 +1836,27 @@
               <span class="badge">${b.count} سؤال</span>
             </div>
             <div class="bank-actions-grid">
-              <button class="btn btn-sm btn-primary-glass liquid-pill" onclick="openBank(${b.id}, '${safeName}', ${Boolean(b.can_edit)})">
+              <button class="btn btn-sm btn-primary-glass" onclick="openBank(${b.id}, '${safeName}', ${Boolean(b.can_edit)})">
                 <svg class="ico ico-sm"><use href="#i-edit"/></svg> الأسئلة
               </button>
-              <button class="btn btn-sm btn-success liquid-pill" ${!canPublish ? "disabled" : ""} onclick="quickPublish(${b.id})">
+              <button class="btn btn-sm btn-success" ${!canPublish ? "disabled" : ""} onclick="quickPublish(${b.id})">
                 <svg class="ico ico-sm"><use href="#i-send"/></svg> إرسال
               </button>
             </div>
             <div class="bank-secondary-bar">
-              <button class="btn btn-sm btn-outline liquid-pill" onclick="openPdfStudioModal(${b.id}, '${safeName}')">
+              <button class="btn btn-sm btn-outline" onclick="openPdfStudioModal(${b.id}, '${safeName}')">
                 <svg class="ico ico-sm"><use href="#i-download"/></svg> PDF
               </button>
-              <button class="btn btn-sm btn-outline liquid-pill" onclick="openExportCsvModal(${b.id}, '${safeName}')">
+              <button class="btn btn-sm btn-outline" onclick="openExportCsvModal(${b.id}, '${safeName}')">
                 <svg class="ico ico-sm"><use href="#i-download"/></svg> CSV
               </button>
-              <button class="btn btn-sm btn-danger liquid-pill" ${!b.can_delete ? "disabled" : ""} onclick="deleteBank(${b.id})">
+              <button class="btn btn-sm btn-danger" ${!b.can_delete ? "disabled" : ""} onclick="deleteBank(${b.id})">
                 <svg class="ico ico-sm"><use href="#i-trash"/></svg> حذف
               </button>
             </div>
           </div>`;
       });
 
-      initLiquidGlassButtons(list);
       syncPublishBanksSelect();
     }
 
@@ -2086,7 +1938,6 @@
       renderPdfOrderList();
       renderPdfHeadingsList();
       document.getElementById("pdfStudioModal").classList.add("open");
-      initLiquidGlassButtons(document.getElementById("pdfStudioModal"));
     }
 
     function renderPdfOrderList() {
@@ -2103,13 +1954,12 @@
             <span style="line-height:1.4;"><b>${idx + 1}.</b> ${q.question}</span>
           </div>
           <div style="display:flex; gap:4px; flex-shrink:0;">
-            <button type="button" class="btn btn-sm btn-outline liquid-pill" style="padding:3px 8px;" onclick="movePdfItem(${idx}, -1)">▲</button>
-            <button type="button" class="btn btn-sm btn-outline liquid-pill" style="padding:3px 8px;" onclick="movePdfItem(${idx}, 1)">▼</button>
+            <button type="button" class="btn btn-sm btn-outline" style="padding:3px 8px;" onclick="movePdfItem(${idx}, -1)">▲</button>
+            <button type="button" class="btn btn-sm btn-outline" style="padding:3px 8px;" onclick="movePdfItem(${idx}, 1)">▼</button>
           </div>
         </div>
       `).join("");
       updatePdfSelBadge();
-      initLiquidGlassButtons(box);
     }
 
     function togglePdfItem(idx, checked) {
@@ -2166,12 +2016,11 @@
         return;
       }
       box.innerHTML = pdfCustomHeadings.map((h, i) => `
-        <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:6px 10px; border-radius:10px; margin-top:6px; font-size:0.8rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.025); padding:6px 10px; border-radius:10px; margin-top:6px; font-size:0.8rem;">
           <span><b>${h.text}</b> <small style="color:var(--hint);">(${h.placement})</small></span>
-          <button type="button" class="btn btn-sm btn-danger liquid-pill" style="padding:3px 9px;" onclick="removeCustomPdfHeading(${i})">حذف</button>
+          <button type="button" class="btn btn-sm btn-danger" style="padding:3px 9px;" onclick="removeCustomPdfHeading(${i})">حذف</button>
         </div>
       `).join("");
-      initLiquidGlassButtons(box);
     }
 
     async function generateAndSendBothPdfs() {
@@ -2245,7 +2094,6 @@
 
       renderExportQuestionsList();
       document.getElementById("exportCsvModal").classList.add("open");
-      initLiquidGlassButtons(document.getElementById("exportCsvModal"));
     }
 
     function toggleExportScope() {
@@ -2395,33 +2243,31 @@
         const hasFlag = (q.explanation || "").includes("مراجعة مطلوبة");
         const optsHtml = opts.map((o, i) => `<div class="opt-item ${i === q.correct_idx ? 'correct' : ''}">${i + 1}. ${o}</div>`).join("");
         list.innerHTML += `
-          <div class="card" id="q-card-${q.id}" style="${hasFlag ? 'border-color: rgba(251, 191, 36, 0.35);' : ''}">
+          <div class="card" id="q-card-${q.id}" style="${hasFlag ? 'border-color: rgba(252, 211, 77, 0.35);' : ''}">
             <div style="margin-bottom:8px; font-weight:600; line-height:1.45;">${idx + 1}. ${q.question}</div>
             ${optsHtml}
-            ${q.explanation ? `<div style="font-size:0.8rem; color:${hasFlag ? '#fbbf24' : 'var(--hint)'}; margin-top:6px;">شرح / تنبيه: ${q.explanation}</div>` : ""}
+            ${q.explanation ? `<div style="font-size:0.8rem; color:${hasFlag ? '#fcd34d' : 'var(--hint)'}; margin-top:6px;">شرح / تنبيه: ${q.explanation}</div>` : ""}
             <div class="row-actions">
-              <button class="btn btn-sm btn-primary-glass liquid-pill" ${!canEdit ? "disabled" : ""} onclick="openQuestionModal(${q.id})">
+              <button class="btn btn-sm btn-primary-glass" ${!canEdit ? "disabled" : ""} onclick="openQuestionModal(${q.id})">
                 <svg class="ico ico-sm"><use href="#i-edit"/></svg> تعديل
               </button>
-              <button class="btn btn-sm btn-outline liquid-pill" ${!canEdit || !hasAnyTargetBank ? "disabled" : ""} onclick="openTransferModal(${q.id}, 'move')">
+              <button class="btn btn-sm btn-outline" ${!canEdit || !hasAnyTargetBank ? "disabled" : ""} onclick="openTransferModal(${q.id}, 'move')">
                 <svg class="ico ico-sm"><use href="#i-move"/></svg> نقل
               </button>
-              <button class="btn btn-sm btn-outline liquid-pill" ${!hasAnyTargetBank ? "disabled" : ""} onclick="openTransferModal(${q.id}, 'copy')">
+              <button class="btn btn-sm btn-outline" ${!hasAnyTargetBank ? "disabled" : ""} onclick="openTransferModal(${q.id}, 'copy')">
                 <svg class="ico ico-sm"><use href="#i-copy"/></svg> نسخ
               </button>
-              <button class="btn btn-sm btn-danger liquid-pill" ${!canDel ? "disabled" : ""} onclick="deleteQuestion(${q.id})">
+              <button class="btn btn-sm btn-danger" ${!canDel ? "disabled" : ""} onclick="deleteQuestion(${q.id})">
                 <svg class="ico ico-sm"><use href="#i-trash"/></svg> حذف
               </button>
             </div>
           </div>`;
       });
-      initLiquidGlassButtons(list);
     }
 
     function openAppendCsvModal() {
       document.getElementById("appendCsvFile").value = "";
       document.getElementById("appendCsvModal").classList.add("open");
-      initLiquidGlassButtons(document.getElementById("appendCsvModal"));
     }
 
     async function submitAppendCsv() {
@@ -2457,13 +2303,12 @@
         row.innerHTML = `
           <span class="dyn-opt-badge">${idx + 1}</span>
           <input type="text" class="dyn-opt-input" placeholder="نص الخيار ${idx + 1}" value="${String(val || "").replace(/"/g, "&quot;")}" oninput="syncCorrectSelectOptions()" />
-          ${safeValues.length > 2 ? `<button type="button" class="btn btn-sm btn-danger liquid-pill" onclick="removeOptionField(${idx})">حذف</button>` : ""}
+          ${safeValues.length > 2 ? `<button type="button" class="btn btn-sm btn-danger" onclick="removeOptionField(${idx})">حذف</button>` : ""}
         `;
         container.appendChild(row);
       });
       document.getElementById("btnAddOptField").disabled = safeValues.length >= 10;
       syncCorrectSelectOptions(selectedCorrect);
-      initLiquidGlassButtons(container);
     }
 
     function getCurrentEditorOptions() {
@@ -2514,7 +2359,6 @@
         renderDynamicOptionsEditor(["", "", "", ""], 0);
       }
       document.getElementById("qModal").classList.add("open");
-      initLiquidGlassButtons(document.getElementById("qModal"));
     }
 
     async function saveQuestion() {
@@ -2583,7 +2427,6 @@
       sel.innerHTML = targets.map(b => `<option value="${b.id}">${b.name}</option>`).join("");
       if (!sel.innerHTML) return alert("لا يوجد بنك متاح للعملية بصلاحياتك الحالية.");
       document.getElementById("transferModal").classList.add("open");
-      initLiquidGlassButtons(document.getElementById("transferModal"));
     }
 
     async function confirmTransferQuestion() {
@@ -2689,10 +2532,9 @@
               <strong>${c.title}</strong><br>
               <small style="color:var(--hint);">وجهة محفوظة${topicLabel}</small>
             </div>
-            <button class="btn btn-sm btn-danger liquid-pill" ${!canDel ? "disabled" : ""} onclick="deleteCommunity(${c.id})">حذف</button>
+            <button class="btn btn-sm btn-danger" ${!canDel ? "disabled" : ""} onclick="deleteCommunity(${c.id})">حذف</button>
           </div>`;
       });
-      initLiquidGlassButtons(list);
       syncBroadcastCommSelect();
     }
 
@@ -2914,8 +2756,8 @@
               <small style="color:var(--hint);">ID: ${a.user_id}</small>
             </div>
             <div style="display:flex; gap:6px;">
-              <button class="btn btn-sm btn-outline liquid-pill" onclick="editAdminForm(${a.user_id})">الصلاحيات</button>
-              ${a.is_owner ? '<span class="badge badge-owner">المالك</span>' : `<button class="btn btn-sm btn-danger liquid-pill" onclick="removeAdmin(${a.user_id})">إزالة</button>`}
+              <button class="btn btn-sm btn-outline" onclick="editAdminForm(${a.user_id})">الصلاحيات</button>
+              ${a.is_owner ? '<span class="badge badge-owner">المالك</span>' : `<button class="btn btn-sm btn-danger" onclick="removeAdmin(${a.user_id})">إزالة</button>`}
             </div>
           </div>
           <div class="perm-pills">
@@ -2927,7 +2769,6 @@
           </div>
         </div>
       `).join("");
-      initLiquidGlassButtons(list);
     }
 
     function editAdminForm(userId) {
@@ -3005,20 +2846,19 @@
       list.innerHTML = logs.map(item => `
         <div class="log-item">
           <div class="log-meta">
-            <span><strong>${item.actor_name}</strong> • <span style="color:#34d399;">${item.actor_tag}</span></span>
+            <span><strong>${item.actor_name}</strong> • <span style="color:#6ee7b7;">${item.actor_tag}</span></span>
             <span>${formatLogDate(item.created_at)}</span>
           </div>
           <div class="log-desc">${item.description}</div>
           ${item.can_undo ? `
             <div class="log-actions">
-              <button class="btn btn-sm btn-outline liquid-pill" onclick="undoLogItem(${item.id})">
+              <button class="btn btn-sm btn-outline" onclick="undoLogItem(${item.id})">
                 <svg class="ico ico-sm"><use href="#i-undo"/></svg> تراجع واستعادة
               </button>
             </div>
           ` : (item.undone ? `<div style="font-size:0.74rem; color:var(--hint); margin-top:4px;">تم التراجع عن هذه العملية</div>` : "")}
         </div>
       `).join("");
-      initLiquidGlassButtons(list);
     }
 
     async function undoLogItem(logId) {
