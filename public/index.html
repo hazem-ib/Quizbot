@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>منظومة إدارة الاختبارات</title>
+  <title>منظومة إدارة الاختبارات والنشر</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     :root {
@@ -118,7 +118,7 @@
     }
     .nav-item {
       flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
-      color: var(--hint); font-size: 0.68rem; cursor: pointer; padding: 4px 2px; transition: color 0.15s;
+      color: var(--hint); font-size: 0.66rem; cursor: pointer; padding: 4px 2px; transition: color 0.15s;
     }
     .nav-item.active { color: #60a5fa; font-weight: 700; }
 
@@ -159,6 +159,66 @@
     .log-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 0.75rem; color: var(--hint); }
     .log-desc { font-size: 0.85rem; line-height: 1.45; }
     .log-actions { margin-top: 7px; display: flex; gap: 8px; align-items: center; }
+
+    .studio-toolbar {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      background: var(--bg); border: 1px solid var(--card-border);
+      border-radius: 12px; padding: 8px; margin-bottom: 10px;
+    }
+    .fmt-btn {
+      padding: 5px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12);
+      background: var(--sec-bg); color: var(--text); font-size: 0.78rem; font-weight: 600;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+    }
+    .fmt-btn:hover { border-color: var(--btn); color: #60a5fa; }
+
+    .grid-row-card {
+      background: var(--bg); border: 1px solid var(--card-border);
+      border-radius: 12px; padding: 10px; margin-bottom: 10px;
+    }
+    .grid-row-head {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 8px; font-size: 0.78rem; color: var(--hint);
+    }
+    .grid-btn-slot {
+      display: grid; grid-template-columns: 1fr 1.2fr auto; gap: 6px;
+      align-items: center; margin-bottom: 7px;
+    }
+    .grid-btn-slot input { margin-bottom: 0; padding: 8px 10px; font-size: 0.82rem; }
+
+    .tg-preview-frame {
+      background: #0b1324; border: 1px solid rgba(59, 130, 246, 0.25);
+      border-radius: 16px; padding: 14px; margin-bottom: 12px;
+    }
+    .tg-preview-label {
+      font-size: 0.72rem; color: #93c5fd; margin-bottom: 8px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .tg-bubble {
+      background: #17243b; border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px; padding: 12px 14px; font-size: 0.88rem;
+      line-height: 1.6; color: #f8fafc; white-space: pre-wrap; word-break: break-word;
+    }
+    .tg-bubble blockquote {
+      margin: 6px 0; padding: 4px 10px;
+      border-right: 3px solid #38bdf8; background: rgba(56, 189, 248, 0.08);
+      border-radius: 0 8px 8px 0; color: #e2e8f0;
+    }
+    .tg-bubble a { color: #60a5fa; text-decoration: underline; }
+    .tg-bubble code {
+      background: rgba(255,255,255,0.08); padding: 1px 5px;
+      border-radius: 6px; font-family: monospace; font-size: 0.82rem;
+    }
+    .tg-kb-preview { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .tg-kb-row { display: flex; gap: 6px; }
+    .tg-kb-pill {
+      flex: 1; background: rgba(30, 48, 78, 0.92);
+      border: 1px solid rgba(96, 165, 250, 0.22);
+      color: #e2e8f0; border-radius: 10px; padding: 8px 10px;
+      font-size: 0.8rem; font-weight: 600;
+      display: flex; align-items: center; justify-content: space-between; gap: 6px;
+      text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
   </style>
 </head>
 <body>
@@ -212,6 +272,21 @@
       </symbol>
       <symbol id="i-back" viewBox="0 0 24 24">
         <path d="M19 12H5m0 0 6-6m-6 6 6 6"/>
+      </symbol>
+      <symbol id="i-broadcast" viewBox="0 0 24 24">
+        <path d="M4 11a8 8 0 0 1 16 0M7 11a5 5 0 0 1 10 0M12 11v8m-3 0h6"/>
+      </symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24">
+        <path d="m12 2 10 6-10 6L2 8l10-6zM2 14l10 6 10-6M2 18l10 6 10-6"/>
+      </symbol>
+      <symbol id="i-eye" viewBox="0 0 24 24">
+        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/>
+      </symbol>
+      <symbol id="i-link" viewBox="0 0 24 24">
+        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+      </symbol>
+      <symbol id="i-save" viewBox="0 0 24 24">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>
       </symbol>
     </defs>
   </svg>
@@ -338,6 +413,112 @@
         </div>
       </div>
       <div id="communitiesList"></div>
+    </div>
+
+    <div id="tab-broadcast" class="tab">
+      <div class="card">
+        <h3><svg class="ico"><use href="#i-layers"/></svg> مكتبة التيمبلتس الجاهزة</h3>
+        <div style="display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end; margin-bottom:10px;">
+          <div>
+            <label>اختيار تيمبلت محفوظ:</label>
+            <select id="tplSelect" onchange="onTemplateSelected()">
+              <option value="">-- رسالة حرة (بدون تيمبلت) --</option>
+            </select>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline" style="margin-bottom:11px;" onclick="clearBroadcastDraft()">
+            جديد
+          </button>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1.2fr 0.8fr; gap:8px;">
+          <div>
+            <label>اسم التيمبلت:</label>
+            <input type="text" id="tplNameInput" placeholder="مثال: إعلان محاضرة / روابط المراجعة" />
+          </div>
+          <div>
+            <label>التصنيف:</label>
+            <input type="text" id="tplCategoryInput" placeholder="محاضرات / تنبيهات" />
+          </div>
+        </div>
+
+        <div class="row-actions" style="margin-top:4px;">
+          <button type="button" class="btn btn-sm btn-success" onclick="saveAsNewTemplate()">
+            <svg class="ico ico-sm"><use href="#i-save"/></svg> حفظ كتيمبلت جديد
+          </button>
+          <button type="button" class="btn btn-sm" id="btnUpdateTemplate" disabled onclick="updateSelectedTemplate()">
+            <svg class="ico ico-sm"><use href="#i-edit"/></svg> حفظ التعديل على التيمبلت
+          </button>
+          <button type="button" class="btn btn-sm btn-danger" id="btnDeleteTemplate" disabled onclick="deleteSelectedTemplate()">
+            <svg class="ico ico-sm"><use href="#i-trash"/></svg> حذف التيمبلت
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3><svg class="ico"><use href="#i-edit"/></svg> محرر الرسالة وتنسيقها</h3>
+        <div class="studio-toolbar">
+          <button type="button" class="fmt-btn" onclick="wrapSelection('<b>', '</b>')"><b>B</b></button>
+          <button type="button" class="fmt-btn" onclick="wrapSelection('<i>', '</i>')"><i>I</i></button>
+          <button type="button" class="fmt-btn" onclick="wrapSelection('<u>', '</u>')"><u>U</u></button>
+          <button type="button" class="fmt-btn" onclick="wrapSelection('<s>', '</s>')"><s>S</s></button>
+          <button type="button" class="fmt-btn" onclick="wrapSelection('<code>', '</code>')">Code</button>
+          <button type="button" class="fmt-btn" onclick="wrapSelection('<blockquote>', '</blockquote>')">Quote</button>
+          <button type="button" class="fmt-btn" onclick="insertTextLink()">
+            <svg class="ico ico-sm"><use href="#i-link"/></svg> رابط نصي
+          </button>
+        </div>
+        <textarea id="bcBodyInput" rows="6" placeholder="اكتب نص الرسالة المنسقة هنا..." oninput="renderBroadcastPreview()"></textarea>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <label style="margin:0; font-weight:600; color:var(--text);">
+            <svg class="ico ico-sm" style="vertical-align:middle;"><use href="#i-link"/></svg> شبكة أزرار الروابط (صفوف وأعمدة)
+          </label>
+          <button type="button" class="btn btn-sm btn-outline" onclick="addBroadcastRow()">
+            <svg class="ico ico-sm"><use href="#i-plus"/></svg> إضافة صف أزرار
+          </button>
+        </div>
+        <div id="bcButtonsGridEditor"></div>
+      </div>
+
+      <div class="card">
+        <h3><svg class="ico"><use href="#i-eye"/></svg> المعاينة المباشرة (Live Preview)</h3>
+        <div class="tg-preview-frame">
+          <div class="tg-preview-label">
+            <span>معاينة شكل الرسالة والأزرار في تيليجرام</span>
+            <span id="bcCharCounter">0 / 4000</span>
+          </div>
+          <div id="bcPreviewBubble" class="tg-bubble"></div>
+          <div id="bcPreviewKeyboard" class="tg-kb-preview"></div>
+        </div>
+
+        <label>الوجهة المستهدفة:</label>
+        <select id="bcTargetType" onchange="toggleBcTarget()">
+          <option value="saved_comm">وجهة محفوظة (مجموعة / قناة / توبيك)</option>
+          <option value="private">المحادثة الخاصة (اختبار سريع)</option>
+        </select>
+
+        <div id="bcSavedCommBox">
+          <label>اختر الوجهة:</label>
+          <select id="bcCommSelect"></select>
+        </div>
+
+        <div class="switch-row" style="margin-top:8px;">
+          <span>إخفاء معاينة الروابط داخل النص</span>
+          <input type="checkbox" id="bcDisablePreview" checked onchange="renderBroadcastPreview()" />
+        </div>
+        <div class="switch-row">
+          <span>إرسال صامت (بدون إشعار للأعضاء)</span>
+          <input type="checkbox" id="bcSilent" />
+        </div>
+        <div class="switch-row">
+          <span>تثبيت الرسالة في الوجهة بعد الإرسال</span>
+          <input type="checkbox" id="bcPin" />
+        </div>
+
+        <button type="button" class="btn btn-success" id="btnSendBroadcast" onclick="sendBroadcastMessage()">
+          <svg class="ico"><use href="#i-send"/></svg> إرسال الرسالة الآن
+        </button>
+      </div>
     </div>
 
     <div id="tab-publish" class="tab">
@@ -500,8 +681,11 @@
       <div class="nav-item" id="nav-communities" onclick="switchTab('communities')">
         <svg class="ico"><use href="#i-globe"/></svg><span>الوجهات</span>
       </div>
+      <div class="nav-item" id="nav-broadcast" onclick="switchTab('broadcast')">
+        <svg class="ico"><use href="#i-broadcast"/></svg><span>النشر</span>
+      </div>
       <div class="nav-item" id="nav-publish" onclick="switchTab('publish')">
-        <svg class="ico"><use href="#i-send"/></svg><span>الإرسال</span>
+        <svg class="ico"><use href="#i-send"/></svg><span>الاختبار</span>
       </div>
       <div class="nav-item" id="nav-admins" style="display:none;" onclick="switchTab('admins')">
         <svg class="ico"><use href="#i-shield"/></svg><span>المشرفون</span>
@@ -777,6 +961,8 @@
     let banksCache = [];
     let commsCache = [];
     let adminsCache = [];
+    let templatesCache = [];
+    let bcRows = [{ text: "", url: "" }];
     let currentBankId = null;
     let currentBankName = "";
     let questionsCache = [];
@@ -799,6 +985,57 @@
         return q.options;
       }
       return [q.opt1, q.opt2, q.opt3, q.opt4].filter(x => x && String(x).trim() !== "" && String(x).trim() !== "-");
+    }
+
+    function escapeHtmlText(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function sanitizePreviewHtml(rawHtml) {
+      const container = document.createElement("div");
+      container.innerHTML = String(rawHtml || "");
+      const allowedTags = new Set(["B", "STRONG", "I", "EM", "U", "INS", "S", "STRIKE", "DEL", "CODE", "PRE", "BLOCKQUOTE", "A", "BR"]);
+
+      function walk(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          return document.createTextNode(node.textContent || "");
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+          return document.createDocumentFragment();
+        }
+        const tag = node.tagName.toUpperCase();
+        const frag = document.createDocumentFragment();
+
+        if (!allowedTags.has(tag)) {
+          Array.from(node.childNodes).forEach(ch => frag.appendChild(walk(ch)));
+          return frag;
+        }
+
+        if (tag === "BR") {
+          return document.createElement("br");
+        }
+
+        const el = document.createElement(tag.toLowerCase());
+        if (tag === "A") {
+          const href = (node.getAttribute("href") || "").trim();
+          if (/^(https?:\/\/|tg:\/\/)/i.test(href)) {
+            el.setAttribute("href", href);
+            el.setAttribute("target", "_blank");
+            el.setAttribute("rel", "noopener noreferrer");
+          }
+        }
+        Array.from(node.childNodes).forEach(ch => el.appendChild(walk(ch)));
+        frag.appendChild(el);
+        return frag;
+      }
+
+      const out = document.createElement("div");
+      Array.from(container.childNodes).forEach(ch => out.appendChild(walk(ch)));
+      return out.innerHTML;
     }
 
     function renderUserIdentityCard() {
@@ -858,10 +1095,14 @@
       document.getElementById("uploadCsvBtn").disabled = !canCreate;
       document.getElementById("uploadPdfBtn").disabled = !canCreate;
 
+      const canPublish = currentActor.role === "owner" || currentActor.can_publish;
+      document.getElementById("btnSendBroadcast").disabled = !canPublish;
+
       const canMgrAdmins = currentActor.role === "owner" || currentActor.can_manage_admins;
       document.getElementById("nav-admins").style.display = canMgrAdmins ? "flex" : "none";
       document.getElementById("permManageRow").style.display = currentActor.role === "owner" ? "flex" : "none";
       document.getElementById("btnClearLogs").style.display = currentActor.role === "owner" ? "inline-flex" : "none";
+      syncTemplateActionButtons();
     }
 
     async function initApp() {
@@ -876,11 +1117,15 @@
         document.getElementById("appContainer").style.display = "block";
         applyActorUI();
 
-        const tasks = [loadBanks(), loadCommunities(), loadLogs()];
+        renderBroadcastGridEditor();
+        renderBroadcastPreview();
+
+        const tasks = [loadBanks(), loadCommunities(), loadTemplates(), loadLogs()];
         if (currentActor.role === "owner" || currentActor.can_manage_admins) {
           tasks.push(loadAdmins());
         }
         await Promise.all(tasks);
+        syncBroadcastCommSelect();
       } catch (e) {
         blockAccess(e.message);
       }
@@ -900,6 +1145,11 @@
           syncPublishBanksSelect();
         }
         await onPublishBankChange();
+      } else if (tabName === "broadcast") {
+        await Promise.all([loadCommunities(), loadTemplates()]);
+        syncBroadcastCommSelect();
+        renderBroadcastGridEditor();
+        renderBroadcastPreview();
       } else if (tabName === "banks") {
         await loadBanks();
       } else if (tabName === "communities") {
@@ -908,6 +1158,351 @@
         await loadLogs();
       } else if (tabName === "admins" && (currentActor?.role === "owner" || currentActor?.can_manage_admins)) {
         await loadAdmins();
+      }
+    }
+
+    function wrapSelection(openTag, closeTag) {
+      const ta = document.getElementById("bcBodyInput");
+      if (!ta) return;
+      const start = ta.selectionStart ?? ta.value.length;
+      const end = ta.selectionEnd ?? ta.value.length;
+      const selected = ta.value.slice(start, end) || "نص";
+      ta.value = ta.value.slice(0, start) + openTag + selected + closeTag + ta.value.slice(end);
+      ta.focus();
+      renderBroadcastPreview();
+    }
+
+    function insertTextLink() {
+      const label = prompt("نص الرابط الظاهر داخل الرسالة:");
+      if (!label || !label.trim()) return;
+      const url = prompt("عنوان الرابط (https://... أو tg://...):", "https://");
+      if (!url || !url.trim()) return;
+      wrapSelection(`<a href="${escapeHtmlText(url.trim())}">`, `</a>`);
+    }
+
+    function syncBroadcastCommSelect() {
+      const sel = document.getElementById("bcCommSelect");
+      if (!sel) return;
+      const prev = sel.value;
+      sel.innerHTML = "";
+      (commsCache || []).forEach(c => {
+        const topicTxt = c.topic_id ? ` • موضوع #${c.topic_id}` : "";
+        const opt = document.createElement("option");
+        opt.value = String(c.id);
+        opt.textContent = `${c.title}${topicTxt}`;
+        sel.appendChild(opt);
+      });
+      if (prev && Array.from(sel.options).some(o => o.value === prev)) {
+        sel.value = prev;
+      }
+    }
+
+    function toggleBcTarget() {
+      const mode = document.getElementById("bcTargetType").value;
+      document.getElementById("bcSavedCommBox").style.display = mode === "saved_comm" ? "block" : "none";
+    }
+
+    function addBroadcastRow() {
+      if (bcRows.length >= 12) return alert("الحد الأقصى هو 12 صف أزرار.");
+      bcRows.push([{ text: "", url: "" }]);
+      renderBroadcastGridEditor();
+      renderBroadcastPreview();
+    }
+
+    function addButtonToRow(rIdx) {
+      if (!bcRows[rIdx]) return;
+      if (bcRows[rIdx].length >= 4) return alert("الحد الأقصى هو 4 أزرار في الصف الواحد.");
+      bcRows[rIdx].push({ text: "", url: "" });
+      renderBroadcastGridEditor();
+      renderBroadcastPreview();
+    }
+
+    function removeButtonFromRow(rIdx, bIdx) {
+      if (!bcRows[rIdx]) return;
+      bcRows[rIdx].splice(bIdx, 1);
+      if (bcRows[rIdx].length === 0) {
+        bcRows.splice(rIdx, 1);
+      }
+      renderBroadcastGridEditor();
+      renderBroadcastPreview();
+    }
+
+    function moveBroadcastRow(rIdx, delta) {
+      const target = rIdx + delta;
+      if (target < 0 || target >= bcRows.length) return;
+      const tmp = bcRows[rIdx];
+      bcRows[rIdx] = bcRows[target];
+      bcRows[target] = tmp;
+      renderBroadcastGridEditor();
+      renderBroadcastPreview();
+    }
+
+    function moveButtonInRow(rIdx, bIdx, delta) {
+      const row = bcRows[rIdx];
+      if (!row) return;
+      const target = bIdx + delta;
+      if (target < 0 || target >= row.length) return;
+      const tmp = row[bIdx];
+      row[bIdx] = row[target];
+      row[target] = tmp;
+      renderBroadcastGridEditor();
+      renderBroadcastPreview();
+    }
+
+    function onBroadcastBtnInput(rIdx, bIdx, field, val) {
+      if (!bcRows[rIdx] || !bcRows[rIdx][bIdx]) return;
+      bcRows[rIdx][bIdx][field] = val;
+      renderBroadcastPreview();
+    }
+
+    function renderBroadcastGridEditor() {
+      const box = document.getElementById("bcButtonsGridEditor");
+      if (!box) return;
+      if (!bcRows.length) {
+        box.innerHTML = `<div style="font-size:0.8rem; color:var(--hint); padding:6px 0;">لا توجد أزرار روابط حالياً. أضف صفاً إذا رغبت.</div>`;
+        return;
+      }
+
+      box.innerHTML = bcRows.map((row, rIdx) => `
+        <div class="grid-row-card">
+          <div class="grid-row-head">
+            <span>صف #${rIdx + 1} (${row.length} زر)</span>
+            <div style="display:flex; gap:4px;">
+              <button type="button" class="btn btn-sm btn-outline" style="padding:2px 7px;" onclick="addButtonToRow(${rIdx})">+ زر</button>
+              <button type="button" class="btn btn-sm btn-outline" style="padding:2px 7px;" onclick="moveBroadcastRow(${rIdx}, -1)">▲</button>
+              <button type="button" class="btn btn-sm btn-outline" style="padding:2px 7px;" onclick="moveBroadcastRow(${rIdx}, 1)">▼</button>
+            </div>
+          </div>
+          ${row.map((btn, bIdx) => `
+            <div class="grid-btn-slot">
+              <input type="text" placeholder="نص الزر" value="${escapeHtmlText(btn.text)}" oninput="onBroadcastBtnInput(${rIdx}, ${bIdx}, 'text', this.value)" />
+              <input type="url" placeholder="https://..." value="${escapeHtmlText(btn.url)}" oninput="onBroadcastBtnInput(${rIdx}, ${bIdx}, 'url', this.value)" />
+              <div style="display:flex; gap:3px;">
+                <button type="button" class="btn btn-sm btn-outline" style="padding:5px 6px;" onclick="moveButtonInRow(${rIdx}, ${bIdx}, -1)">◀</button>
+                <button type="button" class="btn btn-sm btn-outline" style="padding:5px 6px;" onclick="moveButtonInRow(${rIdx}, ${bIdx}, 1)">▶</button>
+                <button type="button" class="btn btn-sm btn-danger" style="padding:5px 7px;" onclick="removeButtonFromRow(${rIdx}, ${bIdx})">×</button>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      `).join("");
+    }
+
+    function renderBroadcastPreview() {
+      const bodyEl = document.getElementById("bcBodyInput");
+      const bubble = document.getElementById("bcPreviewBubble");
+      const kbBox = document.getElementById("bcPreviewKeyboard");
+      const counter = document.getElementById("bcCharCounter");
+      if (!bodyEl || !bubble || !kbBox) return;
+
+      const raw = bodyEl.value || "";
+      if (counter) {
+        counter.innerText = `${raw.length} / 4000`;
+        counter.style.color = raw.length > 4000 ? "#f87171" : "#93c5fd";
+      }
+
+      if (!raw.trim()) {
+        bubble.innerHTML = `<span style="color:var(--hint);">ستظهر معاينة الرسالة هنا أثناء الكتابة...</span>`;
+      } else {
+        bubble.innerHTML = sanitizePreviewHtml(raw.replace(/\n/g, "<br>"));
+      }
+
+      const rowsHtml = (bcRows || []).map(row => {
+        const activeBtns = (row || []).filter(b => (b.text || "").trim() || (b.url || "").trim());
+        if (!activeBtns.length) return "";
+        const pills = activeBtns.map(b => {
+          const t = escapeHtmlText((b.text || "").trim() || "زر بدون نص");
+          return `<span class="tg-kb-pill"><span>${t}</span><svg class="ico ico-sm" style="opacity:0.75;"><use href="#i-link"/></svg></span>`;
+        }).join("");
+        return `<div class="tg-kb-row">${pills}</div>`;
+      }).filter(Boolean).join("");
+
+      kbBox.innerHTML = rowsHtml;
+    }
+
+    async function loadTemplates() {
+      templatesCache = await api("/api/templates");
+      const sel = document.getElementById("tplSelect");
+      if (!sel) return;
+      const currentVal = sel.value;
+      sel.innerHTML = `<option value="">-- رسالة حرة (بدون تيمبلت) --</option>`;
+      templatesCache.forEach(t => {
+        const opt = document.createElement("option");
+        opt.value = String(t.id);
+        opt.textContent = `[${t.category || "عام"}] ${t.name}`;
+        sel.appendChild(opt);
+      });
+      if (currentVal && templatesCache.some(t => String(t.id) === String(currentVal))) {
+        sel.value = String(currentVal);
+      }
+      syncTemplateActionButtons();
+    }
+
+    function syncTemplateActionButtons() {
+      const selId = document.getElementById("tplSelect")?.value;
+      const canPublish = currentActor?.role === "owner" || currentActor?.can_publish;
+      const canDel = currentActor?.role === "owner" || currentActor?.can_delete;
+      if (document.getElementById("btnUpdateTemplate")) {
+        document.getElementById("btnUpdateTemplate").disabled = !selId || !canPublish;
+      }
+      if (document.getElementById("btnDeleteTemplate")) {
+        document.getElementById("btnDeleteTemplate").disabled = !selId || !canDel;
+      }
+    }
+
+    function onTemplateSelected() {
+      const selId = document.getElementById("tplSelect").value;
+      syncTemplateActionButtons();
+      if (!selId) return;
+      const tpl = templatesCache.find(t => String(t.id) === String(selId));
+      if (!tpl) return;
+
+      document.getElementById("tplNameInput").value = tpl.name || "";
+      document.getElementById("tplCategoryInput").value = tpl.category || "عام";
+      document.getElementById("bcBodyInput").value = tpl.body_html || "";
+      document.getElementById("bcDisablePreview").checked = Boolean(tpl.disable_preview);
+
+      const loadedBtns = Array.isArray(tpl.buttons) ? tpl.buttons : [];
+      bcRows = loadedBtns.length
+        ? loadedBtns.map(r => Array.isArray(r) ? r.map(b => ({ text: b.text || "", url: b.url || "" })) : [])
+        : [[{ text: "", url: "" }]];
+
+      renderBroadcastGridEditor();
+      renderBroadcastPreview();
+    }
+
+    function clearBroadcastDraft() {
+      document.getElementById("tplSelect").value = "";
+      document.getElementById("tplNameInput").value = "";
+      document.getElementById("tplCategoryInput").value = "عام";
+      document.getElementById("bcBodyInput").value = "";
+      document.getElementById("bcDisablePreview").checked = true;
+      document.getElementById("bcSilent").checked = false;
+      document.getElementById("bcPin").checked = false;
+      bcRows = [[{ text: "", url: "" }]];
+      syncTemplateActionButtons();
+      renderBroadcastGridEditor();
+      renderBroadcastPreview();
+    }
+
+    function collectCleanedButtons() {
+      const cleaned = [];
+      for (const row of (bcRows || [])) {
+        const validInRow = [];
+        for (const btn of (row || [])) {
+          const text = (btn.text || "").trim();
+          const url = (btn.url || "").trim();
+          if (!text && !url) continue;
+          if (!text || !url) {
+            throw new Error("يرجى إكمال نص الزر والرابط معاً لأي زر مضاف.");
+          }
+          if (!/^(https?:\/\/|tg:\/\/)/i.test(url)) {
+            throw new Error(`الرابط «${url}» يجب أن يبدأ بـ https:// أو http:// أو tg://`);
+          }
+          validInRow.push({ text, url });
+        }
+        if (validInRow.length) cleaned.push(validInRow);
+      }
+      return cleaned;
+    }
+
+    async function saveAsNewTemplate() {
+      const name = document.getElementById("tplNameInput").value.trim();
+      const category = document.getElementById("tplCategoryInput").value.trim() || "عام";
+      const body_html = document.getElementById("bcBodyInput").value;
+      const disable_preview = document.getElementById("bcDisablePreview").checked;
+
+      if (!name) return alert("يرجى إدخال اسم للتيمبلت الجديد.");
+      let buttons = [];
+      try {
+        buttons = collectCleanedButtons();
+      } catch (e) {
+        return alert(e.message);
+      }
+
+      const created = await api("/api/templates", {
+        method: "POST",
+        body: JSON.stringify({ name, category, body_html, buttons, disable_preview })
+      });
+      await loadTemplates();
+      if (created && created.id) {
+        document.getElementById("tplSelect").value = String(created.id);
+        syncTemplateActionButtons();
+      }
+      alert("تم حفظ التيمبلت الجديد بنجاح.");
+    }
+
+    async function updateSelectedTemplate() {
+      const tplId = parseInt(document.getElementById("tplSelect").value);
+      if (!tplId) return;
+      const name = document.getElementById("tplNameInput").value.trim();
+      const category = document.getElementById("tplCategoryInput").value.trim() || "عام";
+      const body_html = document.getElementById("bcBodyInput").value;
+      const disable_preview = document.getElementById("bcDisablePreview").checked;
+
+      if (!name) return alert("يرجى إدخال اسم التيمبلت.");
+      let buttons = [];
+      try {
+        buttons = collectCleanedButtons();
+      } catch (e) {
+        return alert(e.message);
+      }
+
+      await api(`/api/templates/${tplId}`, {
+        method: "PUT",
+        body: JSON.stringify({ name, category, body_html, buttons, disable_preview })
+      });
+      await loadTemplates();
+      alert("تم تحديث التيمبلت بنجاح.");
+    }
+
+    async function deleteSelectedTemplate() {
+      const tplId = parseInt(document.getElementById("tplSelect").value);
+      if (!tplId) return;
+      if (!confirm("حذف هذا التيمبلت نهائياً؟")) return;
+      await api(`/api/templates/${tplId}`, { method: "DELETE" });
+      clearBroadcastDraft();
+      await loadTemplates();
+    }
+
+    async function sendBroadcastMessage() {
+      const body_html = document.getElementById("bcBodyInput").value.trim();
+      if (!body_html) return alert("يرجى كتابة نص الرسالة قبل الإرسال.");
+
+      let buttons = [];
+      try {
+        buttons = collectCleanedButtons();
+      } catch (e) {
+        return alert(e.message);
+      }
+
+      const target_type = document.getElementById("bcTargetType").value;
+      const comm_id = target_type === "saved_comm" ? parseInt(document.getElementById("bcCommSelect").value) : null;
+      if (target_type === "saved_comm" && !comm_id) {
+        return alert("يرجى إضافة واختيار وجهة محفوظة أولاً من تبويب الوجهات.");
+      }
+
+      const selTpl = templatesCache.find(t => String(t.id) === String(document.getElementById("tplSelect").value));
+      const btn = document.getElementById("btnSendBroadcast");
+      btn.disabled = true;
+      try {
+        const res = await api("/api/broadcast_message", {
+          method: "POST",
+          body: JSON.stringify({
+            target_type,
+            comm_id,
+            body_html,
+            buttons,
+            disable_preview: document.getElementById("bcDisablePreview").checked,
+            silent: document.getElementById("bcSilent").checked,
+            pin_message: document.getElementById("bcPin").checked,
+            template_name: selTpl ? selTpl.name : null
+          })
+        });
+        alert(`تم إرسال الرسالة إلى «${res.target_label}» بنجاح.`);
+        await loadLogs();
+      } finally {
+        btn.disabled = false;
       }
     }
 
@@ -1634,6 +2229,7 @@
 
       if (commsCache.length === 0) {
         list.innerHTML = `<div class="card" style="text-align:center; color:var(--hint);">لا توجد وجهات محفوظة بعد.</div>`;
+        syncBroadcastCommSelect();
         return;
       }
 
@@ -1650,6 +2246,7 @@
             <button class="btn btn-sm btn-danger" ${!canDel ? "disabled" : ""} onclick="deleteCommunity(${c.id})">حذف</button>
           </div>`;
       });
+      syncBroadcastCommSelect();
     }
 
     async function testCommunity() {
