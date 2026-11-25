@@ -22,13 +22,13 @@
   </script>
   <style>
     :root {
-      --bg: #07080a;
-      --surface: rgba(16, 18, 24, 0.84);
-      --surface-elevated: rgba(21, 24, 32, 0.9);
-      --hairline: rgba(255, 255, 255, 0.075);
-      --specular: rgba(255, 255, 255, 0.14);
+      --bg: #08090c;
+      --surface: rgba(18, 20, 26, 0.78);
+      --surface-elevated: rgba(24, 27, 35, 0.86);
+      --hairline: rgba(255, 255, 255, 0.08);
+      --specular: rgba(255, 255, 255, 0.16);
       --text: #eef1f6;
-      --hint: #8b94a6;
+      --hint: #8f98ab;
       --accent: #93c5fd;
       --success: #6ee7b7;
       --danger: #fca5a5;
@@ -45,10 +45,10 @@
 
     body {
       margin: 0;
-      padding: 14px 14px 108px;
+      padding: 14px 14px 106px;
       background:
-        radial-gradient(640px circle at 82% -10%, rgba(255, 255, 255, 0.035), transparent 60%),
-        radial-gradient(560px circle at 14% 26%, rgba(255, 255, 255, 0.025), transparent 65%),
+        radial-gradient(650px circle at 80% -8%, rgba(255, 255, 255, 0.045), transparent 60%),
+        radial-gradient(580px circle at 15% 25%, rgba(255, 255, 255, 0.03), transparent 65%),
         var(--bg);
       color: var(--text);
       -webkit-font-smoothing: antialiased;
@@ -59,24 +59,21 @@
     .ico-sm { width: 15px; height: 15px; }
     .ico-lg { width: 34px; height: 34px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
-    /* Custom Apple-style Checkboxes */
+    /* Clean Checkboxes with Clear Checkmark */
     input[type="checkbox"] {
       -webkit-appearance: none;
       appearance: none;
-      width: 20px;
-      height: 20px;
-      min-width: 20px;
-      min-height: 20px;
+      width: 19px;
+      height: 19px;
+      min-width: 19px;
+      min-height: 19px;
       border-radius: 6px;
       border: 1.5px solid rgba(255, 255, 255, 0.24);
       background: rgba(255, 255, 255, 0.04);
       display: inline-grid;
       place-content: center;
       cursor: pointer;
-      transition: background-color 0.16s ease, border-color 0.16s ease, transform 0.12s ease;
-    }
-    input[type="checkbox"]:active {
-      transform: scale(0.92);
+      transition: background-color 0.14s ease, border-color 0.14s ease;
     }
     input[type="checkbox"]:checked {
       background: #e2e8f0;
@@ -84,16 +81,15 @@
     }
     input[type="checkbox"]:checked::before {
       content: "";
-      width: 11px;
-      height: 11px;
-      background-color: #0b0d12;
+      width: 10px;
+      height: 10px;
+      background-color: #090b10;
       clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
-      transform: translateY(-0.5px);
     }
 
     /* Auth Screen */
     #authScreen {
-      position: fixed; inset: 0; background: #07080a; z-index: 9999;
+      position: fixed; inset: 0; background: #08090c; z-index: 9999;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       text-align: center; padding: 24px;
     }
@@ -110,18 +106,19 @@
     /* Dark Glass Surfaces */
     .profile-header {
       display: flex; justify-content: space-between; align-items: center; gap: 10px;
-      background: rgba(16, 18, 24, 0.86);
-      backdrop-filter: blur(18px) saturate(120%);
-      -webkit-backdrop-filter: blur(18px) saturate(120%);
+      background: linear-gradient(180deg, rgba(24, 27, 35, 0.84) 0%, rgba(14, 16, 21, 0.88) 100%);
+      backdrop-filter: blur(22px) saturate(130%);
+      -webkit-backdrop-filter: blur(22px) saturate(130%);
       border: 1px solid var(--hairline);
-      box-shadow: inset 0 1px 0 var(--specular), 0 8px 22px rgba(0, 0, 0, 0.36);
+      box-shadow: inset 0 1px 0 var(--specular), 0 10px 26px rgba(0, 0, 0, 0.42);
       border-radius: 20px; padding: 12px 14px; margin-bottom: 14px;
     }
     .user-identity { display: flex; align-items: center; gap: 11px; min-width: 0; }
     .avatar-box {
       width: 44px; height: 44px; border-radius: 14px; overflow: hidden; flex-shrink: 0;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.09);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
       display: flex; align-items: center; justify-content: center; color: #e2e8f0; font-weight: 700;
     }
     .avatar-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -131,33 +128,33 @@
 
     .header-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
     .badge {
-      background: rgba(255, 255, 255, 0.05); color: #d1d5db;
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.055); color: #d1d5db;
+      border: 1px solid rgba(255, 255, 255, 0.09);
       padding: 3px 10px; border-radius: 999px; font-size: 0.71rem; font-weight: 600;
     }
     .badge-tag {
       background: rgba(255, 255, 255, 0.04); color: #a5b4fc;
-      border: 1px solid rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.08);
       padding: 3px 10px; border-radius: 999px; font-size: 0.71rem; font-weight: 600;
     }
     .badge-owner {
       background: rgba(255, 255, 255, 0.07); color: #f3f4f6;
-      border: 1px solid rgba(255, 255, 255, 0.13);
+      border: 1px solid rgba(255, 255, 255, 0.14);
     }
 
     .card {
-      background: rgba(15, 17, 23, 0.85);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
+      background: linear-gradient(180deg, rgba(21, 24, 31, 0.82) 0%, rgba(13, 15, 20, 0.86) 100%);
+      backdrop-filter: blur(18px) saturate(125%);
+      -webkit-backdrop-filter: blur(18px) saturate(125%);
       border: 1px solid var(--hairline);
-      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 8px 22px rgba(0, 0, 0, 0.35);
       border-radius: var(--radius-card); padding: 15px; margin-bottom: 12px;
     }
     .card h3 { margin: 0 0 12px; font-size: 0.98rem; font-weight: 700; display: flex; align-items: center; gap: 7px; }
 
-    /* Normal Plain Buttons (No Liquid Effect) */
+    /* Normal Plain Buttons */
     .btn {
-      background: #181b22;
+      background: #171a21;
       color: var(--text);
       border: 1px solid rgba(255, 255, 255, 0.09);
       border-radius: var(--radius-btn);
@@ -170,41 +167,41 @@
       align-items: center;
       justify-content: center;
       gap: 6px;
-      transition: background-color 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
+      transition: background-color 0.14s ease, border-color 0.14s ease;
     }
     .btn:hover:not(:disabled) {
-      background: #20242e;
+      background: #1f232d;
       border-color: rgba(255, 255, 255, 0.15);
     }
     .btn:active:not(:disabled) {
-      background: #13161c;
+      background: #12151b;
     }
     .btn:disabled { opacity: 0.36; cursor: not-allowed; }
 
     .btn-primary-glass {
       background: #1c2432;
-      border-color: rgba(147, 197, 253, 0.2);
+      border-color: rgba(147, 197, 253, 0.18);
       color: #e2ecff;
     }
     .btn-primary-glass:hover:not(:disabled) { background: #232d3f; }
 
     .btn-success {
       background: #162924;
-      border-color: rgba(110, 231, 183, 0.2);
-      color: #d1fae5;
+      border-color: rgba(110, 231, 183, 0.18);
+      color: #dcfce7;
     }
     .btn-success:hover:not(:disabled) { background: #1c342e; }
 
     .btn-outline {
-      background: #15181f;
-      border-color: rgba(255, 255, 255, 0.085);
+      background: #14171e;
+      border-color: rgba(255, 255, 255, 0.09);
       color: #d1d5db;
     }
-    .btn-outline:hover:not(:disabled) { background: #1c2029; }
+    .btn-outline:hover:not(:disabled) { background: #1b1f28; }
 
     .btn-danger {
       background: #2b1619;
-      border-color: rgba(252, 165, 165, 0.2);
+      border-color: rgba(252, 165, 165, 0.18);
       color: #fecaca;
     }
     .btn-danger:hover:not(:disabled) { background: #361b1f; }
@@ -230,9 +227,9 @@
     input, select, textarea {
       width: 100%; padding: 10px 13px; border-radius: 13px;
       border: 1px solid rgba(255, 255, 255, 0.08);
-      background: #0d0f14;
+      background: rgba(12, 14, 19, 0.78);
       color: var(--text); margin-bottom: 11px; font-size: 0.88rem; outline: none;
-      transition: border-color 0.16s;
+      transition: border-color 0.18s;
     }
     input[type="color"] {
       width: 44px; height: 32px; padding: 2px; margin-bottom: 0; border-radius: 8px; cursor: pointer;
@@ -248,7 +245,7 @@
       font-size: 0.76rem; font-weight: 700; display: flex; align-items: center; justify-content: center;
     }
 
-    /* Clear Contrast Between Dark Dock Track & Prominent Liquid Lens */
+    /* Dark Liquid Glass Floating Dock with Refraction Lens (Exact Prior Style) */
     .nav-dock-wrap {
       position: fixed;
       bottom: 12px;
@@ -263,12 +260,14 @@
       display: flex;
       align-items: center;
       padding: 4px;
-      border-radius: 25px;
-      background: rgba(8, 9, 12, 0.94);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.065);
-      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.72);
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(22, 25, 33, 0.88) 0%, rgba(12, 14, 19, 0.94) 100%);
+      backdrop-filter: blur(26px) saturate(140%);
+      -webkit-backdrop-filter: blur(26px) saturate(140%);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.16),
+        0 14px 36px rgba(0, 0, 0, 0.52);
       touch-action: pan-y;
     }
     .nav-liquid-lens {
@@ -277,34 +276,21 @@
       bottom: 4px;
       left: 4px;
       width: 64px;
-      border-radius: 21px;
+      border-radius: 20px;
       pointer-events: none;
-      background:
-        radial-gradient(110% 90% at 50% 0%, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.09) 62%, rgba(255, 255, 255, 0.04) 100%);
-      backdrop-filter: blur(22px) saturate(165%) contrast(108%);
-      -webkit-backdrop-filter: blur(22px) saturate(165%) contrast(108%);
-      border: 1px solid rgba(255, 255, 255, 0.28);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0.04) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.14);
       box-shadow:
-        inset 0 1.5px 1px rgba(255, 255, 255, 0.45),
-        inset 0 -1px 2px rgba(0, 0, 0, 0.45),
-        0 6px 18px rgba(0, 0, 0, 0.55),
-        0 0 0 1px rgba(255, 255, 255, 0.06);
+        inset 0 1px 0 rgba(255, 255, 255, 0.25),
+        0 4px 14px rgba(0, 0, 0, 0.35);
       filter: url(#lg-refraction-filter);
-      will-change: transform, width;
-      transition:
-        transform 520ms cubic-bezier(0.19, 1.24, 0.26, 1),
-        width 440ms cubic-bezier(0.22, 1.15, 0.32, 1),
-        box-shadow 260ms ease;
+      transition: transform 390ms cubic-bezier(0.22, 1.32, 0.36, 1), width 320ms cubic-bezier(0.22, 1.32, 0.36, 1);
       z-index: 1;
     }
     .nav-liquid-lens.is-dragging {
       transition: none;
-      background:
-        radial-gradient(110% 90% at 50% 0%, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.13) 65%, rgba(255, 255, 255, 0.06) 100%);
-      border-color: rgba(255, 255, 255, 0.38);
-      box-shadow:
-        inset 0 1.5px 1px rgba(255, 255, 255, 0.55),
-        0 10px 24px rgba(0, 0, 0, 0.65);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.17) 0%, rgba(255, 255, 255, 0.06) 100%);
+      border-color: rgba(255, 255, 255, 0.22);
     }
     .nav-item {
       position: relative;
@@ -319,17 +305,13 @@
       font-size: 0.65rem;
       cursor: pointer;
       padding: 6px 2px;
-      border-radius: 21px;
+      border-radius: 20px;
       user-select: none;
-      transition: color 0.2s ease, transform 0.26s cubic-bezier(0.22, 1.2, 0.36, 1);
-    }
-    .nav-item:active {
-      transform: scale(0.94);
+      transition: color 0.18s ease, transform 0.2s ease;
     }
     .nav-item.active {
       color: #ffffff;
       font-weight: 700;
-      text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
     }
 
     .tab { display: none; }
@@ -338,19 +320,19 @@
     .opt-item { padding: 8px 11px; border-radius: 11px; background: rgba(255, 255, 255, 0.025); margin-bottom: 6px; font-size: 0.84rem; border: 1px solid transparent; }
     .opt-item.correct { border-color: rgba(110, 231, 183, 0.25); background: rgba(110, 231, 183, 0.07); color: #a7f3d0; font-weight: 600; }
 
-    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.76); backdrop-filter: blur(10px); z-index: 200; align-items: center; justify-content: center; padding: 14px; }
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.74); backdrop-filter: blur(12px); z-index: 200; align-items: center; justify-content: center; padding: 14px; }
     .modal.open { display: flex; }
-    .modal-content { background: #12151c; border: 1px solid var(--hairline); box-shadow: 0 16px 40px rgba(0,0,0,0.6); border-radius: 20px; padding: 18px; width: 100%; max-width: 640px; max-height: 88vh; overflow-y: auto; }
+    .modal-content { background: rgba(18, 21, 28, 0.95); backdrop-filter: blur(22px); border: 1px solid var(--hairline); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14); border-radius: 20px; padding: 18px; width: 100%; max-width: 640px; max-height: 88vh; overflow-y: auto; }
 
     .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 11px; font-size: 0.85rem; }
-    .hint-box { background: rgba(255, 255, 255, 0.03); border-right: 3px solid rgba(255, 255, 255, 0.22); padding: 10px 12px; border-radius: 12px; font-size: 0.8rem; margin-bottom: 13px; color: #cbd5e1; line-height: 1.55; }
+    .hint-box { background: rgba(255, 255, 255, 0.03); border-right: 3px solid rgba(255, 255, 255, 0.24); padding: 10px 12px; border-radius: 12px; font-size: 0.8rem; margin-bottom: 13px; color: #cbd5e1; line-height: 1.55; }
     .warn-box { background: rgba(252, 211, 77, 0.07); border-right: 3px solid rgba(252, 211, 77, 0.45); padding: 11px 13px; border-radius: 12px; font-size: 0.8rem; margin-top: 12px; color: #fde68a; line-height: 1.6; }
 
-    .select-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--hairline); border-radius: 14px; padding: 8px; background: #0c0e13; margin-bottom: 12px; }
+    .select-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--hairline); border-radius: 14px; padding: 8px; background: rgba(12, 14, 19, 0.65); margin-bottom: 12px; }
     .select-q-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.83rem; }
     .select-q-item:last-child { border-bottom: none; }
     .select-q-item input[type="checkbox"] { margin-top: 2px; }
-    .select-q-item.excluded { opacity: 0.42; text-decoration: line-through; }
+    .select-q-item.excluded { opacity: 0.4; text-decoration: line-through; }
 
     .color-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .color-chip { display: flex; justify-content: space-between; align-items: center; background: rgba(255, 255, 255, 0.025); padding: 7px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.07); font-size: 0.8rem; }
@@ -371,16 +353,16 @@
 
     .studio-toolbar {
       display: flex; gap: 6px; flex-wrap: wrap;
-      background: #0d0f14; border: 1px solid var(--hairline);
+      background: rgba(12, 14, 19, 0.72); border: 1px solid var(--hairline);
       border-radius: 14px; padding: 8px; margin-bottom: 10px;
     }
     .fmt-btn {
       padding: 6px 11px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.09);
-      background: #181b22;
+      background: #171a21;
       color: var(--text); font-size: 0.78rem; font-weight: 600;
       cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
     }
-    .fmt-btn:hover { background: #20242e; }
+    .fmt-btn:hover { background: #1f232d; }
 
     .grid-row-card {
       background: rgba(255, 255, 255, 0.025); border: 1px solid var(--hairline);
@@ -397,7 +379,7 @@
     .grid-btn-slot input { margin-bottom: 0; padding: 8px 10px; font-size: 0.82rem; }
 
     .tg-preview-frame {
-      background: #0d0f14; border: 1px solid var(--hairline);
+      background: rgba(12, 14, 19, 0.72); border: 1px solid var(--hairline);
       border-radius: 16px; padding: 14px; margin-bottom: 12px;
     }
     .tg-preview-label {
@@ -422,7 +404,7 @@
     .tg-kb-preview { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
     .tg-kb-row { display: flex; gap: 6px; }
     .tg-kb-pill {
-      flex: 1; background: #181b22;
+      flex: 1; background: rgba(255, 255, 255, 0.05);
       border: 1px solid rgba(255, 255, 255, 0.08);
       color: #e5e7eb; border-radius: 10px; padding: 8px 10px;
       font-size: 0.8rem; font-weight: 600;
@@ -436,9 +418,9 @@
   <svg width="0" height="0" style="position:absolute; visibility:hidden;" aria-hidden="true">
     <defs>
       <filter id="lg-refraction-filter" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">
-        <feTurbulence type="fractalNoise" baseFrequency="0.016 0.032" numOctaves="2" seed="7" result="noise" />
-        <feGaussianBlur in="noise" stdDeviation="2.4" result="softMap" />
-        <feDisplacementMap in="SourceGraphic" in2="softMap" scale="11" xChannelSelector="R" yChannelSelector="G" />
+        <feTurbulence type="fractalNoise" baseFrequency="0.018 0.035" numOctaves="2" seed="7" result="noise" />
+        <feGaussianBlur in="noise" stdDeviation="2.2" result="softMap" />
+        <feDisplacementMap in="SourceGraphic" in2="softMap" scale="8" xChannelSelector="R" yChannelSelector="G" />
       </filter>
 
       <symbol id="i-folder" viewBox="0 0 24 24">
@@ -887,7 +869,7 @@
       </div>
     </div>
 
-    <!-- Floating Liquid Lens Dock -->
+    <!-- Dark Liquid Glass Floating Dock -->
     <div class="nav-dock-wrap">
       <div class="nav-bar" id="navDock">
         <div class="nav-liquid-lens" id="navLiquidLens"></div>
@@ -1239,7 +1221,7 @@
         const clampedLeft = Math.max(minLeft, Math.min(maxLeft, relX));
 
         lens.style.width = `${w}px`;
-        lens.style.transform = `translate3d(${clampedLeft - 4}px, 0, 0) scaleX(1.06) scaleY(0.94)`;
+        lens.style.transform = `translate3d(${clampedLeft - 4}px, 0, 0) scaleX(1.05) scaleY(0.95)`;
 
         let closest = items[0];
         let bestDist = Infinity;
