@@ -53,6 +53,8 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
 app = FastAPI(title="Quiz Management & Governance System")
 
+from api.health import router as health_router
+app.include_router(health_router)
 
 @app.middleware("http")
 async def add_server_timing(request: Request, call_next):
