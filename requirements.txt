@@ -6,3 +6,6 @@ pandas
 psycopg2-binary
 python-telegram-bot
 pymupdf
+arabic-reshaper
+python-bidi
+PyMuPDF
