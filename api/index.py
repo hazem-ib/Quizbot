@@ -180,9 +180,23 @@ def init_db():
                     completed_at TIMESTAMP WITH TIME ZONE DEFAULT NULL
                 )
             """)
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS message_templates (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    category TEXT DEFAULT 'عام',
+                    body_html TEXT NOT NULL DEFAULT '',
+                    buttons_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    disable_preview BOOLEAN DEFAULT TRUE,
+                    created_by BIGINT,
+                    owner_name TEXT DEFAULT 'المالك',
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                )
+            """)
             c.execute("CREATE INDEX IF NOT EXISTS idx_questions_bank_id ON questions(bank_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_publish_jobs_actor ON publish_jobs(actor_id, id DESC)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_templates_id ON message_templates(id DESC)")
         conn.commit()
     _db_initialized = True
 
@@ -558,6 +572,73 @@ class AdminUpsertReq(BaseModel):
     can_delete: bool = False
     can_publish: bool = True
     can_manage_admins: bool = False
+
+
+class BroadcastButtonItem(BaseModel):
+    text: str
+    url: str
+
+
+class BroadcastSendReq(BaseModel):
+    target_type: str = "saved_comm"
+    comm_id: Optional[int] = None
+    body_html: str
+    buttons: List[List[BroadcastButtonItem]] = []
+    disable_preview: bool = True
+    silent: bool = False
+    pin_message: bool = False
+    template_name: Optional[str] = None
+
+
+class TemplateUpsertReq(BaseModel):
+    name: str
+    category: Optional[str] = "عام"
+    body_html: str = ""
+    buttons: List[List[BroadcastButtonItem]] = []
+    disable_preview: bool = True
+
+
+def _sanitize_button_url(raw_url: str) -> str:
+    clean = (raw_url or "").strip()
+    if not clean:
+        raise HTTPException(status_code=400, detail="كل زر رابط يجب أن يحتوي على رابط صالح.")
+    parsed = urllib.parse.urlparse(clean)
+    if parsed.scheme.lower() not in ("http", "https", "tg"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"الرابط «{clean}» غير مدعوم. يُسمح فقط بروابط https:// أو http:// أو tg://",
+        )
+    return clean
+
+
+def _build_url_keyboard(buttons_grid: List[List[BroadcastButtonItem]]) -> Optional[InlineKeyboardMarkup]:
+    rows: List[List[InlineKeyboardButton]] = []
+    for row in (buttons_grid or [])[:12]:
+        kb_row: List[InlineKeyboardButton] = []
+        for btn in (row or [])[:4]:
+            label = (btn.text or "").strip()
+            if not label:
+                continue
+            safe_url = _sanitize_button_url(btn.url)
+            kb_row.append(InlineKeyboardButton(text=label[:64], url=safe_url))
+        if kb_row:
+            rows.append(kb_row)
+    return InlineKeyboardMarkup(rows) if rows else None
+
+
+def _normalize_buttons_payload(buttons_grid: List[List[BroadcastButtonItem]]) -> List[List[Dict[str, str]]]:
+    normalized: List[List[Dict[str, str]]] = []
+    for row in (buttons_grid or [])[:12]:
+        clean_row = []
+        for btn in (row or [])[:4]:
+            label = (btn.text or "").strip()
+            if not label:
+                continue
+            safe_url = _sanitize_button_url(btn.url)
+            clean_row.append({"text": label[:64], "url": safe_url})
+        if clean_row:
+            normalized.append(clean_row)
+    return normalized
 
 
 def build_bot_app(webapp_url: str = ""):
@@ -1626,6 +1707,209 @@ async def test_community(req: CommunityCreateReq, x_telegram_init_data: str = He
                 status_code=400,
                 detail=f"تعذر الإرسال: تأكد من إضافة البوت كمشرف ومنح صلاحية النشر. ({e})",
             )
+
+
+@app.get("/api/templates")
+@app.get("/templates")
+async def list_templates(x_telegram_init_data: str = Header(default="")):
+    verify_actor(x_telegram_init_data)
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute("""
+                SELECT id, name, category, body_html, buttons_json, disable_preview, created_by, owner_name, updated_at
+                FROM message_templates ORDER BY id DESC
+            """)
+            rows = c.fetchall()
+
+    items = []
+    for r in rows:
+        btns = r[4] if isinstance(r[4], list) else (json.loads(r[4]) if r[4] else [])
+        items.append({
+            "id": r[0],
+            "name": r[1],
+            "category": r[2] or "عام",
+            "body_html": r[3] or "",
+            "buttons": btns,
+            "disable_preview": bool(r[5]),
+            "created_by": r[6],
+            "owner_name": r[7] or "المالك",
+            "updated_at": r[8].isoformat() if r[8] else None,
+        })
+    return items
+
+
+@app.post("/api/templates")
+@app.post("/templates")
+async def create_template(req: TemplateUpsertReq, x_telegram_init_data: str = Header(default="")):
+    actor = verify_actor(x_telegram_init_data)
+    require_perm(actor, "can_publish", "لا تملك صلاحية حفظ وإدارة التيمبلتس.")
+
+    name = (req.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="يرجى إدخال اسم التيمبلت.")
+    if not (req.body_html or "").strip() and not req.buttons:
+        raise HTTPException(status_code=400, detail="يرجى إدخال نص الرسالة أو إضافة زر رابط واحد على الأقل.")
+
+    clean_btns = _normalize_buttons_payload(req.buttons)
+    actor_label = f"{actor['name']} ({actor['tag']})" if actor["role"] == "admin" else "المالك"
+
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute(
+                """INSERT INTO message_templates (name, category, body_html, buttons_json, disable_preview, created_by, owner_name, updated_at)
+                   VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s, NOW())
+                   RETURNING id""",
+                (
+                    name,
+                    (req.category or "عام").strip() or "عام",
+                    req.body_html or "",
+                    json.dumps(clean_btns, ensure_ascii=False),
+                    bool(req.disable_preview),
+                    actor["user_id"],
+                    actor_label,
+                ),
+            )
+            tpl_id = c.fetchone()[0]
+        conn.commit()
+
+    write_audit_log(actor, "create_template", f"حفظ تيمبلت النشر «{name}».")
+    return {"status": "ok", "id": tpl_id, "name": name}
+
+
+@app.put("/api/templates/{tpl_id}")
+@app.put("/templates/{tpl_id}")
+async def update_template(tpl_id: int, req: TemplateUpsertReq, x_telegram_init_data: str = Header(default="")):
+    actor = verify_actor(x_telegram_init_data)
+    require_perm(actor, "can_publish", "لا تملك صلاحية تعديل التيمبلتس.")
+
+    name = (req.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="يرجى إدخال اسم التيمبلت.")
+    clean_btns = _normalize_buttons_payload(req.buttons)
+
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute("SELECT id FROM message_templates WHERE id = %s", (tpl_id,))
+            if not c.fetchone():
+                raise HTTPException(status_code=404, detail="التيمبلت غير موجود.")
+            c.execute(
+                """UPDATE message_templates
+                   SET name = %s, category = %s, body_html = %s, buttons_json = %s::jsonb,
+                       disable_preview = %s, updated_at = NOW()
+                   WHERE id = %s""",
+                (
+                    name,
+                    (req.category or "عام").strip() or "عام",
+                    req.body_html or "",
+                    json.dumps(clean_btns, ensure_ascii=False),
+                    bool(req.disable_preview),
+                    tpl_id,
+                ),
+            )
+        conn.commit()
+
+    write_audit_log(actor, "update_template", f"حدّث تيمبلت النشر «{name}».")
+    return {"status": "ok", "id": tpl_id}
+
+
+@app.delete("/api/templates/{tpl_id}")
+@app.delete("/templates/{tpl_id}")
+async def delete_template(tpl_id: int, x_telegram_init_data: str = Header(default="")):
+    actor = verify_actor(x_telegram_init_data)
+    require_perm(actor, "can_delete", "لا تملك صلاحية حذف التيمبلتس.")
+
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute("SELECT name FROM message_templates WHERE id = %s", (tpl_id,))
+            row = c.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="التيمبلت غير موجود.")
+            c.execute("DELETE FROM message_templates WHERE id = %s", (tpl_id,))
+        conn.commit()
+
+    write_audit_log(actor, "delete_template", f"حذف تيمبلت النشر «{row[0]}».")
+    return {"status": "ok"}
+
+
+@app.post("/api/broadcast_message")
+@app.post("/broadcast_message")
+async def broadcast_message(req: BroadcastSendReq, x_telegram_init_data: str = Header(default="")):
+    actor = verify_actor(x_telegram_init_data)
+    require_perm(actor, "can_publish", "لا تملك صلاحية إرسال الرسائل إلى الوجهات.")
+
+    body_text = (req.body_html or "").strip()
+    if not body_text:
+        raise HTTPException(status_code=400, detail="يرجى كتابة نص الرسالة قبل الإرسال.")
+    if len(body_text) > 4000:
+        raise HTTPException(status_code=400, detail="نص الرسالة يتجاوز الحد المسموح به في تيليجرام (4000 حرف).")
+
+    markup = _build_url_keyboard(req.buttons)
+    topic_id: Optional[int] = None
+
+    if req.target_type == "private":
+        target_chat: Any = actor["user_id"]
+        target_label = "المحادثة الخاصة"
+    elif req.target_type == "saved_comm":
+        if not req.comm_id:
+            raise HTTPException(status_code=400, detail="يرجى اختيار الوجهة المستهدفة.")
+        with PooledConn() as conn:
+            with conn.cursor() as c:
+                c.execute("SELECT title, chat_id, topic_id FROM communities WHERE id = %s", (req.comm_id,))
+                comm_row = c.fetchone()
+        if not comm_row:
+            raise HTTPException(status_code=404, detail="الوجهة المحددة غير موجودة.")
+        target_label = comm_row[0]
+        target_chat = comm_row[1].strip()
+        topic_id = comm_row[2]
+    else:
+        raise HTTPException(status_code=400, detail="نوع الوجهة غير صالح.")
+
+    send_kwargs: Dict[str, Any] = {
+        "chat_id": target_chat,
+        "text": body_text,
+        "parse_mode": ParseMode.HTML,
+        "disable_web_page_preview": bool(req.disable_preview),
+        "disable_notification": bool(req.silent),
+    }
+    if topic_id:
+        send_kwargs["message_thread_id"] = topic_id
+    if markup:
+        send_kwargs["reply_markup"] = markup
+
+    bot_app = build_bot_app()
+    async with bot_app:
+        try:
+            sent_msg = await bot_app.bot.send_message(**send_kwargs)
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"تعذر إرسال الرسالة: تأكد من صحة تنسيق HTML وصلاحيات البوت في الوجهة. ({e})",
+            )
+
+        pinned_ok = False
+        if req.pin_message and sent_msg and getattr(sent_msg, "message_id", None):
+            try:
+                await bot_app.bot.pin_chat_message(
+                    chat_id=target_chat,
+                    message_id=sent_msg.message_id,
+                    disable_notification=True,
+                )
+                pinned_ok = True
+            except Exception:
+                pinned_ok = False
+
+    tpl_note = f" (عبر تيمبلت: {req.template_name})" if req.template_name else ""
+    pin_note = " • مثبتة" if pinned_ok else ""
+    write_audit_log(
+        actor,
+        "broadcast_message",
+        f"أرسل رسالة منسقة بأزرار روابط إلى «{target_label}»{tpl_note}{pin_note}.",
+    )
+    return {
+        "status": "ok",
+        "target_label": target_label,
+        "pinned": pinned_ok,
+    }
 
 
 async def execute_publish_job(
