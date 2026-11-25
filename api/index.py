@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 import psycopg2
 from psycopg2 import pool
+from psycopg2.extensions import TRANSACTION_STATUS_IDLE
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from starlette.concurrency import run_in_threadpool
@@ -22,6 +23,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppI
 from telegram.constants import ParseMode
 from telegram.error import RetryAfter
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+
 
 def extract_pdf_mcq_rows(pdf_bytes: bytes) -> Dict[str, Any]:
     """Load the PDF parser only when a PDF import is requested."""
@@ -44,6 +46,7 @@ def build_bank_pdf_bytes(
     except Exception as exc:
         raise RuntimeError("وحدة تصدير PDF غير متوفرة حالياً على السيرفر.") from exc
     return _build(bank_name, questions, solved=solved, settings=settings)
+
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
@@ -100,9 +103,6 @@ class PooledConn:
         self._pool = get_pool()
         self.conn = self._pool.getconn()
 
-        # Avoid a SELECT 1 round trip on every checkout. Read-only operations
-        # use autocommit so they also avoid opening transactions that must
-        # later be rolled back.
         if self.conn.closed:
             self._pool.putconn(self.conn, close=True)
             self.conn = self._pool.getconn()
@@ -120,7 +120,6 @@ class PooledConn:
                 return
 
             if self._readonly:
-                # Restore the pool's default transaction mode before reuse.
                 if self.conn.autocommit:
                     self.conn.autocommit = False
             elif exc_type is not None or self.conn.get_transaction_status() != TRANSACTION_STATUS_IDLE:
@@ -138,130 +137,124 @@ def init_db():
     global _db_initialized
     if _db_initialized:
         return
-    with PooledConn() as conn:
-        with conn.cursor() as c:
-            c.execute("CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)")
-            c.execute("""
-                CREATE TABLE IF NOT EXISTS admins (
-                    user_id BIGINT PRIMARY KEY,
-                    name TEXT,
-                    tag TEXT DEFAULT 'مشرف',
-                    can_create_bank BOOLEAN DEFAULT TRUE,
-                    can_edit_others_banks BOOLEAN DEFAULT FALSE,
-                    can_delete BOOLEAN DEFAULT FALSE,
-                    can_publish BOOLEAN DEFAULT TRUE,
-                    can_manage_admins BOOLEAN DEFAULT FALSE
-                )
-            """)
-            c.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS tag TEXT DEFAULT 'مشرف'")
-            c.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS can_create_bank BOOLEAN DEFAULT TRUE")
-            c.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS can_edit_others_banks BOOLEAN DEFAULT FALSE")
-            c.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS can_delete BOOLEAN DEFAULT FALSE")
-            c.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS can_publish BOOLEAN DEFAULT TRUE")
-            c.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS can_manage_admins BOOLEAN DEFAULT FALSE")
-
-            c.execute("""
-                CREATE TABLE IF NOT EXISTS banks (
-                    id SERIAL PRIMARY KEY,
-                    name TEXT UNIQUE,
-                    owner_id BIGINT DEFAULT NULL,
-                    owner_name TEXT DEFAULT 'المالك'
-                )
-            """)
-            c.execute("ALTER TABLE banks ADD COLUMN IF NOT EXISTS owner_id BIGINT DEFAULT NULL")
-            c.execute("ALTER TABLE banks ADD COLUMN IF NOT EXISTS owner_name TEXT DEFAULT 'المالك'")
-
-            c.execute("""
-                CREATE TABLE IF NOT EXISTS questions (
-                    id SERIAL PRIMARY KEY,
-                    bank_id INTEGER REFERENCES banks(id) ON DELETE CASCADE,
-                    question TEXT,
-                    opt1 TEXT, opt2 TEXT, opt3 TEXT, opt4 TEXT,
-                    options_json JSONB DEFAULT NULL,
-                    correct_idx INTEGER,
-                    explanation TEXT DEFAULT ''
-                )
-            """)
-            c.execute("ALTER TABLE questions ADD COLUMN IF NOT EXISTS options_json JSONB DEFAULT NULL")
-
-            c.execute("""
-                CREATE TABLE IF NOT EXISTS communities (
-                    id SERIAL PRIMARY KEY,
-                    title TEXT,
-                    chat_id TEXT,
-                    topic_id INTEGER DEFAULT NULL
-                )
-            """)
-            c.execute("""
-                CREATE TABLE IF NOT EXISTS audit_logs (
-                    id SERIAL PRIMARY KEY,
-                    actor_id BIGINT,
-                    actor_name TEXT,
-                    actor_role TEXT,
-                    actor_tag TEXT,
-                    action_type TEXT,
-                    description TEXT,
-                    payload JSONB DEFAULT NULL,
-                    undone BOOLEAN DEFAULT FALSE,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                )
-            """)
-            c.execute("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS payload JSONB DEFAULT NULL")
-            c.execute("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS undone BOOLEAN DEFAULT FALSE")
-
-            c.execute("""
-                CREATE TABLE IF NOT EXISTS publish_jobs (
-                    id SERIAL PRIMARY KEY,
-                    actor_id BIGINT,
-                    actor_name TEXT,
-                    actor_tag TEXT,
-                    bank_id INTEGER,
-                    target_type TEXT,
-                    comm_id INTEGER,
-                    target_label TEXT,
-                    quiz_title TEXT DEFAULT '',
-                    total_count INTEGER DEFAULT 0,
-                    sent_count INTEGER DEFAULT 0,
-                    failed_count INTEGER DEFAULT 0,
-                    failed_question_ids JSONB DEFAULT '[]'::jsonb,
-                    delay_sec REAL DEFAULT 0.0,
-                    shuffle_options BOOLEAN DEFAULT FALSE,
-                    open_period INTEGER DEFAULT NULL,
-                    status TEXT DEFAULT 'queued',
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                    completed_at TIMESTAMP WITH TIME ZONE DEFAULT NULL
-                )
-            """)
-            c.execute("""
-                CREATE TABLE IF NOT EXISTS message_templates (
-                    id SERIAL PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    category TEXT DEFAULT 'عام',
-                    body_html TEXT NOT NULL DEFAULT '',
-                    buttons_json JSONB NOT NULL DEFAULT '[]'::jsonb,
-                    disable_preview BOOLEAN DEFAULT TRUE,
-                    created_by BIGINT,
-                    owner_name TEXT DEFAULT 'المالك',
-                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                )
-            """)
-            c.execute("CREATE INDEX IF NOT EXISTS idx_questions_bank_id ON questions(bank_id)")
-            c.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at)")
-            c.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_id_id ON audit_logs(actor_id, id DESC)")
-            c.execute("CREATE INDEX IF NOT EXISTS idx_publish_jobs_actor ON publish_jobs(actor_id, id DESC)")
-            c.execute("CREATE INDEX IF NOT EXISTS idx_publish_jobs_created_at ON publish_jobs(created_at)")
-            c.execute("CREATE INDEX IF NOT EXISTS idx_templates_id ON message_templates(id DESC)")
-        conn.commit()
-    _db_initialized = True
-
-
-def init_db():
-    global _db_initialized
-    if _db_initialized:
-        return
     with _db_init_lock:
-        if not _db_initialized:
-            _init_db_schema()
+        if _db_initialized:
+            return
+        with PooledConn() as conn:
+            with conn.cursor() as c:
+                c.execute("CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)")
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS admins (
+                        user_id BIGINT PRIMARY KEY,
+                        name TEXT,
+                        tag TEXT DEFAULT 'مشرف',
+                        can_create_bank BOOLEAN DEFAULT TRUE,
+                        can_edit_others_banks BOOLEAN DEFAULT FALSE,
+                        can_delete BOOLEAN DEFAULT FALSE,
+                        can_publish BOOLEAN DEFAULT TRUE,
+                        can_manage_admins BOOLEAN DEFAULT FALSE
+                    )
+                """)
+                c.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS tag TEXT DEFAULT 'مشرف'")
+                c.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS can_create_bank BOOLEAN DEFAULT TRUE")
+                c.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS can_edit_others_banks BOOLEAN DEFAULT FALSE")
+                c.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS can_delete BOOLEAN DEFAULT FALSE")
+                c.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS can_publish BOOLEAN DEFAULT TRUE")
+                c.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS can_manage_admins BOOLEAN DEFAULT FALSE")
+
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS banks (
+                        id SERIAL PRIMARY KEY,
+                        name TEXT UNIQUE,
+                        owner_id BIGINT DEFAULT NULL,
+                        owner_name TEXT DEFAULT 'المالك'
+                    )
+                """)
+                c.execute("ALTER TABLE banks ADD COLUMN IF NOT EXISTS owner_id BIGINT DEFAULT NULL")
+                c.execute("ALTER TABLE banks ADD COLUMN IF NOT EXISTS owner_name TEXT DEFAULT 'المالك'")
+
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS questions (
+                        id SERIAL PRIMARY KEY,
+                        bank_id INTEGER REFERENCES banks(id) ON DELETE CASCADE,
+                        question TEXT,
+                        opt1 TEXT, opt2 TEXT, opt3 TEXT, opt4 TEXT,
+                        options_json JSONB DEFAULT NULL,
+                        correct_idx INTEGER,
+                        explanation TEXT DEFAULT ''
+                    )
+                """)
+                c.execute("ALTER TABLE questions ADD COLUMN IF NOT EXISTS options_json JSONB DEFAULT NULL")
+
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS communities (
+                        id SERIAL PRIMARY KEY,
+                        title TEXT,
+                        chat_id TEXT,
+                        topic_id INTEGER DEFAULT NULL
+                    )
+                """)
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS audit_logs (
+                        id SERIAL PRIMARY KEY,
+                        actor_id BIGINT,
+                        actor_name TEXT,
+                        actor_role TEXT,
+                        actor_tag TEXT,
+                        action_type TEXT,
+                        description TEXT,
+                        payload JSONB DEFAULT NULL,
+                        undone BOOLEAN DEFAULT FALSE,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                """)
+                c.execute("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS payload JSONB DEFAULT NULL")
+                c.execute("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS undone BOOLEAN DEFAULT FALSE")
+
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS publish_jobs (
+                        id SERIAL PRIMARY KEY,
+                        actor_id BIGINT,
+                        actor_name TEXT,
+                        actor_tag TEXT,
+                        bank_id INTEGER,
+                        target_type TEXT,
+                        comm_id INTEGER,
+                        target_label TEXT,
+                        quiz_title TEXT DEFAULT '',
+                        total_count INTEGER DEFAULT 0,
+                        sent_count INTEGER DEFAULT 0,
+                        failed_count INTEGER DEFAULT 0,
+                        failed_question_ids JSONB DEFAULT '[]'::jsonb,
+                        delay_sec REAL DEFAULT 0.0,
+                        shuffle_options BOOLEAN DEFAULT FALSE,
+                        open_period INTEGER DEFAULT NULL,
+                        status TEXT DEFAULT 'queued',
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        completed_at TIMESTAMP WITH TIME ZONE DEFAULT NULL
+                    )
+                """)
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS message_templates (
+                        id SERIAL PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        category TEXT DEFAULT 'عام',
+                        body_html TEXT NOT NULL DEFAULT '',
+                        buttons_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+                        disable_preview BOOLEAN DEFAULT TRUE,
+                        created_by BIGINT,
+                        owner_name TEXT DEFAULT 'المالك',
+                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                """)
+                c.execute("CREATE INDEX IF NOT EXISTS idx_questions_bank_id ON questions(bank_id)")
+                c.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at)")
+                c.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_id_id ON audit_logs(actor_id, id DESC)")
+                c.execute("CREATE INDEX IF NOT EXISTS idx_publish_jobs_actor ON publish_jobs(actor_id, id DESC)")
+                c.execute("CREATE INDEX IF NOT EXISTS idx_publish_jobs_created_at ON publish_jobs(created_at)")
+                c.execute("CREATE INDEX IF NOT EXISTS idx_templates_id ON message_templates(id DESC)")
+            conn.commit()
+        _db_initialized = True
 
 
 @app.on_event("startup")
@@ -279,8 +272,6 @@ def cleanup_old_logs(force: bool = False):
     if not force and now - _cleanup_last_run < CLEANUP_INTERVAL_SECONDS:
         return
 
-    # Serialize cleanup attempts so concurrent requests do not run the same
-    # maintenance DELETEs at the same time.
     with _cleanup_lock:
         now = time.monotonic()
         if not force and now - _cleanup_last_run < CLEANUP_INTERVAL_SECONDS:
@@ -475,8 +466,6 @@ def verify_actor(init_data: str) -> Dict[str, Any]:
             owner_row = c.fetchone()
             owner_id = int(owner_row[0]) if owner_row else None
 
-            # Initialize the owner atomically, preserving the first-user-wins
-            # behavior while avoiding multiple separate pool checkouts.
             if owner_id is None:
                 c.execute(
                     """INSERT INTO config (key, value)
@@ -1351,7 +1340,7 @@ def undo_audit_log(log_id: int, x_telegram_init_data: str = Header(default="")):
 
 
 def parse_correct_index(ans_raw_val, opts: list) -> Optional[int]:
-    if pd.isna(ans_raw_val):
+    if ans_raw_val is None:
         return None
     s = str(ans_raw_val).strip()
     if not s or s.lower() == "nan":
@@ -1435,7 +1424,6 @@ def upload_csv(
 ):
     actor = verify_actor(x_telegram_init_data)
     content = file.file.read()
-    # Pandas is only needed for CSV uploads; keep it out of normal cold starts.
     import pandas as pd
 
     df = None
@@ -1650,7 +1638,7 @@ def update_question(q_id: int, req: QuestionUpdate, x_telegram_init_data: str = 
 
 
 @app.post("/api/questions/{q_id}/move")
-@app.post("/api/questions/{q_id}/move")
+@app.post("/questions/{q_id}/move")
 def move_question(q_id: int, req: TransferQuestionReq, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     with PooledConn(readonly=True) as conn:
@@ -1682,7 +1670,7 @@ def move_question(q_id: int, req: TransferQuestionReq, x_telegram_init_data: str
 
 
 @app.post("/api/questions/{q_id}/copy")
-@app.post("/api/questions/{q_id}/copy")
+@app.post("/questions/{q_id}/copy")
 def copy_question(q_id: int, req: TransferQuestionReq, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     with PooledConn(readonly=True) as conn:
@@ -1720,7 +1708,7 @@ def copy_question(q_id: int, req: TransferQuestionReq, x_telegram_init_data: str
 
 
 @app.delete("/api/questions/{q_id}")
-@app.delete("/api/questions/{q_id}")
+@app.delete("/questions/{q_id}")
 def delete_question(q_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_delete", "لا تملك صلاحية حذف الأسئلة.")
@@ -2142,9 +2130,6 @@ async def execute_publish_job(
                 failed_count += 1
                 failed_ids.append(qid)
 
-            # Persist progress in small checkpoints instead of one database
-            # transaction per Telegram poll. Failed IDs are checkpointed
-            # immediately; successful progress is flushed every five items.
             checkpoint_due = (
                 (idx + 1) % 5 == 0
                 or idx == total_requested - 1
