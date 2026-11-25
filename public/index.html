@@ -1861,9 +1861,9 @@
       }
 
       const canPublish = currentActor?.role === "owner" || currentActor?.can_publish;
-      banksCache.forEach(b => {
+      list.innerHTML = banksCache.map(b => {
         const safeName = b.name.replace(/'/g, "\\'");
-        list.innerHTML += `
+        return `
           <div class="card" id="bank-card-${b.id}">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
               <div>
@@ -1892,7 +1892,7 @@
               </button>
             </div>
           </div>`;
-      });
+      }).join("");
 
       syncPublishBanksSelect();
     }
@@ -2275,11 +2275,11 @@
         return;
       }
 
-      filtered.forEach((q, idx) => {
+      list.innerHTML = filtered.map((q, idx) => {
         const opts = getQuestionOptions(q);
         const hasFlag = (q.explanation || "").includes("مراجعة مطلوبة");
         const optsHtml = opts.map((o, i) => `<div class="opt-item ${i === q.correct_idx ? 'correct' : ''}">${i + 1}. ${o}</div>`).join("");
-        list.innerHTML += `
+        return `
           <div class="card" id="q-card-${q.id}" style="${hasFlag ? 'border-color: rgba(252, 211, 77, 0.35);' : ''}">
             <div style="margin-bottom:8px; font-weight:600; line-height:1.45;">${idx + 1}. ${q.question}</div>
             ${optsHtml}
@@ -2299,7 +2299,7 @@
               </button>
             </div>
           </div>`;
-      });
+      }).join("");
     }
 
     function openAppendCsvModal() {
@@ -2560,10 +2560,13 @@
       }
 
       const canDel = currentActor?.role === "owner" || currentActor?.can_delete;
-      commsCache.forEach(c => {
+      sel.innerHTML = commsCache.map(c => {
         const topicLabel = c.topic_id ? ` • موضوع #${c.topic_id}` : "";
-        sel.innerHTML += `<option value="${c.id}">${c.title}${topicLabel}</option>`;
-        list.innerHTML += `
+        return `<option value="${c.id}">${c.title}${topicLabel}</option>`;
+      }).join("");
+      list.innerHTML = commsCache.map(c => {
+        const topicLabel = c.topic_id ? ` • موضوع #${c.topic_id}` : "";
+        return `
           <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
             <div>
               <strong>${c.title}</strong><br>
@@ -2571,7 +2574,7 @@
             </div>
             <button class="btn btn-sm btn-danger" ${!canDel ? "disabled" : ""} onclick="deleteCommunity(${c.id})">حذف</button>
           </div>`;
-      });
+      }).join("");
       syncBroadcastCommSelect();
     }
 

@@ -8,38 +8,65 @@ import hashlib
 import urllib.parse
 import asyncio
 import random
+import time
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
-import pandas as pd
 import psycopg2
 from psycopg2 import pool
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Poll, MenuButtonWebApp
 from telegram.constants import ParseMode
 from telegram.error import RetryAfter
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-try:
-    from api.pdf_mcq_importer import extract_pdf_mcq_rows
-except Exception:
-    def extract_pdf_mcq_rows(pdf_bytes: bytes) -> Dict[str, Any]:
-        raise ValueError("وحدة استيراد PDF غير متوفرة حالياً على السيرفر.")
+def extract_pdf_mcq_rows(pdf_bytes: bytes) -> Dict[str, Any]:
+    """Load the PDF parser only when a PDF import is requested."""
+    try:
+        from api.pdf_mcq_importer import extract_pdf_mcq_rows as _extract
+    except Exception as exc:
+        raise ValueError("وحدة استيراد PDF غير متوفرة حالياً على السيرفر.") from exc
+    return _extract(pdf_bytes)
 
-try:
-    from api.pdf_bank_exporter import build_bank_pdf_bytes
-except Exception:
-    def build_bank_pdf_bytes(bank_name: str, questions: list, solved: bool = False, settings: Optional[dict] = None) -> bytes:
-        raise RuntimeError("وحدة تصدير PDF غير متوفرة حالياً على السيرفر.")
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "9268644584:AAE8woNBoXzueYqpsT4x69efYcDgP1mPP9Y").strip()
+def build_bank_pdf_bytes(
+    bank_name: str,
+    questions: list,
+    solved: bool = False,
+    settings: Optional[dict] = None,
+) -> bytes:
+    """Load PyMuPDF/export code only when a PDF export is requested."""
+    try:
+        from api.pdf_bank_exporter import build_bank_pdf_bytes as _build
+    except Exception as exc:
+        raise RuntimeError("وحدة تصدير PDF غير متوفرة حالياً على السيرفر.") from exc
+    return _build(bank_name, questions, solved=solved, settings=settings)
+
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
 app = FastAPI(title="Quiz Management & Governance System")
 
+
+@app.middleware("http")
+async def add_server_timing(request: Request, call_next):
+    started_at = time.perf_counter()
+    response = await call_next(request)
+    elapsed_ms = (time.perf_counter() - started_at) * 1000
+    response.headers["Server-Timing"] = f"app;dur={elapsed_ms:.2f}"
+    return response
+
+
 db_pool: Optional[pool.ThreadedConnectionPool] = None
 _db_initialized = False
+_cleanup_last_run = 0.0
+_cleanup_lock = threading.Lock()
+_pool_lock = threading.Lock()
+_db_init_lock = threading.Lock()
+CLEANUP_INTERVAL_SECONDS = 6 * 60 * 60
 
 
 def _clean_db_url(url: str) -> str:
@@ -51,43 +78,58 @@ def get_pool() -> pool.ThreadedConnectionPool:
     if not DATABASE_URL:
         raise HTTPException(status_code=500, detail="متغير DATABASE_URL غير مضاف في إعدادات البيئة.")
     if db_pool is None:
-        db_pool = pool.ThreadedConnectionPool(
-            minconn=1,
-            maxconn=10,
-            dsn=_clean_db_url(DATABASE_URL),
-            sslmode="require",
-            connect_timeout=10,
-        )
+        with _pool_lock:
+            if db_pool is None:
+                db_pool = pool.ThreadedConnectionPool(
+                    minconn=1,
+                    maxconn=10,
+                    dsn=_clean_db_url(DATABASE_URL),
+                    sslmode="require",
+                    connect_timeout=10,
+                )
     return db_pool
 
 
 class PooledConn:
-    def __init__(self):
+    def __init__(self, readonly: bool = False):
         self.conn = None
+        self._pool = None
+        self._readonly = readonly
 
     def __enter__(self):
-        p = get_pool()
-        self.conn = p.getconn()
-        try:
-            if self.conn.closed:
-                p.putconn(self.conn, close=True)
-                self.conn = p.getconn()
-            with self.conn.cursor() as cur:
-                cur.execute("SELECT 1")
-        except Exception:
-            try:
-                p.putconn(self.conn, close=True)
-            except Exception:
-                pass
-            self.conn = p.getconn()
+        self._pool = get_pool()
+        self.conn = self._pool.getconn()
+
+        # Avoid a SELECT 1 round trip on every checkout. Read-only operations
+        # use autocommit so they also avoid opening transactions that must
+        # later be rolled back.
+        if self.conn.closed:
+            self._pool.putconn(self.conn, close=True)
+            self.conn = self._pool.getconn()
+        if self._readonly and not self.conn.autocommit:
+            self.conn.autocommit = True
         return self.conn
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.conn is not None:
+        if self.conn is None:
+            return
+
+        try:
+            if self.conn.closed:
+                self._pool.putconn(self.conn, close=True)
+                return
+
+            if self._readonly:
+                # Restore the pool's default transaction mode before reuse.
+                if self.conn.autocommit:
+                    self.conn.autocommit = False
+            elif exc_type is not None or self.conn.get_transaction_status() != TRANSACTION_STATUS_IDLE:
+                self.conn.rollback()
+
+            self._pool.putconn(self.conn)
+        except Exception:
             try:
-                if exc_type is not None:
-                    self.conn.rollback()
-                get_pool().putconn(self.conn)
+                self._pool.putconn(self.conn, close=True)
             except Exception:
                 pass
 
@@ -205,14 +247,25 @@ def init_db():
             """)
             c.execute("CREATE INDEX IF NOT EXISTS idx_questions_bank_id ON questions(bank_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_id_id ON audit_logs(actor_id, id DESC)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_publish_jobs_actor ON publish_jobs(actor_id, id DESC)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_publish_jobs_created_at ON publish_jobs(created_at)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_templates_id ON message_templates(id DESC)")
         conn.commit()
     _db_initialized = True
 
 
+def init_db():
+    global _db_initialized
+    if _db_initialized:
+        return
+    with _db_init_lock:
+        if not _db_initialized:
+            _init_db_schema()
+
+
 @app.on_event("startup")
-async def on_startup():
+def on_startup():
     try:
         init_db()
         cleanup_old_logs()
@@ -220,13 +273,26 @@ async def on_startup():
         pass
 
 
-def cleanup_old_logs():
-    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
-    with PooledConn() as conn:
-        with conn.cursor() as c:
-            c.execute("DELETE FROM audit_logs WHERE created_at < %s", (cutoff,))
-            c.execute("DELETE FROM publish_jobs WHERE created_at < %s", (cutoff,))
-        conn.commit()
+def cleanup_old_logs(force: bool = False):
+    global _cleanup_last_run
+    now = time.monotonic()
+    if not force and now - _cleanup_last_run < CLEANUP_INTERVAL_SECONDS:
+        return
+
+    # Serialize cleanup attempts so concurrent requests do not run the same
+    # maintenance DELETEs at the same time.
+    with _cleanup_lock:
+        now = time.monotonic()
+        if not force and now - _cleanup_last_run < CLEANUP_INTERVAL_SECONDS:
+            return
+
+        cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+        with PooledConn() as conn:
+            with conn.cursor() as c:
+                c.execute("DELETE FROM audit_logs WHERE created_at < %s", (cutoff,))
+                c.execute("DELETE FROM publish_jobs WHERE created_at < %s", (cutoff,))
+            conn.commit()
+        _cleanup_last_run = time.monotonic()
 
 
 def normalize_options_list(
@@ -265,7 +331,7 @@ def legacy_four_cols(opts: List[str]):
 
 
 def get_owner_id() -> Optional[int]:
-    with PooledConn() as conn:
+    with PooledConn(readonly=True) as conn:
         with conn.cursor() as c:
             c.execute("SELECT value FROM config WHERE key = 'owner_id'")
             row = c.fetchone()
@@ -307,8 +373,12 @@ def format_display_name(user_info: dict) -> str:
     return "مستخدم"
 
 
-def get_actor_profile(user_id: int, fallback_name: str = "مستخدم") -> Optional[Dict[str, Any]]:
-    owner = get_owner_id()
+def get_actor_profile(
+    user_id: int,
+    fallback_name: str = "مستخدم",
+    owner_id: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
+    owner = get_owner_id() if owner_id is None else owner_id
     if owner is None:
         return None
     if user_id == owner:
@@ -324,7 +394,7 @@ def get_actor_profile(user_id: int, fallback_name: str = "مستخدم") -> Opti
             "can_publish": True,
             "can_manage_admins": True,
         }
-    with PooledConn() as conn:
+    with PooledConn(readonly=True) as conn:
         with conn.cursor() as c:
             c.execute(
                 """SELECT user_id, name, tag, can_create_bank, can_edit_others_banks, can_delete, can_publish, can_manage_admins
@@ -374,6 +444,8 @@ def write_audit_log(
 
 
 def verify_actor(init_data: str) -> Dict[str, Any]:
+    if not BOT_TOKEN:
+        raise HTTPException(status_code=500, detail="متغير BOT_TOKEN غير مضاف في إعدادات البيئة.")
     init_db()
     if not init_data or not init_data.strip():
         raise HTTPException(status_code=403, detail="غير مصرح: يجب فتح التطبيق من داخل تيليجرام.")
@@ -396,13 +468,78 @@ def verify_actor(init_data: str) -> Dict[str, Any]:
     if not user_id:
         raise HTTPException(status_code=403, detail="تعذر قراءة معرف المستخدم.")
 
-    if get_owner_id() is None:
-        set_owner_id(int(user_id), display_name)
+    user_id = int(user_id)
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute("SELECT value FROM config WHERE key = 'owner_id'")
+            owner_row = c.fetchone()
+            owner_id = int(owner_row[0]) if owner_row else None
 
-    profile = get_actor_profile(int(user_id), display_name)
-    if not profile:
+            # Initialize the owner atomically, preserving the first-user-wins
+            # behavior while avoiding multiple separate pool checkouts.
+            if owner_id is None:
+                c.execute(
+                    """INSERT INTO config (key, value)
+                       VALUES ('owner_id', %s)
+                       ON CONFLICT (key) DO NOTHING""",
+                    (str(user_id),),
+                )
+                c.execute("SELECT value FROM config WHERE key = 'owner_id'")
+                owner_row = c.fetchone()
+                owner_id = int(owner_row[0]) if owner_row else None
+
+                if owner_id == user_id:
+                    c.execute(
+                        """INSERT INTO admins
+                           (user_id, name, tag, can_create_bank, can_edit_others_banks,
+                            can_delete, can_publish, can_manage_admins)
+                           VALUES (%s, %s, 'المالك', TRUE, TRUE, TRUE, TRUE, TRUE)
+                           ON CONFLICT (user_id) DO UPDATE SET
+                             name = EXCLUDED.name, tag = 'المالك',
+                             can_create_bank = TRUE, can_edit_others_banks = TRUE,
+                             can_delete = TRUE, can_publish = TRUE,
+                             can_manage_admins = TRUE""",
+                        (user_id, display_name),
+                    )
+                    conn.commit()
+
+            if owner_id == user_id:
+                return {
+                    "user_id": user_id,
+                    "name": display_name,
+                    "role": "owner",
+                    "role_label": "المالك",
+                    "tag": "المالك",
+                    "can_create_bank": True,
+                    "can_edit_others_banks": True,
+                    "can_delete": True,
+                    "can_publish": True,
+                    "can_manage_admins": True,
+                }
+
+            c.execute(
+                """SELECT user_id, name, tag, can_create_bank, can_edit_others_banks,
+                          can_delete, can_publish, can_manage_admins
+                   FROM admins WHERE user_id = %s""",
+                (user_id,),
+            )
+            profile_row = c.fetchone()
+
+    if not profile_row:
         raise HTTPException(status_code=403, detail="عذراً، أنت لست مشرفاً في البوت.")
-    return profile
+
+    return {
+        "user_id": profile_row[0],
+        "name": profile_row[1] or display_name,
+        "role": "admin",
+        "role_label": "مشرف",
+        "tag": profile_row[2] or "مشرف",
+        "can_create_bank": bool(profile_row[3]),
+        "can_edit_others_banks": bool(profile_row[4]),
+        "can_delete": bool(profile_row[5]),
+        "can_publish": bool(profile_row[6]),
+        "can_manage_admins": bool(profile_row[7]),
+    }
 
 
 def require_perm(actor: Dict[str, Any], perm_key: str, error_msg: str):
@@ -413,7 +550,7 @@ def require_perm(actor: Dict[str, Any], perm_key: str, error_msg: str):
 
 
 def get_bank_record(bank_id: int) -> Optional[Dict[str, Any]]:
-    with PooledConn() as conn:
+    with PooledConn(readonly=True) as conn:
         with conn.cursor() as c:
             c.execute("SELECT id, name, owner_id, owner_name FROM banks WHERE id = %s", (bank_id,))
             row = c.fetchone()
@@ -507,7 +644,7 @@ def get_base_url(request: Request) -> str:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def serve_home():
+def serve_home():
     here = os.path.dirname(os.path.abspath(__file__))
     candidates = [
         os.path.join(here, "public", "index.html"),
@@ -657,6 +794,8 @@ def _normalize_buttons_payload(buttons_grid: List[List[BroadcastButtonItem]]) ->
 
 
 def build_bot_app(webapp_url: str = ""):
+    if not BOT_TOKEN:
+        raise RuntimeError("BOT_TOKEN environment variable is not configured.")
     application = Application.builder().token(BOT_TOKEN).build()
 
     async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -797,15 +936,15 @@ async def telegram_webhook(request: Request):
 
 @app.get("/api/me")
 @app.get("/me")
-async def get_me(x_telegram_init_data: str = Header(default="")):
+def get_me(x_telegram_init_data: str = Header(default="")):
     return verify_actor(x_telegram_init_data)
 
 
 @app.get("/api/banks")
 @app.get("/banks")
-async def get_banks(x_telegram_init_data: str = Header(default="")):
+def get_banks(x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
-    with PooledConn() as conn:
+    with PooledConn(readonly=True) as conn:
         with conn.cursor() as c:
             c.execute("""
                 SELECT b.id, b.name, b.owner_id, COALESCE(b.owner_name, 'المالك'), COUNT(q.id)::int
@@ -840,7 +979,7 @@ async def get_banks(x_telegram_init_data: str = Header(default="")):
 
 @app.post("/api/banks")
 @app.post("/banks")
-async def create_bank(req: BankRenameReq, x_telegram_init_data: str = Header(default="")):
+def create_bank(req: BankRenameReq, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_create_bank", "لا تملك صلاحية إنشاء بنوك أسئلة جديدة.")
     name = req.name.strip()
@@ -867,7 +1006,7 @@ async def create_bank(req: BankRenameReq, x_telegram_init_data: str = Header(def
 
 @app.put("/api/banks/{bank_id}")
 @app.put("/banks/{bank_id}")
-async def rename_bank(bank_id: int, req: BankRenameReq, x_telegram_init_data: str = Header(default="")):
+def rename_bank(bank_id: int, req: BankRenameReq, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     bank = get_bank_record(bank_id)
     if not bank:
@@ -890,7 +1029,7 @@ async def rename_bank(bank_id: int, req: BankRenameReq, x_telegram_init_data: st
 
 @app.delete("/api/banks/{bank_id}")
 @app.delete("/banks/{bank_id}")
-async def delete_bank(bank_id: int, x_telegram_init_data: str = Header(default="")):
+def delete_bank(bank_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_delete", "لا تملك صلاحية الحذف.")
     bank = get_bank_record(bank_id)
@@ -948,7 +1087,7 @@ async def export_questions_csv(
     if not bank:
         raise HTTPException(status_code=404, detail="البنك غير موجود.")
 
-    with PooledConn() as conn:
+    with PooledConn(readonly=True) as conn:
         with conn.cursor() as c:
             if req.question_ids:
                 c.execute(
@@ -1027,7 +1166,7 @@ async def export_bank_pdf_pair(
     if not bank:
         raise HTTPException(status_code=404, detail="البنك غير موجود.")
 
-    with PooledConn() as conn:
+    with PooledConn(readonly=True) as conn:
         with conn.cursor() as c:
             c.execute(
                 """SELECT id, question, opt1, opt2, opt3, opt4, options_json, correct_idx, explanation
@@ -1136,7 +1275,7 @@ async def export_bank_pdf_pair(
 
 @app.post("/api/logs/{log_id}/undo")
 @app.post("/logs/{log_id}/undo")
-async def undo_audit_log(log_id: int, x_telegram_init_data: str = Header(default="")):
+def undo_audit_log(log_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     with PooledConn() as conn:
         with conn.cursor() as c:
@@ -1242,7 +1381,7 @@ def parse_correct_index(ans_raw_val, opts: list) -> Optional[int]:
 
 @app.post("/api/upload_pdf")
 @app.post("/upload_pdf")
-async def upload_pdf(
+def upload_pdf(
     bank_name: str = Form(default=""),
     bank_id: Optional[int] = Form(default=None),
     file: UploadFile = File(...),
@@ -1253,7 +1392,7 @@ async def upload_pdf(
     if not filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="يرجى رفع ملف بصيغة PDF.")
 
-    pdf_bytes = await file.read()
+    pdf_bytes = file.file.read()
     try:
         parsed = extract_pdf_mcq_rows(pdf_bytes)
     except ValueError as e:
@@ -1287,7 +1426,7 @@ async def upload_pdf(
 
 @app.post("/api/upload_csv")
 @app.post("/upload_csv")
-async def upload_csv(
+def upload_csv(
     bank_name: str = Form(default=""),
     bank_id: Optional[int] = Form(default=None),
     structure: str = Form(default="auto"),
@@ -1295,7 +1434,10 @@ async def upload_csv(
     x_telegram_init_data: str = Header(default=""),
 ):
     actor = verify_actor(x_telegram_init_data)
-    content = await file.read()
+    content = file.file.read()
+    # Pandas is only needed for CSV uploads; keep it out of normal cold starts.
+    import pandas as pd
+
     df = None
     for enc in ["utf-8-sig", "utf-8", "cp1256", "windows-1256", "latin1"]:
         try:
@@ -1394,9 +1536,9 @@ async def upload_csv(
 
 @app.get("/api/banks/{bank_id}/questions")
 @app.get("/banks/{bank_id}/questions")
-async def get_questions(bank_id: int, x_telegram_init_data: str = Header(default="")):
+def get_questions(bank_id: int, x_telegram_init_data: str = Header(default="")):
     verify_actor(x_telegram_init_data)
-    with PooledConn() as conn:
+    with PooledConn(readonly=True) as conn:
         with conn.cursor() as c:
             c.execute(
                 """SELECT id, question, opt1, opt2, opt3, opt4, options_json, correct_idx, explanation
@@ -1425,7 +1567,7 @@ async def get_questions(bank_id: int, x_telegram_init_data: str = Header(default
 
 @app.post("/api/questions")
 @app.post("/questions")
-async def add_question(req: QuestionCreate, x_telegram_init_data: str = Header(default="")):
+def add_question(req: QuestionCreate, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     bank = get_bank_record(req.bank_id)
     if not bank:
@@ -1464,9 +1606,9 @@ async def add_question(req: QuestionCreate, x_telegram_init_data: str = Header(d
 
 @app.put("/api/questions/{q_id}")
 @app.put("/questions/{q_id}")
-async def update_question(q_id: int, req: QuestionUpdate, x_telegram_init_data: str = Header(default="")):
+def update_question(q_id: int, req: QuestionUpdate, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
-    with PooledConn() as conn:
+    with PooledConn(readonly=True) as conn:
         with conn.cursor() as c:
             c.execute("SELECT bank_id FROM questions WHERE id = %s", (q_id,))
             row = c.fetchone()
@@ -1509,9 +1651,9 @@ async def update_question(q_id: int, req: QuestionUpdate, x_telegram_init_data: 
 
 @app.post("/api/questions/{q_id}/move")
 @app.post("/api/questions/{q_id}/move")
-async def move_question(q_id: int, req: TransferQuestionReq, x_telegram_init_data: str = Header(default="")):
+def move_question(q_id: int, req: TransferQuestionReq, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
-    with PooledConn() as conn:
+    with PooledConn(readonly=True) as conn:
         with conn.cursor() as c:
             c.execute("SELECT bank_id FROM questions WHERE id = %s", (q_id,))
             row = c.fetchone()
@@ -1541,9 +1683,9 @@ async def move_question(q_id: int, req: TransferQuestionReq, x_telegram_init_dat
 
 @app.post("/api/questions/{q_id}/copy")
 @app.post("/api/questions/{q_id}/copy")
-async def copy_question(q_id: int, req: TransferQuestionReq, x_telegram_init_data: str = Header(default="")):
+def copy_question(q_id: int, req: TransferQuestionReq, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
-    with PooledConn() as conn:
+    with PooledConn(readonly=True) as conn:
         with conn.cursor() as c:
             c.execute(
                 "SELECT bank_id, question, opt1, opt2, opt3, opt4, options_json, correct_idx, explanation FROM questions WHERE id = %s",
@@ -1579,10 +1721,10 @@ async def copy_question(q_id: int, req: TransferQuestionReq, x_telegram_init_dat
 
 @app.delete("/api/questions/{q_id}")
 @app.delete("/api/questions/{q_id}")
-async def delete_question(q_id: int, x_telegram_init_data: str = Header(default="")):
+def delete_question(q_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_delete", "لا تملك صلاحية حذف الأسئلة.")
-    with PooledConn() as conn:
+    with PooledConn(readonly=True) as conn:
         with conn.cursor() as c:
             c.execute("SELECT bank_id FROM questions WHERE id = %s", (q_id,))
             row = c.fetchone()
@@ -1603,9 +1745,9 @@ async def delete_question(q_id: int, x_telegram_init_data: str = Header(default=
 
 @app.get("/api/communities")
 @app.get("/communities")
-async def get_communities(x_telegram_init_data: str = Header(default="")):
+def get_communities(x_telegram_init_data: str = Header(default="")):
     verify_actor(x_telegram_init_data)
-    with PooledConn() as conn:
+    with PooledConn(readonly=True) as conn:
         with conn.cursor() as c:
             c.execute("SELECT id, title, chat_id, topic_id FROM communities ORDER BY id DESC")
             rows = c.fetchall()
@@ -1614,7 +1756,7 @@ async def get_communities(x_telegram_init_data: str = Header(default="")):
 
 @app.post("/api/communities")
 @app.post("/communities")
-async def add_community(req: CommunityCreateReq, x_telegram_init_data: str = Header(default="")):
+def add_community(req: CommunityCreateReq, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     title = req.title.strip()
     chat_id = req.chat_id.strip()
@@ -1635,7 +1777,7 @@ async def add_community(req: CommunityCreateReq, x_telegram_init_data: str = Hea
 
 @app.delete("/api/communities/{comm_id}")
 @app.delete("/communities/{comm_id}")
-async def delete_community(comm_id: int, x_telegram_init_data: str = Header(default="")):
+def delete_community(comm_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_delete", "لا تملك صلاحية حذف الوجهات.")
     with PooledConn() as conn:
@@ -1672,9 +1814,9 @@ async def test_community(req: CommunityCreateReq, x_telegram_init_data: str = He
 
 @app.get("/api/templates")
 @app.get("/templates")
-async def list_templates(x_telegram_init_data: str = Header(default="")):
+def list_templates(x_telegram_init_data: str = Header(default="")):
     verify_actor(x_telegram_init_data)
-    with PooledConn() as conn:
+    with PooledConn(readonly=True) as conn:
         with conn.cursor() as c:
             c.execute("""
                 SELECT id, name, category, body_html, buttons_json, disable_preview, created_by, owner_name, updated_at
@@ -1701,7 +1843,7 @@ async def list_templates(x_telegram_init_data: str = Header(default="")):
 
 @app.post("/api/templates")
 @app.post("/templates")
-async def create_template(req: TemplateUpsertReq, x_telegram_init_data: str = Header(default="")):
+def create_template(req: TemplateUpsertReq, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_publish", "لا تملك صلاحية حفظ وإدارة التيمبلتس.")
 
@@ -1739,7 +1881,7 @@ async def create_template(req: TemplateUpsertReq, x_telegram_init_data: str = He
 
 @app.put("/api/templates/{tpl_id}")
 @app.put("/templates/{tpl_id}")
-async def update_template(tpl_id: int, req: TemplateUpsertReq, x_telegram_init_data: str = Header(default="")):
+def update_template(tpl_id: int, req: TemplateUpsertReq, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_publish", "لا تملك صلاحية تعديل التيمبلتس.")
 
@@ -1775,7 +1917,7 @@ async def update_template(tpl_id: int, req: TemplateUpsertReq, x_telegram_init_d
 
 @app.delete("/api/templates/{tpl_id}")
 @app.delete("/templates/{tpl_id}")
-async def delete_template(tpl_id: int, x_telegram_init_data: str = Header(default="")):
+def delete_template(tpl_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_delete", "لا تملك صلاحية حذف التيمبلتس.")
 
@@ -1813,7 +1955,7 @@ async def broadcast_message(req: BroadcastSendReq, x_telegram_init_data: str = H
     elif req.target_type == "saved_comm":
         if not req.comm_id:
             raise HTTPException(status_code=400, detail="يرجى اختيار الوجهة المستهدفة.")
-        with PooledConn() as conn:
+        with PooledConn(readonly=True) as conn:
             with conn.cursor() as c:
                 c.execute("SELECT title, chat_id, topic_id FROM communities WHERE id = %s", (req.comm_id,))
                 comm_row = c.fetchone()
@@ -1873,6 +2015,45 @@ async def broadcast_message(req: BroadcastSendReq, x_telegram_init_data: str = H
     }
 
 
+def _load_publish_job_rows(job_id: int, q_ids: List[int]):
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute("UPDATE publish_jobs SET status = 'running' WHERE id = %s", (job_id,))
+            c.execute(
+                """SELECT id, question, opt1, opt2, opt3, opt4, options_json, correct_idx, explanation
+                   FROM questions WHERE id = ANY(%s)""",
+                (q_ids,),
+            )
+            q_map = {r[0]: r for r in c.fetchall()}
+        conn.commit()
+    return q_map
+
+
+def _persist_publish_progress(job_id: int, sent_count: int, failed_count: int, failed_ids: List[int]):
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute(
+                """UPDATE publish_jobs
+                   SET sent_count = %s, failed_count = %s, failed_question_ids = %s::jsonb
+                   WHERE id = %s""",
+                (sent_count, failed_count, json.dumps(failed_ids), job_id),
+            )
+        conn.commit()
+
+
+def _finalize_publish_job(job_id: int, status: str, sent_count: int, failed_count: int, failed_ids: List[int]):
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute(
+                """UPDATE publish_jobs
+                   SET status = %s, sent_count = %s, failed_count = %s,
+                       failed_question_ids = %s::jsonb, completed_at = NOW()
+                   WHERE id = %s""",
+                (status, sent_count, failed_count, json.dumps(failed_ids), job_id),
+            )
+        conn.commit()
+
+
 async def execute_publish_job(
     job_id: int,
     q_ids: List[int],
@@ -1886,17 +2067,7 @@ async def execute_publish_job(
     actor: Dict[str, Any],
     is_retry: bool = False,
 ):
-    with PooledConn() as conn:
-        with conn.cursor() as c:
-            c.execute("UPDATE publish_jobs SET status = 'running' WHERE id = %s", (job_id,))
-            c.execute(
-                """SELECT id, question, opt1, opt2, opt3, opt4, options_json, correct_idx, explanation
-                   FROM questions WHERE id = ANY(%s)""",
-                (q_ids,),
-            )
-            q_map = {r[0]: r for r in c.fetchall()}
-        conn.commit()
-
+    q_map = await run_in_threadpool(_load_publish_job_rows, job_id, q_ids)
     ordered_rows = [q_map[qid] for qid in q_ids if qid in q_map]
     total_requested = len(ordered_rows)
     sent_count = 0
@@ -1971,15 +2142,22 @@ async def execute_publish_job(
                 failed_count += 1
                 failed_ids.append(qid)
 
-            with PooledConn() as conn:
-                with conn.cursor() as c:
-                    c.execute(
-                        """UPDATE publish_jobs
-                           SET sent_count = %s, failed_count = %s, failed_question_ids = %s::jsonb
-                           WHERE id = %s""",
-                        (sent_count, failed_count, json.dumps(failed_ids), job_id),
-                    )
-                conn.commit()
+            # Persist progress in small checkpoints instead of one database
+            # transaction per Telegram poll. Failed IDs are checkpointed
+            # immediately; successful progress is flushed every five items.
+            checkpoint_due = (
+                (idx + 1) % 5 == 0
+                or idx == total_requested - 1
+                or not delivered
+            )
+            if checkpoint_due:
+                await run_in_threadpool(
+                    _persist_publish_progress,
+                    job_id,
+                    sent_count,
+                    failed_count,
+                    failed_ids,
+                )
 
             if delivered and idx < total_requested - 1:
                 if delay_sec > 0:
@@ -1990,16 +2168,14 @@ async def execute_publish_job(
                     await asyncio.sleep(0.01)
 
         final_status = "completed" if failed_count == 0 else ("partial_failed" if sent_count > 0 else "failed")
-        with PooledConn() as conn:
-            with conn.cursor() as c:
-                c.execute(
-                    """UPDATE publish_jobs
-                       SET status = %s, sent_count = %s, failed_count = %s,
-                           failed_question_ids = %s::jsonb, completed_at = NOW()
-                       WHERE id = %s""",
-                    (final_status, sent_count, failed_count, json.dumps(failed_ids), job_id),
-                )
-            conn.commit()
+        await run_in_threadpool(
+            _finalize_publish_job,
+            job_id,
+            final_status,
+            sent_count,
+            failed_count,
+            failed_ids,
+        )
 
         target_name = target_label or "المحادثة الخاصة"
         finish_msg = f"تمت عملية إرسال الاختبار إلى «{target_name}»."
@@ -2012,7 +2188,8 @@ async def execute_publish_job(
         except Exception:
             pass
 
-    write_audit_log(
+    await run_in_threadpool(
+        write_audit_log,
         actor,
         "publish_quiz",
         finish_msg,
@@ -2021,7 +2198,7 @@ async def execute_publish_job(
 
 @app.post("/api/publish_batch")
 @app.post("/publish_batch")
-async def publish_batch(
+def publish_batch(
     req: BatchPublishReq,
     background_tasks: BackgroundTasks,
     x_telegram_init_data: str = Header(default=""),
@@ -2110,10 +2287,10 @@ async def publish_batch(
 
 @app.get("/api/publish_jobs")
 @app.get("/publish_jobs")
-async def get_publish_jobs(x_telegram_init_data: str = Header(default="")):
+def get_publish_jobs(x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     cleanup_old_logs()
-    with PooledConn() as conn:
+    with PooledConn(readonly=True) as conn:
         with conn.cursor() as c:
             if actor["role"] == "owner" or actor["can_manage_admins"]:
                 c.execute("""
@@ -2158,7 +2335,7 @@ async def get_publish_jobs(x_telegram_init_data: str = Header(default="")):
 
 @app.post("/api/publish_jobs/retry_failed")
 @app.post("/publish_jobs/retry_failed")
-async def retry_failed_questions(
+def retry_failed_questions(
     req: RetryFailedReq,
     background_tasks: BackgroundTasks,
     x_telegram_init_data: str = Header(default=""),
@@ -2255,11 +2432,11 @@ async def retry_failed_questions(
 
 @app.get("/api/admins")
 @app.get("/admins")
-async def list_admins(x_telegram_init_data: str = Header(default="")):
+def list_admins(x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_manage_admins", "إدارة المشرفين غير متاحة لصلاحياتك الحالية.")
     owner = get_owner_id()
-    with PooledConn() as conn:
+    with PooledConn(readonly=True) as conn:
         with conn.cursor() as c:
             c.execute(
                 """SELECT user_id, name, tag, can_create_bank, can_edit_others_banks, can_delete, can_publish, can_manage_admins
@@ -2285,7 +2462,7 @@ async def list_admins(x_telegram_init_data: str = Header(default="")):
 
 @app.post("/api/admins")
 @app.post("/admins")
-async def upsert_admin(req: AdminUpsertReq, x_telegram_init_data: str = Header(default="")):
+def upsert_admin(req: AdminUpsertReq, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_manage_admins", "لا تملك صلاحية إدارة المشرفين.")
     owner = get_owner_id()
@@ -2331,7 +2508,7 @@ async def upsert_admin(req: AdminUpsertReq, x_telegram_init_data: str = Header(d
 
 @app.delete("/api/admins/{admin_id}")
 @app.delete("/admins/{admin_id}")
-async def remove_admin(admin_id: int, x_telegram_init_data: str = Header(default="")):
+def remove_admin(admin_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_manage_admins", "لا تملك صلاحية إزالة المشرفين.")
     owner = get_owner_id()
@@ -2353,10 +2530,10 @@ async def remove_admin(admin_id: int, x_telegram_init_data: str = Header(default
 
 @app.get("/api/logs")
 @app.get("/logs")
-async def get_logs(x_telegram_init_data: str = Header(default="")):
+def get_logs(x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     cleanup_old_logs()
-    with PooledConn() as conn:
+    with PooledConn(readonly=True) as conn:
         with conn.cursor() as c:
             if actor["role"] == "owner" or actor["can_manage_admins"]:
                 c.execute("""
@@ -2390,7 +2567,7 @@ async def get_logs(x_telegram_init_data: str = Header(default="")):
 
 @app.delete("/api/logs")
 @app.delete("/logs")
-async def clear_logs(x_telegram_init_data: str = Header(default="")):
+def clear_logs(x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     if actor["role"] != "owner":
         raise HTTPException(status_code=403, detail="مسح السجل بالكامل متاح للمالك فقط.")
