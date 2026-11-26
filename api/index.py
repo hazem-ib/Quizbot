@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Poll, MenuButtonWebApp
 from telegram.constants import ParseMode
 from telegram.error import RetryAfter
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 
 def extract_pdf_mcq_rows(pdf_bytes: bytes) -> Dict[str, Any]:
@@ -53,8 +53,13 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
 app = FastAPI(title="Quiz Management & Governance System")
 
-from api.health import router as health_router
+try:
+    from api.health import router as health_router
+except ImportError:
+    from src.api.health import router as health_router
+
 app.include_router(health_router)
+
 
 @app.middleware("http")
 async def add_server_timing(request: Request, call_next):
@@ -72,6 +77,20 @@ _cleanup_lock = threading.Lock()
 _pool_lock = threading.Lock()
 _db_init_lock = threading.Lock()
 CLEANUP_INTERVAL_SECONDS = 6 * 60 * 60
+
+# Live control flags for running publish jobs: {job_id: "running" | "paused" | "cancelled"}
+_job_controls: Dict[int, str] = {}
+_job_controls_lock = threading.Lock()
+
+
+def _set_job_control(job_id: int, state: str):
+    with _job_controls_lock:
+        _job_controls[job_id] = state
+
+
+def _get_job_control(job_id: int) -> str:
+    with _job_controls_lock:
+        return _job_controls.get(job_id, "running")
 
 
 def _clean_db_url(url: str) -> str:
@@ -230,12 +249,17 @@ def init_db():
                         failed_question_ids JSONB DEFAULT '[]'::jsonb,
                         delay_sec REAL DEFAULT 0.0,
                         shuffle_options BOOLEAN DEFAULT FALSE,
+                        shuffle_questions BOOLEAN DEFAULT FALSE,
+                        is_anonymous BOOLEAN DEFAULT TRUE,
                         open_period INTEGER DEFAULT NULL,
                         status TEXT DEFAULT 'queued',
                         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                         completed_at TIMESTAMP WITH TIME ZONE DEFAULT NULL
                     )
                 """)
+                c.execute("ALTER TABLE publish_jobs ADD COLUMN IF NOT EXISTS shuffle_questions BOOLEAN DEFAULT FALSE")
+                c.execute("ALTER TABLE publish_jobs ADD COLUMN IF NOT EXISTS is_anonymous BOOLEAN DEFAULT TRUE")
+
                 c.execute("""
                     CREATE TABLE IF NOT EXISTS message_templates (
                         id SERIAL PRIMARY KEY,
@@ -697,9 +721,16 @@ class BatchPublishReq(BaseModel):
     comm_id: Optional[int] = None
     delay_sec: float = 0.0
     shuffle_options: bool = False
+    shuffle_questions: bool = False
+    is_anonymous: bool = True
     open_period: Optional[int] = None
     limit_count: Optional[int] = None
     quiz_title: Optional[str] = None
+
+
+class JobControlReq(BaseModel):
+    job_id: int
+    action: str  # "pause" | "resume" | "cancel"
 
 
 class RetryFailedReq(BaseModel):
@@ -784,6 +815,111 @@ def _normalize_buttons_payload(buttons_grid: List[List[BroadcastButtonItem]]) ->
     return normalized
 
 
+def _format_live_job_card(
+    job_id: int,
+    target_label: str,
+    quiz_title: str,
+    sent_count: int,
+    failed_count: int,
+    total_count: int,
+    status: str,
+    shuffle_questions: bool,
+    shuffle_options: bool,
+    is_anonymous: bool,
+    open_period: Optional[int],
+    delay_sec: float,
+    elapsed_sec: float,
+) -> tuple[str, Optional[InlineKeyboardMarkup]]:
+    done_count = sent_count + failed_count
+    pct = round((done_count / total_count) * 100, 1) if total_count > 0 else 0.0
+    filled = int(round((pct / 100.0) * 10))
+    bar = ("■" * max(0, min(10, filled))) + ("□" * max(0, 10 - max(0, min(10, filled))))
+
+    status_map = {
+        "queued": "في الانتظار",
+        "running": "قيد الإرسال الآن",
+        "paused": "متوقف مؤقتاً",
+        "cancelled": "ملغي",
+        "completed": "مكتمل بنجاح",
+        "partial_failed": "مكتمل مع أسئلة متعذرة",
+        "failed": "فشل الإرسال",
+    }
+    status_ar = status_map.get(status, status)
+    title_line = f"<b>{quiz_title}</b>\n" if quiz_title else ""
+    anon_label = "مجهول" if is_anonymous else "ظاهر (من يجاوب يظهر)"
+    timer_label = f"{open_period}ث" if open_period else "بدون مؤقت"
+    shuffle_q_lbl = "نعم" if shuffle_questions else "لا"
+    shuffle_o_lbl = "نعم" if shuffle_options else "لا"
+
+    text = (
+        f"📡 <b>متابعة عملية إرسال الاختبار #{job_id}</b>\n"
+        f"{title_line}"
+        f"• الحالة: <b>{status_ar}</b>\n"
+        f"• الوجهة: <b>{target_label}</b>\n"
+        f"• التقدم: <code>[{bar}]</code> <b>{pct}%</b> ({done_count}/{total_count})\n"
+        f"• تم إرسالها: <b>{sent_count}</b> | متعذرة: <b>{failed_count}</b>\n"
+        f"• الوقت المنقضي: <code>{int(elapsed_sec)}s</code> | التأخير: <code>{delay_sec}s</code>\n"
+        f"• نوع الكويز: <b>{anon_label}</b> | المؤقت: <b>{timer_label}</b>\n"
+        f"• خلط الأسئلة: <b>{shuffle_q_lbl}</b> | خلط الخيارات: <b>{shuffle_o_lbl}</b>"
+    )
+
+    if status in ("queued", "running"):
+        kb = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("⏸ إيقاف مؤقت", callback_data=f"job:pause:{job_id}"),
+                InlineKeyboardButton("⏹ إلغاء العملية", callback_data=f"job:cancel:{job_id}"),
+            ],
+            [InlineKeyboardButton("🔄 تحديث الآن", callback_data=f"job:refresh:{job_id}")],
+        ])
+    elif status == "paused":
+        kb = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("▶️ استئناف الإرسال", callback_data=f"job:resume:{job_id}"),
+                InlineKeyboardButton("⏹ إلغاء العملية", callback_data=f"job:cancel:{job_id}"),
+            ],
+            [InlineKeyboardButton("🔄 تحديث الآن", callback_data=f"job:refresh:{job_id}")],
+        ])
+    else:
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 تحديث الحالة النهائية", callback_data=f"job:refresh:{job_id}")],
+        ])
+
+    return text, kb
+
+
+def _read_job_snapshot(job_id: int) -> Optional[Dict[str, Any]]:
+    with PooledConn(readonly=True) as conn:
+        with conn.cursor() as c:
+            c.execute(
+                """SELECT id, actor_id, target_label, quiz_title, total_count, sent_count,
+                          failed_count, status, shuffle_questions, shuffle_options,
+                          is_anonymous, open_period, delay_sec, created_at
+                   FROM publish_jobs WHERE id = %s""",
+                (job_id,),
+            )
+            r = c.fetchone()
+    if not r:
+        return None
+    created_at = r[13]
+    elapsed = (datetime.now(timezone.utc) - created_at).total_seconds() if created_at else 0.0
+    return {
+        "id": r[0],
+        "actor_id": r[1],
+        "target_label": r[2] or "المحادثة الخاصة",
+        "quiz_title": r[3] or "",
+        "total_count": r[4] or 0,
+        "sent_count": r[5] or 0,
+        "failed_count": r[6] or 0,
+        "status": r[7] or "queued",
+        "shuffle_questions": bool(r[8]),
+        "shuffle_options": bool(r[9]),
+        "is_anonymous": bool(r[10]) if r[10] is not None else True,
+        "open_period": r[11],
+        "delay_sec": float(r[12] or 0.0),
+        "elapsed_sec": max(0.0, elapsed),
+    }
+
+
 def build_bot_app(webapp_url: str = ""):
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN environment variable is not configured.")
@@ -846,6 +982,79 @@ def build_bot_app(webapp_url: str = ""):
 
         await msg.reply_text(**reply_kwargs)
 
+    async def job_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        if not query or not query.data:
+            return
+        parts = query.data.split(":")
+        if len(parts) != 3 or parts[0] != "job":
+            return
+
+        action = parts[1]
+        try:
+            job_id = int(parts[2])
+        except ValueError:
+            await query.answer("معرّف عملية غير صالح", show_alert=False)
+            return
+
+        snap = await run_in_threadpool(_read_job_snapshot, job_id)
+        if not snap:
+            await query.answer("العملية غير موجودة", show_alert=False)
+            return
+
+        caller_id = query.from_user.id if query.from_user else 0
+        actor = await run_in_threadpool(get_actor_profile, caller_id)
+        is_allowed = (
+            (actor and actor.get("role") == "owner")
+            or (actor and actor.get("can_manage_admins"))
+            or int(snap["actor_id"]) == int(caller_id)
+        )
+        if not is_allowed:
+            await query.answer("لا تملك صلاحية التحكم في هذه العملية", show_alert=True)
+            return
+
+        if action == "pause" and snap["status"] in ("running", "queued"):
+            _set_job_control(job_id, "paused")
+            await run_in_threadpool(
+                lambda: _update_job_status_only(job_id, "paused")
+            )
+            await query.answer("تم إيقاف العملية مؤقتاً ⏸")
+        elif action == "resume" and snap["status"] == "paused":
+            _set_job_control(job_id, "running")
+            await run_in_threadpool(
+                lambda: _update_job_status_only(job_id, "running")
+            )
+            await query.answer("تم استئناف الإرسال ▶️")
+        elif action == "cancel" and snap["status"] in ("running", "queued", "paused"):
+            _set_job_control(job_id, "cancelled")
+            await run_in_threadpool(
+                lambda: _update_job_status_only(job_id, "cancelled")
+            )
+            await query.answer("تم إلغاء العملية ⏹")
+        else:
+            await query.answer("تم التحديث 🔄")
+
+        fresh = await run_in_threadpool(_read_job_snapshot, job_id) or snap
+        card_text, card_kb = _format_live_job_card(
+            job_id=fresh["id"],
+            target_label=fresh["target_label"],
+            quiz_title=fresh["quiz_title"],
+            sent_count=fresh["sent_count"],
+            failed_count=fresh["failed_count"],
+            total_count=fresh["total_count"],
+            status=fresh["status"],
+            shuffle_questions=fresh["shuffle_questions"],
+            shuffle_options=fresh["shuffle_options"],
+            is_anonymous=fresh["is_anonymous"],
+            open_period=fresh["open_period"],
+            delay_sec=fresh["delay_sec"],
+            elapsed_sec=fresh["elapsed_sec"],
+        )
+        try:
+            await query.edit_message_text(text=card_text, parse_mode=ParseMode.HTML, reply_markup=card_kb)
+        except Exception:
+            pass
+
     async def handle_pdf_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         init_db()
         doc = update.message.document if update.message else None
@@ -889,6 +1098,7 @@ def build_bot_app(webapp_url: str = ""):
 
     application.add_handler(CommandHandler("start", start_cmd))
     application.add_handler(CommandHandler("id", id_cmd))
+    application.add_handler(CallbackQueryHandler(job_callback, pattern=r"^job:(pause|resume|cancel|refresh):\d+$"))
     application.add_handler(MessageHandler(filters.Document.PDF, handle_pdf_doc))
     return application
 
@@ -1640,7 +1850,7 @@ def update_question(q_id: int, req: QuestionUpdate, x_telegram_init_data: str = 
 
 
 @app.post("/api/questions/{q_id}/move")
-@app.post("/questions/{q_id}/move")
+@app.post("/api/questions/{q_id}/move")
 def move_question(q_id: int, req: TransferQuestionReq, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     with PooledConn(readonly=True) as conn:
@@ -1672,7 +1882,7 @@ def move_question(q_id: int, req: TransferQuestionReq, x_telegram_init_data: str
 
 
 @app.post("/api/questions/{q_id}/copy")
-@app.post("/questions/{q_id}/copy")
+@app.post("/api/questions/{q_id}/copy")
 def copy_question(q_id: int, req: TransferQuestionReq, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     with PooledConn(readonly=True) as conn:
@@ -1710,7 +1920,7 @@ def copy_question(q_id: int, req: TransferQuestionReq, x_telegram_init_data: str
 
 
 @app.delete("/api/questions/{q_id}")
-@app.delete("/questions/{q_id}")
+@app.delete("/api/questions/{q_id}")
 def delete_question(q_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_delete", "لا تملك صلاحية حذف الأسئلة.")
@@ -1766,7 +1976,7 @@ def add_community(req: CommunityCreateReq, x_telegram_init_data: str = Header(de
 
 
 @app.delete("/api/communities/{comm_id}")
-@app.delete("/communities/{comm_id}")
+@app.delete("/api/communities/{comm_id}")
 def delete_community(comm_id: int, x_telegram_init_data: str = Header(default="")):
     actor = verify_actor(x_telegram_init_data)
     require_perm(actor, "can_delete", "لا تملك صلاحية حذف الوجهات.")
@@ -2005,6 +2215,13 @@ async def broadcast_message(req: BroadcastSendReq, x_telegram_init_data: str = H
     }
 
 
+def _update_job_status_only(job_id: int, status: str):
+    with PooledConn() as conn:
+        with conn.cursor() as c:
+            c.execute("UPDATE publish_jobs SET status = %s WHERE id = %s", (status, job_id))
+        conn.commit()
+
+
 def _load_publish_job_rows(job_id: int, q_ids: List[int]):
     with PooledConn() as conn:
         with conn.cursor() as c:
@@ -2052,28 +2269,106 @@ async def execute_publish_job(
     topic_id: Optional[int],
     delay_sec: float,
     shuffle_options: bool,
+    shuffle_questions: bool,
+    is_anonymous: bool,
     open_period: Optional[int],
     quiz_title: Optional[str],
     actor: Dict[str, Any],
     is_retry: bool = False,
 ):
+    _set_job_control(job_id, "running")
+    started_mono = time.monotonic()
     q_map = await run_in_threadpool(_load_publish_job_rows, job_id, q_ids)
     ordered_rows = [q_map[qid] for qid in q_ids if qid in q_map]
+    if shuffle_questions:
+        random.shuffle(ordered_rows)
+
     total_requested = len(ordered_rows)
     sent_count = 0
     failed_count = 0
     failed_ids: List[int] = []
     admin_id = actor["user_id"]
+    clean_title = (quiz_title or "").strip()
 
-    is_group_or_channel = str(target_chat).startswith("-") or str(target_chat).startswith("@")
+    target_str = str(target_chat).strip()
+    is_group_or_channel = target_str.startswith("-") or target_str.startswith("@")
+    # Telegram channels require anonymous polls; groups and private chats allow visible or anonymous polls
+    is_channel_target = target_str.startswith("@") or (target_str.startswith("-100") and not topic_id)
+    effective_anonymous = True if is_channel_target else bool(is_anonymous)
+
+    live_msg_id: Optional[int] = None
+    last_edit_time = 0.0
+
     bot_app = build_bot_app()
     async with bot_app:
-        if quiz_title and quiz_title.strip() and total_requested > 0:
+        # Send live control card to actor's private chat
+        init_text, init_kb = _format_live_job_card(
+            job_id=job_id,
+            target_label=target_label or "المحادثة الخاصة",
+            quiz_title=clean_title,
+            sent_count=0,
+            failed_count=0,
+            total_count=total_requested,
+            status="running",
+            shuffle_questions=shuffle_questions,
+            shuffle_options=shuffle_options,
+            is_anonymous=effective_anonymous,
+            open_period=open_period,
+            delay_sec=delay_sec,
+            elapsed_sec=0.0,
+        )
+        try:
+            live_msg = await bot_app.bot.send_message(
+                chat_id=admin_id,
+                text=init_text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=init_kb,
+            )
+            live_msg_id = getattr(live_msg, "message_id", None)
+            last_edit_time = time.monotonic()
+        except Exception:
+            live_msg_id = None
+
+        async def _push_live_update(cur_status: str, force: bool = False):
+            nonlocal last_edit_time
+            if not live_msg_id:
+                return
+            now_m = time.monotonic()
+            if not force and (now_m - last_edit_time) < 2.2:
+                return
+            txt, kb = _format_live_job_card(
+                job_id=job_id,
+                target_label=target_label or "المحادثة الخاصة",
+                quiz_title=clean_title,
+                sent_count=sent_count,
+                failed_count=failed_count,
+                total_count=total_requested,
+                status=cur_status,
+                shuffle_questions=shuffle_questions,
+                shuffle_options=shuffle_options,
+                is_anonymous=effective_anonymous,
+                open_period=open_period,
+                delay_sec=delay_sec,
+                elapsed_sec=max(0.0, now_m - started_mono),
+            )
+            try:
+                await bot_app.bot.edit_message_text(
+                    chat_id=admin_id,
+                    message_id=live_msg_id,
+                    text=txt,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=kb,
+                )
+                last_edit_time = time.monotonic()
+            except Exception:
+                pass
+
+        if clean_title and total_requested > 0:
             try:
                 prefix = "إعادة إرسال الأسئلة المتعذرة" if is_retry else "اختبار جديد"
                 intro_kwargs = {
                     "chat_id": target_chat,
-                    "text": f"**{quiz_title.strip()}**\n{prefix} • عدد الأسئلة: **{total_requested}**",
+                    "text": f"**{clean_title}**\n{prefix} • عدد الأسئلة: **{total_requested}**",
                     "parse_mode": "Markdown",
                 }
                 if topic_id:
@@ -2082,7 +2377,24 @@ async def execute_publish_job(
             except Exception:
                 pass
 
+        cancelled_early = False
         for idx, row in enumerate(ordered_rows):
+            # Pause / Cancel loop
+            ctrl = _get_job_control(job_id)
+            if ctrl == "paused":
+                await run_in_threadpool(_update_job_status_only, job_id, "paused")
+                await _push_live_update("paused", force=True)
+                while _get_job_control(job_id) == "paused":
+                    await asyncio.sleep(1.0)
+                ctrl = _get_job_control(job_id)
+                if ctrl == "running":
+                    await run_in_threadpool(_update_job_status_only, job_id, "running")
+                    await _push_live_update("running", force=True)
+
+            if _get_job_control(job_id) == "cancelled":
+                cancelled_early = True
+                break
+
             qid, q_text, o1, o2, o3, o4, opts_json, c_idx, expl = row
             raw_opts = unpack_row_options((o1, o2, o3, o4, opts_json))
             opts = [x[:98] for x in raw_opts[:10]]
@@ -2100,7 +2412,7 @@ async def execute_publish_job(
                 "options": opts,
                 "type": Poll.QUIZ,
                 "correct_option_id": current_correct,
-                "is_anonymous": True,
+                "is_anonymous": effective_anonymous,
             }
             if expl:
                 kwargs["explanation"] = expl[:195]
@@ -2112,6 +2424,9 @@ async def execute_publish_job(
             delivered = False
             attempts = 0
             while attempts < 4:
+                if _get_job_control(job_id) == "cancelled":
+                    cancelled_early = True
+                    break
                 attempts += 1
                 try:
                     await bot_app.bot.send_poll(**kwargs)
@@ -2128,12 +2443,15 @@ async def execute_publish_job(
                     else:
                         break
 
+            if cancelled_early:
+                break
+
             if not delivered:
                 failed_count += 1
                 failed_ids.append(qid)
 
             checkpoint_due = (
-                (idx + 1) % 5 == 0
+                (idx + 1) % 3 == 0
                 or idx == total_requested - 1
                 or not delivered
             )
@@ -2145,6 +2463,7 @@ async def execute_publish_job(
                     failed_count,
                     failed_ids,
                 )
+                await _push_live_update("running", force=False)
 
             if delivered and idx < total_requested - 1:
                 if delay_sec > 0:
@@ -2154,7 +2473,11 @@ async def execute_publish_job(
                 else:
                     await asyncio.sleep(0.01)
 
-        final_status = "completed" if failed_count == 0 else ("partial_failed" if sent_count > 0 else "failed")
+        if cancelled_early:
+            final_status = "cancelled"
+        else:
+            final_status = "completed" if failed_count == 0 else ("partial_failed" if sent_count > 0 else "failed")
+
         await run_in_threadpool(
             _finalize_publish_job,
             job_id,
@@ -2163,17 +2486,10 @@ async def execute_publish_job(
             failed_count,
             failed_ids,
         )
+        await _push_live_update(final_status, force=True)
 
         target_name = target_label or "المحادثة الخاصة"
-        finish_msg = f"تمت عملية إرسال الاختبار إلى «{target_name}»."
-
-        try:
-            await bot_app.bot.send_message(
-                chat_id=admin_id,
-                text=finish_msg,
-            )
-        except Exception:
-            pass
+        finish_msg = f"تمت عملية إرسال الاختبار إلى «{target_name}» (الحالة: {final_status}، تم إرسال {sent_count} من {total_requested})."
 
     await run_in_threadpool(
         write_audit_log,
@@ -2229,8 +2545,8 @@ def publish_batch(
                 """INSERT INTO publish_jobs
                    (actor_id, actor_name, actor_tag, bank_id, target_type, comm_id, target_label,
                     quiz_title, total_count, sent_count, failed_count, failed_question_ids,
-                    delay_sec, shuffle_options, open_period, status)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0, '[]'::jsonb, %s, %s, %s, 'queued')
+                    delay_sec, shuffle_options, shuffle_questions, is_anonymous, open_period, status)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0, '[]'::jsonb, %s, %s, %s, %s, %s, 'queued')
                    RETURNING id""",
                 (
                     actor["user_id"],
@@ -2244,12 +2560,15 @@ def publish_batch(
                     len(ordered_valid_ids),
                     req.delay_sec,
                     req.shuffle_options,
+                    req.shuffle_questions,
+                    bool(req.is_anonymous),
                     req.open_period,
                 ),
             )
             job_id = c.fetchone()[0]
         conn.commit()
 
+    _set_job_control(job_id, "running")
     background_tasks.add_task(
         execute_publish_job,
         job_id,
@@ -2259,6 +2578,8 @@ def publish_batch(
         topic_id,
         req.delay_sec,
         req.shuffle_options,
+        req.shuffle_questions,
+        bool(req.is_anonymous),
         req.open_period,
         req.quiz_title,
         actor,
@@ -2272,6 +2593,36 @@ def publish_batch(
     }
 
 
+@app.post("/api/publish_jobs/control")
+@app.post("/publish_jobs/control")
+def control_publish_job(req: JobControlReq, x_telegram_init_data: str = Header(default="")):
+    actor = verify_actor(x_telegram_init_data)
+    require_perm(actor, "can_publish", "لا تملك صلاحية التحكم في عمليات الإرسال.")
+
+    action = (req.action or "").strip().lower()
+    if action not in ("pause", "resume", "cancel"):
+        raise HTTPException(status_code=400, detail="إجراء غير صالح (pause / resume / cancel).")
+
+    snap = _read_job_snapshot(req.job_id)
+    if not snap:
+        raise HTTPException(status_code=404, detail="عملية الإرسال غير موجودة.")
+    if actor["role"] != "owner" and not actor["can_manage_admins"] and int(snap["actor_id"]) != int(actor["user_id"]):
+        raise HTTPException(status_code=403, detail="لا تملك صلاحية التحكم في هذه العملية.")
+
+    if action == "pause":
+        _set_job_control(req.job_id, "paused")
+        _update_job_status_only(req.job_id, "paused")
+        return {"status": "paused", "job_id": req.job_id}
+    elif action == "resume":
+        _set_job_control(req.job_id, "running")
+        _update_job_status_only(req.job_id, "running")
+        return {"status": "running", "job_id": req.job_id}
+    else:
+        _set_job_control(req.job_id, "cancelled")
+        _update_job_status_only(req.job_id, "cancelled")
+        return {"status": "cancelled", "job_id": req.job_id}
+
+
 @app.get("/api/publish_jobs")
 @app.get("/publish_jobs")
 def get_publish_jobs(x_telegram_init_data: str = Header(default="")):
@@ -2283,14 +2634,14 @@ def get_publish_jobs(x_telegram_init_data: str = Header(default="")):
                 c.execute("""
                     SELECT id, actor_name, actor_tag, target_label, quiz_title,
                            total_count, sent_count, failed_count, failed_question_ids,
-                           status, created_at, completed_at
+                           status, created_at, completed_at, shuffle_questions, is_anonymous
                     FROM publish_jobs ORDER BY id DESC LIMIT 15
                 """)
             else:
                 c.execute("""
                     SELECT id, actor_name, actor_tag, target_label, quiz_title,
                            total_count, sent_count, failed_count, failed_question_ids,
-                           status, created_at, completed_at
+                           status, created_at, completed_at, shuffle_questions, is_anonymous
                     FROM publish_jobs WHERE actor_id = %s ORDER BY id DESC LIMIT 15
                 """, (actor["user_id"],))
             rows = c.fetchall()
@@ -2316,6 +2667,8 @@ def get_publish_jobs(x_telegram_init_data: str = Header(default="")):
             "status": r[9],
             "created_at": r[10].isoformat() if r[10] else None,
             "completed_at": r[11].isoformat() if r[11] else None,
+            "shuffle_questions": bool(r[12]),
+            "is_anonymous": bool(r[13]) if r[13] is not None else True,
         })
     return jobs
 
@@ -2334,7 +2687,8 @@ def retry_failed_questions(
         with conn.cursor() as c:
             c.execute(
                 """SELECT id, actor_id, bank_id, target_type, comm_id, target_label,
-                          quiz_title, failed_question_ids, delay_sec, shuffle_options, open_period
+                          quiz_title, failed_question_ids, delay_sec, shuffle_options,
+                          open_period, shuffle_questions, is_anonymous
                    FROM publish_jobs WHERE id = %s""",
                 (req.job_id,),
             )
@@ -2370,12 +2724,15 @@ def retry_failed_questions(
             if not valid_failed_ids:
                 raise HTTPException(status_code=400, detail="الأسئلة المتعذرة لم تعد موجودة في قاعدة البيانات.")
 
+            shuf_q = bool(row[11])
+            is_anon = bool(row[12]) if row[12] is not None else True
+
             c.execute(
                 """INSERT INTO publish_jobs
                    (actor_id, actor_name, actor_tag, bank_id, target_type, comm_id, target_label,
                     quiz_title, total_count, sent_count, failed_count, failed_question_ids,
-                    delay_sec, shuffle_options, open_period, status)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0, '[]'::jsonb, %s, %s, %s, 'queued')
+                    delay_sec, shuffle_options, shuffle_questions, is_anonymous, open_period, status)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0, '[]'::jsonb, %s, %s, %s, %s, %s, 'queued')
                    RETURNING id""",
                 (
                     actor["user_id"],
@@ -2389,12 +2746,15 @@ def retry_failed_questions(
                     len(valid_failed_ids),
                     row[8] or 0.0,
                     bool(row[9]),
+                    shuf_q,
+                    is_anon,
                     row[10],
                 ),
             )
             new_job_id = c.fetchone()[0]
         conn.commit()
 
+    _set_job_control(new_job_id, "running")
     background_tasks.add_task(
         execute_publish_job,
         new_job_id,
@@ -2404,6 +2764,8 @@ def retry_failed_questions(
         topic_id,
         row[8] or 0.0,
         bool(row[9]),
+        shuf_q,
+        is_anon,
         row[10],
         row[6] or "",
         actor,
