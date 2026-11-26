@@ -792,6 +792,10 @@
           <span>خلط ترتيب الخيارات</span>
           <input type="checkbox" id="pubShuffleOpt" />
         </div>
+        <div class="switch-row">
+          <span>كويز مجهول الهوية (إخفاء أسماء المجيبين)</span>
+          <input type="checkbox" id="pubIsAnonymous" checked />
+        </div>
 
         <button id="pubStartBtn" class="btn btn-primary-glass" onclick="publishQuiz()">
           <svg class="ico"><use href="#i-send"/></svg> بدء الإرسال
@@ -805,7 +809,7 @@
           <div class="progress-bar-bg">
             <div id="progressBarFill" class="progress-bar-fill"></div>
           </div>
-          <small style="display:block; color:var(--hint); margin-top:7px;">ستصلك رسالة في الخاص عند انتهاء العملية.</small>
+          <small style="display:block; color:var(--hint); margin-top:7px;">ستصلك رسالة تحكم حية في الخاص مع إمكانية الإيقاف المؤقت أو الإلغاء.</small>
         </div>
       </div>
     </div>
@@ -2716,7 +2720,8 @@
         if (!ok) return;
       }
 
-      if (document.getElementById("pubShuffleQ").checked) {
+      const shuffleQuestions = document.getElementById("pubShuffleQ").checked;
+      if (shuffleQuestions) {
         questionsToSend.sort(() => Math.random() - 0.5);
       }
 
@@ -2746,6 +2751,7 @@
       const useTimer = document.getElementById("enableTimer").checked;
       const open_period = useTimer ? (parseInt(document.getElementById("pubTimer").value) || 30) : null;
       const shuffle_options = document.getElementById("pubShuffleOpt").checked;
+      const is_anonymous = document.getElementById("pubIsAnonymous").checked;
       const delay_sec = parseFloat(document.getElementById("pubDelay").value);
 
       const startBtn = document.getElementById("pubStartBtn");
@@ -2770,6 +2776,8 @@
             comm_id: commId,
             delay_sec,
             shuffle_options,
+            shuffle_questions: shuffleQuestions,
+            is_anonymous,
             open_period,
             limit_count: limitCount,
             quiz_title: quizTitle
