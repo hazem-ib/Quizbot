@@ -6,18 +6,28 @@ import fitz  # PyMuPDF
 import arabic_reshaper
 from bidi.algorithm import get_display
 
-_ARABIC_RE = re.compile(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]")
+_ARABIC_CHAR_RE = re.compile(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]")
+_LATIN_CHAR_RE = re.compile(r"[A-Za-z]")
 
 
 def _has_arabic(text: str) -> bool:
-    return bool(_ARABIC_RE.search(text or ""))
+    return bool(_ARABIC_CHAR_RE.search(text or ""))
 
 
-def _shape_arabic(text: str) -> str:
-    raw = str(text or "")
-    if not raw or not _has_arabic(raw):
-        return raw
-    reshaped = arabic_reshaper.reshape(raw)
+def _is_arabic_dominant(text: str) -> bool:
+    if not text:
+        return False
+    ar_count = len(_ARABIC_CHAR_RE.findall(text))
+    en_count = len(_LATIN_CHAR_RE.findall(text))
+    return ar_count > en_count
+
+
+def _shape_single_line(line: str) -> str:
+    """Shape a single line safely without reversing multi-line order."""
+    s = str(line or "")
+    if not s or not _has_arabic(s):
+        return s
+    reshaped = arabic_reshaper.reshape(s)
     return get_display(reshaped)
 
 
@@ -36,14 +46,6 @@ def _hex_to_rgb(hex_color: Optional[str], default: Tuple[float, float, float]) -
         return (r, g, b)
     except ValueError:
         return default
-
-
-def _is_arabic_dominant(text: str) -> bool:
-    if not text:
-        return False
-    ar_count = len(re.findall(r"[\u0600-\u06FF]", text))
-    en_count = len(re.findall(r"[A-Za-z]", text))
-    return ar_count > en_count
 
 
 def _clean_question_text(raw: str) -> str:
@@ -92,66 +94,66 @@ def _wrap_text(text: str, font: fitz.Font, fontsize: float, max_width: float) ->
 
 def _pick_font(style: str, bold: bool = False) -> fitz.Font:
     here = os.path.dirname(os.path.abspath(__file__))
-    local_fonts = [
-        os.path.join(here, "fonts", "Amiri-Bold.ttf" if bold else "Amiri-Regular.ttf"),
-        os.path.join(here, "fonts", "Amiri-Regular.ttf"),
-        os.path.join(here, "fonts", "NotoNaskhArabic-Bold.ttf" if bold else "NotoNaskhArabic-Regular.ttf"),
-        os.path.join(here, "fonts", "NotoNaskhArabic-Regular.ttf"),
-        os.path.join(here, "fonts", "Cairo-Bold.ttf" if bold else "Cairo-Regular.ttf"),
-        os.path.join(here, "fonts", "Cairo-Regular.ttf"),
-        os.path.join(here, "..", "fonts", "Amiri-Regular.ttf"),
-        os.path.join(here, "..", "fonts", "NotoNaskhArabic-Regular.ttf"),
-    ]
-
     style_key = (style or "soft_rounded").strip().lower()
+
+    local_candidates: List[str] = []
+    if style_key == "bold_friendly":
+        local_candidates = [
+            os.path.join(here, "fonts", "Cairo-Bold.ttf"),
+            os.path.join(here, "fonts", "NotoSansArabic-Bold.ttf"),
+            os.path.join(here, "fonts", "Amiri-Bold.ttf"),
+            os.path.join(here, "fonts", "Amiri-Regular.ttf"),
+        ]
+    elif style_key == "clean_sans":
+        local_candidates = [
+            os.path.join(here, "fonts", "NotoSansArabic-Bold.ttf" if bold else "NotoSansArabic-Regular.ttf"),
+            os.path.join(here, "fonts", "Cairo-Bold.ttf" if bold else "Cairo-Regular.ttf"),
+            os.path.join(here, "fonts", "Amiri-Bold.ttf" if bold else "Amiri-Regular.ttf"),
+        ]
+    else:  # soft_rounded
+        local_candidates = [
+            os.path.join(here, "fonts", "Cairo-Bold.ttf" if bold else "Cairo-Regular.ttf"),
+            os.path.join(here, "fonts", "NotoSansArabic-Bold.ttf" if bold else "NotoSansArabic-Regular.ttf"),
+            os.path.join(here, "fonts", "Amiri-Bold.ttf" if bold else "Amiri-Regular.ttf"),
+            os.path.join(here, "fonts", "NotoNaskhArabic-Regular.ttf"),
+        ]
 
     if style_key == "soft_rounded":
         sys_candidates = (
             [
-                "/usr/share/fonts/truetype/nunito/Nunito-Bold.ttf",
-                "/usr/share/fonts/truetype/comic-neue/ComicNeue-Bold.ttf",
                 "/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf",
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
             ]
             if bold
             else [
-                "/usr/share/fonts/truetype/nunito/Nunito-SemiBold.ttf",
-                "/usr/share/fonts/truetype/nunito/Nunito-Regular.ttf",
-                "/usr/share/fonts/truetype/comic-neue/ComicNeue-Regular.ttf",
                 "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
             ]
         )
     elif style_key == "bold_friendly":
-        sys_candidates = (
-            [
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                "/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf",
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-            ]
-            if bold
-            else [
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                "/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf",
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            ]
-        )
+        sys_candidates = [
+            "/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        ]
     else:  # clean_sans
         sys_candidates = (
             [
+                "/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf",
                 "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                "/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf",
             ]
             if bold
             else [
+                "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
                 "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
             ]
         )
 
-    for path in local_fonts + sys_candidates:
+    for path in local_candidates + sys_candidates:
         if os.path.exists(path):
             try:
                 return fitz.Font(fontfile=path)
@@ -222,6 +224,7 @@ def build_bank_pdf_bytes(
 
     doc = fitz.open()
     clean_bank_name = str(bank_name or "Question Bank").strip()
+    bank_is_ar = _is_arabic_dominant(clean_bank_name)
 
     def _new_page(is_first: bool = False) -> Tuple[fitz.Page, float]:
         pg = doc.new_page(width=page_w, height=page_h)
@@ -237,19 +240,20 @@ def build_bank_pdf_bytes(
                 color=col_q_num,
                 width=1.5,
             )
-            title_shaped = _shape_arabic(clean_bank_name)
+            title_shaped = _shape_single_line(clean_bank_name)
             title_tw = fitz.TextWriter(pg.rect)
-            if _is_arabic_dominant(clean_bank_name):
+            if bank_is_ar:
                 tw_title_w = font_bold.text_length(title_shaped, fontsize=14.5)
                 title_tw.append((page_w - margin_x - tw_title_w, y_cursor + 19), title_shaped, font=font_bold, fontsize=14.5)
             else:
                 title_tw.append((margin_x, y_cursor + 19), title_shaped, font=font_bold, fontsize=14.5)
             title_tw.write_text(pg, color=col_text)
 
-            meta_str = _shape_arabic(f"{len(questions)} Questions")
+            meta_raw = f"{len(questions)} سؤال" if bank_is_ar else f"{len(questions)} Questions"
+            meta_str = _shape_single_line(meta_raw)
             meta_w = font_reg.text_length(meta_str, fontsize=9.5)
             meta_tw = fitz.TextWriter(pg.rect)
-            if _is_arabic_dominant(clean_bank_name):
+            if bank_is_ar:
                 meta_tw.append((margin_x, y_cursor + 19), meta_str, font=font_reg, fontsize=9.5)
             else:
                 meta_tw.append((page_w - margin_x - meta_w, y_cursor + 19), meta_str, font=font_reg, fontsize=9.5)
@@ -259,7 +263,7 @@ def build_bank_pdf_bytes(
         return pg, y_cursor
 
     def _draw_footer(pg: fitz.Page, p_num: int, total_p: int) -> None:
-        footer_text = _shape_arabic(f"{clean_bank_name}   •   {p_num} / {total_p}")
+        footer_text = _shape_single_line(f"{clean_bank_name}   •   {p_num} / {total_p}")
         tw_w = font_reg.text_length(footer_text, fontsize=8.5)
         tw = fitz.TextWriter(pg.rect)
         tw.append(((page_w - tw_w) / 2.0, page_h - 18.0), footer_text, font=font_reg, fontsize=8.5)
@@ -275,26 +279,30 @@ def build_bank_pdf_bytes(
         c_idx = int(q.get("correct_idx", 0) or 0)
         expl_raw = str(q.get("explanation", "") or "").strip()
 
-        q_full_str = _shape_arabic(f"{idx}. {q_raw}")
-        q_lines = _wrap_text(q_full_str, font_bold, body_size, inner_w)
-        q_block_h = max(1, len(q_lines)) * line_height
+        q_full_str = f"{idx}. {q_raw}"
+        q_raw_lines = _wrap_text(q_full_str, font_bold, body_size, inner_w)
+        q_shaped_lines = [_shape_single_line(ln) for ln in q_raw_lines]
+        q_block_h = max(1, len(q_shaped_lines)) * line_height
 
-        opt_blocks: List[Tuple[int, str, List[str], bool]] = []
+        opt_blocks: List[Tuple[int, str, List[Tuple[str, bool]], bool]] = []
         opts_total_h = 0.0
         badge_col_w = 26.0
         for o_i, o_val in enumerate(opts):
-            letter = _shape_arabic(_option_label(o_i, opt_style))
+            letter = _shape_single_line(_option_label(o_i, opt_style))
             is_corr = solved and (o_i == c_idx)
             f_use = font_bold if is_corr else font_reg
-            o_shaped = _shape_arabic(o_val)
-            o_lines = _wrap_text(o_shaped, f_use, opt_size, inner_w - badge_col_w)
-            opt_blocks.append((o_i, letter, o_lines, is_corr))
-            opts_total_h += max(1, len(o_lines)) * opt_line_height + (gap_opts if o_i < len(opts) - 1 else 0.0)
+            o_is_ar = _is_arabic_dominant(o_val)
+            o_raw_lines = _wrap_text(o_val, f_use, opt_size, inner_w - badge_col_w)
+            o_shaped_lines = [(_shape_single_line(ln), o_is_ar) for ln in o_raw_lines]
+            opt_blocks.append((o_i, letter, o_shaped_lines, is_corr))
+            opts_total_h += max(1, len(o_shaped_lines)) * opt_line_height + (gap_opts if o_i < len(opts) - 1 else 0.0)
 
+        expl_is_ar = _is_arabic_dominant(expl_raw)
         expl_lines: List[str] = []
         expl_block_h = 0.0
         if solved and show_expl and expl_raw:
-            expl_lines = _wrap_text(_shape_arabic(expl_raw), font_reg, expl_size, inner_w)
+            expl_raw_lines = _wrap_text(expl_raw, font_reg, expl_size, inner_w)
+            expl_lines = [_shape_single_line(ln) for ln in expl_raw_lines]
             expl_block_h = 8.0 + len(expl_lines) * expl_line_height
 
         card_h = card_pad_y + q_block_h + gap_q_opts + opts_total_h + expl_block_h + card_pad_y
@@ -308,7 +316,7 @@ def build_bank_pdf_bytes(
         inner_y = cur_y + card_pad_y
 
         q_tw = fitz.TextWriter(page.rect)
-        for line_i, line_str in enumerate(q_lines):
+        for line_i, line_str in enumerate(q_shaped_lines):
             ly = inner_y + body_size + line_i * line_height
             if q_is_ar:
                 lw = font_bold.text_length(line_str, fontsize=body_size)
@@ -336,9 +344,13 @@ def build_bank_pdf_bytes(
             let_tw.write_text(page, color=circle_txt_col)
 
             opt_tw = fitz.TextWriter(page.rect)
-            for l_idx, l_str in enumerate(o_lines):
+            for l_idx, (l_str, l_is_ar) in enumerate(o_lines):
                 oy = inner_y + opt_size + l_idx * opt_line_height
-                ox = margin_x + card_pad_x + badge_col_w
+                if l_is_ar:
+                    lw = f_use.text_length(l_str, fontsize=opt_size)
+                    ox = page_w - margin_x - card_pad_x - lw
+                else:
+                    ox = margin_x + card_pad_x + badge_col_w
                 opt_tw.append((ox, oy), l_str, font=f_use, fontsize=opt_size)
                 if is_corr and correct_underline:
                     uw = f_use.text_length(l_str, fontsize=opt_size)
@@ -364,7 +376,7 @@ def build_bank_pdf_bytes(
             ex_tw = fitz.TextWriter(page.rect)
             for e_i, e_str in enumerate(expl_lines):
                 ey = inner_y + expl_size + e_i * expl_line_height
-                if _is_arabic_dominant(expl_raw):
+                if expl_is_ar:
                     ew = font_reg.text_length(e_str, fontsize=expl_size)
                     ex_x = page_w - margin_x - card_pad_x - ew
                 else:
