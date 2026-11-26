@@ -20,6 +20,187 @@
       }
     });
   </script>
+  <!-- Paste this whole block right before </body>, AFTER your main <script>. It injects its own CSS. -->
+<script>
+(function () {
+  const tg = window.Telegram && window.Telegram.WebApp;
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const H = (fn) => { try { fn(tg.HapticFeedback); } catch (_) {} };
+  const hap = {
+    light: () => H(h => h.impactOccurred("light")),
+    soft: () => H(h => h.impactOccurred("soft")),
+    select: () => H(h => h.selectionChanged()),
+    ok: () => H(h => h.notificationOccurred("success")),
+    err: () => H(h => h.notificationOccurred("error"))
+  };
+  try { tg.setHeaderColor("#000000"); tg.setBackgroundColor("#000000"); } catch (_) {}
+
+  /* ---------- CSS ---------- */
+  const css = `
+  @keyframes tabIn { from { opacity:0; transform:translateY(16px) scale(.985); filter:blur(6px);} to { opacity:1; transform:none; filter:none;} }
+  @keyframes popIn { from { opacity:0; transform:translateY(20px) scale(.95);} to { opacity:1; transform:none;} }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  @keyframes fadeOut { to{opacity:0} }
+  @keyframes sheetDown { to{ transform:translateY(100%);} }
+  @keyframes icoPop { 0%{transform:scale(.8)} 55%{transform:scale(1.22)} 100%{transform:scale(1)} }
+  @keyframes shimmer { from{transform:translateX(-100%)} to{transform:translateX(100%)} }
+  @keyframes toastIn { from{opacity:0; transform:translateY(-24px) scale(.9);} to{opacity:1; transform:none;} }
+  @keyframes toastOut { to{opacity:0; transform:translateY(-18px) scale(.94);} }
+
+  .tab.tab-enter { animation: tabIn .42s cubic-bezier(.2,.9,.3,1) both; }
+  .pop-in { animation: popIn .46s cubic-bezier(.2,1.1,.3,1) both; animation-delay: var(--d, 0ms); }
+  .modal.open { animation: fadeIn .25s ease both; }
+  .modal.closing { animation: fadeOut .22s ease forwards; }
+  .modal.closing .modal-content { animation: sheetDown .22s ease-in forwards; }
+  .modal-content { position: relative; }
+  .sheet-grip { position:absolute; top:0; left:0; right:0; height:44px; touch-action:none; z-index:3; }
+
+  /* Liquid glass lens */
+  .nav-liquid-lens { background:none !important; border:none !important; box-shadow:none !important; filter:none !important; }
+  .nav-liquid-lens::before {
+    content:""; position:absolute; inset:0; border-radius:999px;
+    background:linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.07));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.42), inset 0 -1px 0 rgba(255,255,255,.08),
+                0 6px 18px rgba(0,0,0,.42), 0 0 0 .5px rgba(255,255,255,.2);
+    scale: var(--sx,1) var(--sy,1);
+    transition: scale .45s cubic-bezier(.2,1.6,.4,1), background .2s;
+  }
+  .nav-liquid-lens::after {
+    content:""; position:absolute; top:3px; left:14%; right:14%; height:38%; border-radius:999px;
+    background:linear-gradient(180deg, rgba(255,255,255,.28), transparent);
+    opacity:.55; pointer-events:none; scale: var(--sx,1) 1; transition: scale .45s cubic-bezier(.2,1.6,.4,1);
+  }
+  .nav-liquid-lens.is-dragging::before { background:linear-gradient(180deg, rgba(255,255,255,.32), rgba(255,255,255,.1)); }
+  .nav-item.active .ico { animation: icoPop .5s cubic-bezier(.2,1.4,.4,1); }
+  .nav-bar.pressed .nav-item.active .ico { transform: scale(1.15); transition: transform .25s; }
+  .nav-bar { transition: transform .35s cubic-bezier(.2,1.5,.4,1); }
+  .nav-bar.pressed { transform: scale(1.025); }
+
+  .progress-bar-fill { position:relative; overflow:hidden; }
+  .progress-bar-fill::after { content:""; position:absolute; inset:0; background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent); animation: shimmer 1.3s infinite; }
+
+  /* Glass toasts (replace alert) */
+  .toast-stack { position:fixed; top:12px; left:0; right:0; z-index:99999; display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none; padding:0 14px; padding-top: env(safe-area-inset-top, 0px); }
+  .toast { max-width:520px; padding:12px 18px; border-radius:22px; font-size:.88rem; line-height:1.5; color:#fff; text-align:center;
+    background:rgba(44,44,46,.72); backdrop-filter:blur(26px) saturate(170%); -webkit-backdrop-filter:blur(26px) saturate(170%);
+    border:.5px solid rgba(255,255,255,.16); box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 14px 34px rgba(0,0,0,.55);
+    animation: toastIn .45s cubic-bezier(.2,1.4,.4,1) both; }
+  .toast.out { animation: toastOut .3s ease forwards; }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; } }`;
+  const st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
+
+  /* ---------- Haptics ---------- */
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest(".btn, .fmt-btn");
+    if (b && !b.disabled) hap.light();
+  }, true);
+  document.addEventListener("change", (e) => { if (e.target.matches('input[type="checkbox"]')) hap.select(); });
+  document.querySelectorAll(".nav-item").forEach(n => n.addEventListener("click", hap.select));
+
+  /* ---------- Tab enter animation ---------- */
+  document.querySelectorAll(".tab").forEach(t => {
+    t._was = t.classList.contains("active");
+    new MutationObserver(() => {
+      const on = t.classList.contains("active");
+      if (on && !t._was) {
+        t._was = true;
+        t.classList.add("tab-enter");
+        setTimeout(() => t.classList.remove("tab-enter"), 520);
+      } else if (!on) { t._was = false; }
+    }).observe(t, { attributes: true, attributeFilter: ["class"] });
+  });
+
+  /* ---------- Staggered card pop-in ---------- */
+  ["banksList", "questionsList", "communitiesList", "adminsList", "logsList"].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    let last = 0;
+    new MutationObserver(() => {
+      const now = Date.now(); if (now - last < 600) return; last = now;
+      Array.from(el.children).slice(0, 12).forEach((k, i) => {
+        k.style.setProperty("--d", i * 45 + "ms");
+        k.classList.add("pop-in");
+      });
+    }).observe(el, { childList: true });
+  });
+
+  /* ---------- Liquid glass dock ---------- */
+  const dock = document.getElementById("navDock"), lens = document.getElementById("navLiquidLens");
+  if (dock && lens) {
+    const setS = (x, y) => { lens.style.setProperty("--sx", x); lens.style.setProperty("--sy", y); };
+    let down = false, lx = 0, lt = 0;
+    dock.addEventListener("pointerdown", (e) => {
+      down = true; lx = e.clientX; lt = performance.now();
+      dock.classList.add("pressed"); setS(1.14, 1.22); hap.soft();
+    });
+    dock.addEventListener("pointermove", (e) => {
+      if (!down) return;
+      const now = performance.now();
+      const v = Math.abs(e.clientX - lx) / Math.max(1, now - lt);
+      lx = e.clientX; lt = now;
+      const s = Math.min(v * 0.2, 0.38);
+      setS((1.14 + s).toFixed(3), (1.22 - s * 0.6).toFixed(3));
+    });
+    const up = () => {
+      if (!down) return; down = false;
+      dock.classList.remove("pressed");
+      setS(1.1, 0.9);                       // squash
+      setTimeout(() => setS(1, 1), 120);    // spring back with overshoot
+    };
+    ["pointerup", "pointercancel", "pointerleave"].forEach(n => dock.addEventListener(n, up));
+  }
+
+  /* ---------- Bottom sheets: swipe down + tap outside + animated close ---------- */
+  const origClose = window.closeModal;
+  window.closeModal = function (id) {
+    const m = document.getElementById(id);
+    if (!m || reduce || !m.classList.contains("open")) return origClose(id);
+    m.classList.add("closing");
+    setTimeout(() => { m.classList.remove("closing"); origClose(id); }, 220);
+  };
+  document.querySelectorAll(".modal").forEach(m => {
+    const c = m.querySelector(".modal-content"); if (!c) return;
+    m.addEventListener("click", (e) => { if (e.target === m) window.closeModal(m.id); });
+    const grip = document.createElement("div"); grip.className = "sheet-grip"; c.prepend(grip);
+    let y0 = null, dy = 0, t0 = 0;
+    grip.addEventListener("pointerdown", (e) => {
+      y0 = e.clientY; dy = 0; t0 = performance.now();
+      c.style.transition = "none"; grip.setPointerCapture(e.pointerId);
+    });
+    grip.addEventListener("pointermove", (e) => {
+      if (y0 === null) return;
+      dy = Math.max(0, e.clientY - y0);
+      c.style.transform = `translateY(${dy}px)`;
+      m.style.background = `rgba(0,0,0,${0.6 * (1 - Math.min(dy / 420, 1))})`;
+    });
+    const end = () => {
+      if (y0 === null) return;
+      const fast = dy / Math.max(1, performance.now() - t0) > 0.6;
+      c.style.transition = "transform .3s cubic-bezier(.2,.9,.3,1)";
+      if (dy > 120 || fast) {
+        c.style.transform = "translateY(100%)"; hap.light();
+        setTimeout(() => { m.classList.remove("open"); c.style.transform = ""; c.style.transition = ""; m.style.background = ""; }, 260);
+      } else {
+        c.style.transform = "";
+        setTimeout(() => { c.style.transition = ""; m.style.background = ""; }, 320);
+      }
+      y0 = null;
+    };
+    grip.addEventListener("pointerup", end); grip.addEventListener("pointercancel", end);
+  });
+
+  /* ---------- Glass toasts instead of alert() ---------- */
+  const stack = document.createElement("div"); stack.className = "toast-stack"; document.body.appendChild(stack);
+  window.alert = function (msg) {
+    const text = String(msg == null ? "" : msg);
+    const t = document.createElement("div"); t.className = "toast"; t.textContent = text;
+    stack.appendChild(t);
+    /تعذر|يرجى|لا تملك|الحد الأقصى|خطأ/.test(text) ? hap.err() : hap.ok();
+    setTimeout(() => { t.classList.add("out"); setTimeout(() => t.remove(), 320); }, 2800);
+  };
+})();
+</script>
+
   <style>:root {
   --bg: #000000;
   --surface: #1c1c1e;
